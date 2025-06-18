@@ -1883,9 +1883,7 @@ fn parse_prefix(&mut self) -> Result<ast::Expr, Diagnostic<FileId>> {
             let c = chars[i];
             i += 1;
 
-            if c == '$' && i < chars.len() && chars[i] == '{' {
-                i += 1;
-
+            if c == '{' {
                 if !current.is_empty() {
                     parts.push(ast::TemplateStrPart::Literal(std::mem::take(&mut current)));
                 }
