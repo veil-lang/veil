@@ -771,7 +771,7 @@ impl TypeChecker {
                         let impls = self.impls.clone();
                         let mut method_found = false;
                         let mut method_return_type = Type::Unknown;
-                        let mut expected_args = 0;
+                        let mut method_param_types = Vec::new();
                         
                         for impl_block in &impls {
                             if impl_block.target_type == type_name {
@@ -779,7 +779,7 @@ impl TypeChecker {
                                     if method.name == method_name {
                                         method_found = true;
                                         method_return_type = method.return_type.clone();
-                                        expected_args = method.params.len();
+                                        method_param_types = method.params.iter().map(|(_, ty)| ty.clone()).collect();
                                         break;
                                     }
                                 }
@@ -797,6 +797,7 @@ impl TypeChecker {
                         }
                         
                         let actual_args = if is_static_call { args.len() - 1 } else { args.len() };
+                        let expected_args = method_param_types.len();
                         
                         if actual_args != expected_args {
                             self.report_error(
@@ -804,6 +805,13 @@ impl TypeChecker {
                                     method_name, expected_args, actual_args),
                                 *span,
                             );
+                        }
+                        
+                        let start_idx = if is_static_call { 1 } else { 1 };
+                        for (i, param_type) in method_param_types.iter().enumerate() {
+                            if let Some(arg) = args.get_mut(start_idx + i) {
+                                self.check_expr_with_expected(arg, param_type)?;
+                            }
                         }
                         
                         *expr_type = method_return_type.clone();

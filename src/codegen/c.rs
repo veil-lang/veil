@@ -1181,6 +1181,7 @@ impl CBackend {
     fn emit_main_if_missing(&mut self, program: &ast::Program) -> Result<(), CompileError> {
         if !program.functions.iter().any(|f| f.name == "main") {
             self.body.push_str("\nint main(int argc, char* argv[]) {\n");
+            self.body.push_str("ve_arena_enter();\n");
 
             if self.is_test_mode {
                 self.body.push_str("    const char* test_to_run = argc > 1 ? argv[1] : NULL;\n");
@@ -1211,6 +1212,7 @@ impl CBackend {
                 }
             }
 
+            self.body.push_str("ve_arena_exit();\n");
             self.body.push_str("#ifdef VE_DEBUG_MEMORY\n    ve_arena_stats();\n#endif\n");
             self.body.push_str("    ve_arena_cleanup();\n");
             self.body.push_str("    return 0;\n}\n");
@@ -1325,14 +1327,25 @@ impl CBackend {
         self.body
             .push_str(&format!("{} {}({}) {{\n", return_type, func_name, params));
 
+        if func.name == "main" {
+            self.body.push_str("ve_arena_enter();\n");
+        }
+
         let mut stmts = func.body.iter().peekable();
+        let mut has_tail_return = false;
         while let Some(stmt) = stmts.next() {
             let is_last = stmts.peek().is_none();
             if is_last {
                 if let ast::Stmt::Expr(expr, _) = stmt {
                     if expr.get_info().is_tail {
                         let expr_code = self.emit_expr(expr)?;
+                        if func.name == "main" {
+                            self.body.push_str("ve_arena_exit();\n");
+                            self.body.push_str("#ifdef VE_DEBUG_MEMORY\n    ve_arena_stats();\n#endif\n");
+                            self.body.push_str("    ve_arena_cleanup();\n");
+                        }
                         self.body.push_str(&format!("return {};\n", expr_code));
+                        has_tail_return = true;
                         continue;
                     }
                 }
@@ -1340,19 +1353,22 @@ impl CBackend {
             self.emit_stmt(stmt)?;
         }
 
-        if func.name == "main" {
-            let last_is_return = func
-                .body
-                .last()
-                .is_some_and(|s| matches!(s, ast::Stmt::Return(..)));
+        if !has_tail_return {
+            if func.name == "main" {
+                let last_is_return = func
+                    .body
+                    .last()
+                    .is_some_and(|s| matches!(s, ast::Stmt::Return(..)));
 
-            if !last_is_return {
-                self.body.push_str("#ifdef VE_DEBUG_MEMORY\n    ve_arena_stats();\n#endif\n");
-                self.body.push_str("    ve_arena_cleanup();\n");
-                self.body.push_str("    return 0;\n");
+                if !last_is_return {
+                    self.body.push_str("ve_arena_exit();\n");
+                    self.body.push_str("#ifdef VE_DEBUG_MEMORY\n    ve_arena_stats();\n#endif\n");
+                    self.body.push_str("    ve_arena_cleanup();\n");
+                    self.body.push_str("    return 0;\n");
+                }
+            } else if func.return_type == Type::Void {
+                self.body.push_str("    return;\n");
             }
-        } else if func.return_type == Type::Void {
-            self.body.push_str("    return;\n");
         }
 
         self.body.push_str("}\n\n");
@@ -1444,15 +1460,6 @@ impl CBackend {
                 self.body.push_str(&format!("return {};\n", expr_code));
             }
             ast::Stmt::Expr(expr, _) => {
-                let needs_arena = match expr {
-                    ast::Expr::Call(name, _, _) => !self.ffi_functions.contains(name),
-                    _ => false,
-                };
-
-                if needs_arena {
-                    self.body.push_str("ve_arena_enter();\n");
-                }
-
                 let expr_code = self.emit_expr(expr)?;
                 if expr_code.starts_with('{') {
                     self.body.push_str(&expr_code);
@@ -1460,10 +1467,6 @@ impl CBackend {
                     self.body.push_str(&format!("{};\n", expr_code));
                 } else {
                     self.body.push_str(&format!("{}\n", expr_code));
-                }
-
-                if needs_arena {
-                    self.body.push_str("ve_arena_exit();\n");
                 }
             }
             ast::Stmt::Block(stmts, _) => {
