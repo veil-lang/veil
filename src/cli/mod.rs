@@ -260,23 +260,21 @@ pub fn process_build(
             println!("{}", format!("Cleaning build directory: {}", build_dir.display()).yellow());
         }
         
-        let cache_dir = build_dir.join(".cache");
-        let cache_backup = if cache_dir.exists() {
-            let temp_cache = std::env::temp_dir().join(format!("veil_cache_backup_{}", std::process::id()));
-            std::fs::rename(&cache_dir, &temp_cache)?;
-            Some(temp_cache)
-        } else {
-            None
-        };
-        
-        std::fs::remove_dir_all(&build_dir)?;
-        std::fs::create_dir_all(&build_dir)?;
-        
-        if let Some(temp_cache) = cache_backup {
-            std::fs::rename(&temp_cache, &cache_dir)?;
-            if verbose {
-                println!("{}", "Cache preserved".green());
+
+        for entry in std::fs::read_dir(&build_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.file_name() != Some(std::ffi::OsStr::new(".cache")) {
+                if path.is_dir() {
+                    std::fs::remove_dir_all(&path)?;
+                } else {
+                    std::fs::remove_file(&path)?;
+                }
             }
+        }
+        
+        if verbose {
+            println!("{}", "Cache preserved".green());
         }
     } else {
         std::fs::create_dir_all(&build_dir)?;

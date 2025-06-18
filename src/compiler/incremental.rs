@@ -401,8 +401,7 @@ impl IncrementalCompiler {
                     module_type: crate::ast::ModuleType::Standard,
                     alias: None,
                 };
-                program.imports.insert(0, prelude_import);
-            }let resolved_deps = super::resolve_imports_only(&program.imports, &normalized_current)?;
+                program.imports.insert(0, prelude_import);            }let resolved_deps = super::resolve_imports_only(&program.imports, &normalized_current)?;
             
             for resolved_import in &resolved_deps {
                 let dep_path = &resolved_import.path;
@@ -411,13 +410,23 @@ impl IncrementalCompiler {
                     to_process.push(dep_normalized.clone());
                 }
                 self.module_graph.add_dependency(&normalized_current, &dep_normalized)?;
-            }            let mut module_info = super::cache::ModuleInfo::new(normalized_current.clone())?;
-            module_info.imports = program.imports.clone();
-            module_info.program = Some(program.clone());
-            module_info.extract_symbols(&program);
+            }
             
-            self.module_graph.build_symbol_dependencies(&normalized_current, &program);
-            self.module_graph.add_module(module_info);
+
+            if !self.module_graph.modules.contains_key(&normalized_current) {
+                let mut module_info = super::cache::ModuleInfo::new(normalized_current.clone())?;
+                module_info.imports = program.imports.clone();
+                module_info.program = Some(program.clone());
+                module_info.extract_symbols(&program);
+                
+
+                if self.build_cache.is_cache_valid(&normalized_current).unwrap_or(false) {
+                    module_info.is_dirty = false;
+                }
+                
+                self.module_graph.build_symbol_dependencies(&normalized_current, &program);
+                self.module_graph.add_module(module_info);
+            }
         }
 
         Ok(())
@@ -609,13 +618,27 @@ impl IncrementalCompiler {
                         program.functions.push(function.clone());
                     }
                 }
-                
-                for struct_def in &module_program.structs {
+                  for struct_def in &module_program.structs {
                     if matches!(struct_def.visibility, crate::ast::Visibility::Public) {
                         program.structs.push(struct_def.clone());
                     }
                 }
-                
+                  for impl_block in &module_program.impls {
+                    let is_builtin_type = impl_block.target_type.contains("[]") || 
+                                         matches!(impl_block.target_type.as_str(), 
+                                         "string" | "i32" | "i64" | "f32" | "f64" | "bool" | 
+                                         "i8" | "i16" | "u8" | "u16" | "u32" | "u64");
+                    
+                    let target_is_exported = is_builtin_type || 
+                        module_program.structs.iter().any(|s| 
+                            s.name == impl_block.target_type && 
+                            matches!(s.visibility, crate::ast::Visibility::Public)
+                        );
+                    
+                    if target_is_exported {
+                        program.impls.push(impl_block.clone());
+                    }
+                }
 
                 for ffi_func in &module_program.ffi_functions {
                     program.ffi_functions.push(ffi_func.clone());

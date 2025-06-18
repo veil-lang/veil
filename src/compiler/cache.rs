@@ -155,17 +155,19 @@ impl ModuleInfo {
     pub fn update_if_changed(&mut self) -> Result<bool> {
         let metadata = fs::metadata(&self.file_path)?;
         let current_modified = metadata.modified()?;
-        
-        if current_modified > self.last_modified {
+          if current_modified > self.last_modified {
             let content = fs::read_to_string(&self.file_path)?;
             let new_hash = Self::calculate_hash(&content);
             
             if new_hash != self.content_hash {
+                let old_program = self.program.clone();
+                
                 self.content_hash = new_hash;
                 self.last_modified = current_modified;
                 self.is_dirty = true;
                 self.program = None;
-                  if let Some(old_program) = self.program.clone() {
+                
+                if let Some(old_program) = old_program {
                     self.detect_symbol_changes(&old_program);
                 }
                 
@@ -281,8 +283,9 @@ pub struct BuildCacheManager {
 }
 
 impl BuildCacheManager {    pub fn new(build_dir: &Path) -> Self {
-        let cache_file = build_dir.join(".veil_cache.json");
-        let symbol_cache_file = build_dir.join(".veil_symbol_cache.json");
+        let cache_dir = build_dir.join(".cache");
+        let cache_file = cache_dir.join("build_cache.json");
+        let symbol_cache_file = cache_dir.join("symbol_cache.json");
         let mut manager = Self {
             cache_entries: HashMap::new(),
             symbol_cache: HashMap::new(),

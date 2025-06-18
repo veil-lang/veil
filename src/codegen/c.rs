@@ -153,6 +153,10 @@ impl CBackend {
         for struct_def in &imported_structs {
             self.emit_struct(struct_def)?;
         }
+        
+        let imported_struct_names: std::collections::HashSet<String> = 
+            imported_structs.iter().map(|s| s.name.clone()).collect();
+        
         for struct_def in &program.structs {
             let fields: Vec<(String, Type)> = struct_def
                 .fields
@@ -165,7 +169,9 @@ impl CBackend {
             self.enum_defs.insert(enum_def.name.clone(), enum_def.clone());
         }
         for struct_def in &program.structs {
-            self.emit_struct(struct_def)?;
+            if !imported_struct_names.contains(&struct_def.name) {
+                self.emit_struct(struct_def)?;
+            }
         }
         for enum_def in &program.enums {
             self.emit_enum(enum_def)?;
@@ -309,11 +315,21 @@ impl CBackend {
         }
         
         let imported_structs = self.imported_structs.clone();
-        let all_structs: Vec<&ast::StructDef> = program
-            .structs
-            .iter()
-            .chain(imported_structs.iter())
-            .collect();
+        let mut all_structs: Vec<&ast::StructDef> = Vec::new();
+        let mut seen_names = std::collections::HashSet::new();
+        
+        for struct_def in imported_structs.iter() {
+            if seen_names.insert(struct_def.name.clone()) {
+                all_structs.push(struct_def);
+            }
+        }
+        
+        for struct_def in program.structs.iter() {
+            if seen_names.insert(struct_def.name.clone()) {
+                all_structs.push(struct_def);
+            }
+        }
+        
         self.generate_struct_to_str_functions(all_structs);
         self.emit_main_if_missing(&program)?;
         self.write_output(output_path)?;
@@ -651,6 +667,11 @@ impl CBackend {
         self.header.push_str("typedef float ve_f32;\n");
         self.header.push_str("typedef double ve_f64;\n");
         self.header.push_str("typedef size_t ve_size_t;\n\n");
+        self.header.push_str("typedef struct {\n");
+        self.header.push_str("    void* data;\n");
+        self.header.push_str("    size_t length;\n");
+        self.header.push_str("    size_t capacity;\n");
+        self.header.push_str("} ve_Array;\n\n");
 
         self.emit_arena_system();
         self.emit_utility_functions();
@@ -793,6 +814,82 @@ impl CBackend {
             .push_str("        ve_temp_arena.capacity = 0;\n");
         self.header.push_str("    }\n");
         self.header.push_str("}\n\n");
+        
+        self.emit_array_functions();
+    }
+
+    fn emit_array_functions(&mut self) {
+        self.includes.borrow_mut().insert("<string.h>".to_string());
+        
+        self.header.push_str("static ve_Array* ve_array_create(void* data, size_t length, size_t element_size) {\n");
+        self.header.push_str("    ve_Array* arr = ve_arena_alloc(sizeof(ve_Array));\n");
+        self.header.push_str("    if (arr) {\n");
+        self.header.push_str("        arr->data = data;\n");
+        self.header.push_str("        arr->length = length;\n");
+        self.header.push_str("        arr->capacity = length;\n");
+        self.header.push_str("    }\n");
+        self.header.push_str("    return arr;\n");
+        self.header.push_str("}\n\n");
+
+        self.header.push_str("static ve_Array* ve_array_create_empty(size_t element_size, size_t initial_capacity) {\n");
+        self.header.push_str("    if (initial_capacity == 0) initial_capacity = 4;\n");
+        self.header.push_str("    void* data = ve_arena_alloc(initial_capacity * element_size);\n");
+        self.header.push_str("    ve_Array* arr = ve_arena_alloc(sizeof(ve_Array));\n");
+        self.header.push_str("    if (arr && data) {\n");
+        self.header.push_str("        arr->data = data;\n");
+        self.header.push_str("        arr->length = 0;\n");
+        self.header.push_str("        arr->capacity = initial_capacity;\n");
+        self.header.push_str("    }\n");
+        self.header.push_str("    return arr;\n");
+        self.header.push_str("}\n\n");
+
+        self.header.push_str("static ve_Array* ve_array_ensure_capacity(ve_Array* arr, size_t required_capacity, size_t element_size) {\n");
+        self.header.push_str("    if (!arr || arr->capacity >= required_capacity) return arr;\n");
+        self.header.push_str("    size_t new_capacity = arr->capacity;\n");
+        self.header.push_str("    while (new_capacity < required_capacity) {\n");
+        self.header.push_str("        new_capacity = new_capacity == 0 ? 4 : new_capacity * 2;\n");
+        self.header.push_str("    }\n");
+        self.header.push_str("    void* new_data = ve_arena_alloc(new_capacity * element_size);\n");
+        self.header.push_str("    if (new_data && arr->data) {\n");
+        self.header.push_str("        memcpy(new_data, arr->data, arr->length * element_size);\n");
+        self.header.push_str("    }\n");
+        self.header.push_str("    arr->data = new_data;\n");
+        self.header.push_str("    arr->capacity = new_capacity;\n");
+        self.header.push_str("    return arr;\n");
+        self.header.push_str("}\n\n");
+
+        self.header.push_str("static ve_Array* ve_array_append_element(ve_Array* arr, void* element, size_t element_size) {\n");
+        self.header.push_str("    if (!arr) {\n");
+        self.header.push_str("        arr = ve_array_create_empty(element_size, 4);\n");
+        self.header.push_str("    }\n");
+        self.header.push_str("    arr = ve_array_ensure_capacity(arr, arr->length + 1, element_size);\n");
+        self.header.push_str("    if (arr && arr->data && element) {\n");
+        self.header.push_str("        char* dest = ((char*)arr->data) + (arr->length * element_size);\n");
+        self.header.push_str("        memcpy(dest, element, element_size);\n");
+        self.header.push_str("        arr->length++;\n");
+        self.header.push_str("    }\n");
+        self.header.push_str("    return arr;\n");
+        self.header.push_str("}\n\n");
+
+        self.header.push_str("static size_t ve_array_length(ve_Array* arr) {\n");
+        self.header.push_str("    return arr ? arr->length : 0;\n");
+        self.header.push_str("}\n\n");
+
+        self.header.push_str("static void* ve_array_data(ve_Array* arr) {\n");
+        self.header.push_str("    return arr ? arr->data : NULL;\n");
+        self.header.push_str("}\n\n");
+
+        self.header.push_str("static ve_Array* ve_array_append_i32(ve_Array* arr, int value) {\n");
+        self.header.push_str("    return ve_array_append_element(arr, &value, sizeof(int));\n");
+        self.header.push_str("}\n\n");
+
+        self.header.push_str("static ve_Array* ve_array_append_string(ve_Array* arr, const char* value) {\n");
+        self.header.push_str("    return ve_array_append_element(arr, &value, sizeof(const char*));\n");
+        self.header.push_str("}\n\n");
+
+        self.header.push_str("static ve_Array* ve_array_append_bool(ve_Array* arr, bool value) {\n");
+        self.header.push_str("    return ve_array_append_element(arr, &value, sizeof(bool));\n");
+        self.header.push_str("}\n\n");
     }
 
     fn emit_utility_functions(&mut self) {
@@ -838,6 +935,114 @@ impl CBackend {
             .push_str("    char* buffer = ve_arena_alloc(20);\n");
         self.header.push_str("    sprintf(buffer, \"%p\", ptr);\n");
         self.header.push_str("    return buffer;\n");
+        self.header.push_str("}\n\n");
+
+        self.header
+            .push_str("static char* ve_array_to_str(ve_Array* arr) {\n");
+        self.header
+            .push_str("    if (!arr) return \"[null array]\";\n");
+        self.header
+            .push_str("    size_t len = arr->length;\n");
+        self.header
+            .push_str("    if (len == 0) return \"[]\";\n");
+        self.header
+            .push_str("    char* buffer = ve_arena_alloc(64 + len * 16);\n");
+        self.header
+            .push_str("    sprintf(buffer, \"[array of %zu elements]\", len);\n");
+        self.header
+            .push_str("    return buffer;\n");
+        self.header.push_str("}\n\n");
+
+        self.header
+            .push_str("static char* ve_array_i32_to_str(ve_Array* arr) {\n");
+        self.header
+            .push_str("    if (!arr) return \"[null array]\";\n");
+        self.header
+            .push_str("    size_t len = arr->length;\n");
+        self.header
+            .push_str("    if (len == 0) return \"[]\";\n");
+        self.header
+            .push_str("    size_t buffer_size = 16 + len * 16;\n");
+        self.header
+            .push_str("    char* buffer = ve_arena_alloc(buffer_size);\n");
+        self.header
+            .push_str("    strcpy(buffer, \"[\");\n");
+        self.header
+            .push_str("    for (size_t i = 0; i < len; i++) {\n");
+        self.header
+            .push_str("        if (i > 0) strcat(buffer, \", \");\n");
+        self.header
+            .push_str("        char temp[16];\n");
+        self.header
+            .push_str("        sprintf(temp, \"%d\", ((int*)ve_array_data(arr))[i]);\n");
+        self.header
+            .push_str("        strcat(buffer, temp);\n");
+        self.header
+            .push_str("    }\n");
+        self.header
+            .push_str("    strcat(buffer, \"]\");\n");
+        self.header
+            .push_str("    return buffer;\n");
+        self.header.push_str("}\n\n");
+
+        self.header
+            .push_str("static char* ve_array_string_to_str(ve_Array* arr) {\n");
+        self.header
+            .push_str("    if (!arr) return \"[null array]\";\n");
+        self.header
+            .push_str("    size_t len = arr->length;\n");
+        self.header
+            .push_str("    if (len == 0) return \"[]\";\n");
+        self.header
+            .push_str("    size_t buffer_size = 16 + len * 64;\n");
+        self.header
+            .push_str("    char* buffer = ve_arena_alloc(buffer_size);\n");
+        self.header
+            .push_str("    strcpy(buffer, \"[\");\n");
+        self.header
+            .push_str("    for (size_t i = 0; i < len; i++) {\n");
+        self.header
+            .push_str("        if (i > 0) strcat(buffer, \", \");\n");
+        self.header
+            .push_str("        strcat(buffer, \"\\\"\");\n");
+        self.header
+            .push_str("        strcat(buffer, ((const char**)ve_array_data(arr))[i]);\n");
+        self.header
+            .push_str("        strcat(buffer, \"\\\"\");\n");
+        self.header
+            .push_str("    }\n");
+        self.header
+            .push_str("    strcat(buffer, \"]\");\n");
+        self.header
+            .push_str("    return buffer;\n");
+        self.header.push_str("}\n\n");
+
+        self.header
+            .push_str("static char* ve_array_bool_to_str(ve_Array* arr) {\n");
+        self.header
+            .push_str("    if (!arr) return \"[null array]\";\n");
+        self.header
+            .push_str("    size_t len = arr->length;\n");
+        self.header
+            .push_str("    if (len == 0) return \"[]\";\n");
+        self.header
+            .push_str("    size_t buffer_size = 16 + len * 8;\n");
+        self.header
+            .push_str("    char* buffer = ve_arena_alloc(buffer_size);\n");
+        self.header
+            .push_str("    strcpy(buffer, \"[\");\n");
+        self.header
+            .push_str("    for (size_t i = 0; i < len; i++) {\n");
+        self.header
+            .push_str("        if (i > 0) strcat(buffer, \", \");\n");
+        self.header
+            .push_str("        strcat(buffer, ((bool*)ve_array_data(arr))[i] ? \"true\" : \"false\");\n");
+        self.header
+            .push_str("    }\n");
+        self.header
+            .push_str("    strcat(buffer, \"]\");\n");
+        self.header
+            .push_str("    return buffer;\n");
         self.header.push_str("}\n\n");
 
         let (strcpy_fn, strcat_fn) = if cfg!(target_os = "windows") && cfg!(target_env = "msvc") {
@@ -1039,14 +1244,20 @@ impl CBackend {
                 .map(|(name, ty)| format!("{} {}", self.type_to_c(ty), name))
                 .collect::<Vec<_>>()
                 .join(", ");
-            self.body
+            self.header
                 .push_str(&format!("{} {}({});\n", return_type, func_name, params));
         }
         
         for impl_block in &program.impls {
             for method in &impl_block.methods {
                 let return_type = self.type_to_c(&method.return_type);
-                let method_name = format!("ve_method_{}_{}", impl_block.target_type, method.name);
+                let sanitized_type = if impl_block.target_type.starts_with("[]") {
+                    let inner = &impl_block.target_type[2..];
+                    format!("array_{}", inner)
+                } else {
+                    impl_block.target_type.clone()
+                };
+                let method_name = format!("ve_method_{}_{}", sanitized_type, method.name);
                 
                 let params = method
                     .params
@@ -1054,7 +1265,7 @@ impl CBackend {
                     .map(|(name, ty)| format!("{} {}", self.type_to_c(ty), name))
                     .collect::<Vec<_>>()
                     .join(", ");
-                self.body
+                self.header
                     .push_str(&format!("{} {}({});\n", return_type, method_name, params));
             }
         }
@@ -1181,13 +1392,18 @@ impl CBackend {
                         ast::Expr::Bool(_, _) => Type::Bool,
                         ast::Expr::Str(_, _) => Type::String,
                         ast::Expr::Call(func_name, _, _) => {
-                            self.functions_map.get(func_name).cloned().ok_or_else(|| {
-                                CompileError::CodegenError {
-                                    message: format!("Undefined function '{}'", func_name),
-                                    span: Some(expr.span()),
-                                    file_id: self.file_id,
-                                }
-                            })?
+
+                            if func_name.starts_with("<method>.") {
+                                expr.get_type()
+                            } else {
+                                self.functions_map.get(func_name).cloned().ok_or_else(|| {
+                                    CompileError::CodegenError {
+                                        message: format!("Undefined function '{}'", func_name),
+                                        span: Some(expr.span()),
+                                        file_id: self.file_id,
+                                    }
+                                })?
+                            }
                         }
                         _ => expr.get_type(),
                     }
@@ -1732,14 +1948,24 @@ impl CBackend {
                 if name.starts_with("<method>.") {
                     let method_name = &name[9..]; 
                     if let Some(obj_expr) = args.first() {
-                        let obj_code = self.emit_expr(obj_expr)?;
                         let obj_type = &obj_expr.get_type();
                         let type_name = self.type_to_c_name(obj_type);
                         
-                        let method_func_name = format!("ve_method_{}_{}", type_name, method_name);
+                        let sanitized_type_name = type_name.replace("[]", "_array").replace("[", "_").replace("]", "_");
+                        let method_func_name = format!("ve_method_{}_{}", sanitized_type_name, method_name);
                         
                         let mut args_code = Vec::new();
-                        args_code.push(obj_code); 
+                        
+                        let is_static_method = matches!(obj_expr, ast::Expr::Var(var_name, _) 
+                            if self.struct_defs.contains_key(var_name.as_str()) || 
+                               self.enum_defs.contains_key(var_name.as_str()) || 
+                               matches!(var_name.as_str(), "Command" | "Array" | "Option"));
+                        
+                        if !is_static_method {
+                            let obj_code = self.emit_expr(obj_expr)?;
+                            args_code.push(obj_code);
+                        }
+                        
                         for arg in args.iter().skip(1) {
                             args_code.push(self.emit_expr(arg)?);
                         }
@@ -1800,6 +2026,22 @@ impl CBackend {
                     (Type::F32, Type::String) => Ok(format!("ve_float_to_str({})", expr_code)),
                     (Type::F64, Type::String) => Ok(format!("ve_double_to_str({})", expr_code)),
                     (Type::Bool, Type::String) => Ok(format!("ve_bool_to_str({})", expr_code)),
+                    (Type::Array(inner_type), Type::String) => {
+                        match inner_type.as_ref() {
+                            Type::I32 => Ok(format!("ve_array_i32_to_str({})", expr_code)),
+                            Type::String => Ok(format!("ve_array_string_to_str({})", expr_code)),
+                            Type::Bool => Ok(format!("ve_array_bool_to_str({})", expr_code)),
+                            _ => Ok(format!("ve_array_to_str({})", expr_code)),
+                        }
+                    },
+                    (Type::SizedArray(inner_type, _), Type::String) => {
+                        match inner_type.as_ref() {
+                            Type::I32 => Ok(format!("ve_array_i32_to_str({})", expr_code)),
+                            Type::String => Ok(format!("ve_array_string_to_str({})", expr_code)),
+                            Type::Bool => Ok(format!("ve_array_bool_to_str({})", expr_code)),
+                            _ => Ok(format!("ve_array_to_str({})", expr_code)),
+                        }
+                    },
                     (Type::RawPtr, Type::String) => Ok(format!("(const char*)({})", expr_code)),
                     (Type::Pointer(inner), Type::String) => {
                         if matches!(**inner, Type::U8) {
@@ -1852,8 +2094,7 @@ impl CBackend {
             ast::Expr::FieldAccess(obj, field_name, _info) => {
                 let obj_code = self.emit_expr(obj)?;
                 Ok(format!("{}.{}", obj_code, field_name))
-            }
-            ast::Expr::ArrayInit(elements, info) => {
+            }            ast::Expr::ArrayInit(elements, info) => {
                 let element_type = match &info.ty {
                     Type::Array(inner) => inner.clone(),
                     _ => {
@@ -1866,42 +2107,129 @@ impl CBackend {
                 };
 
                 let element_type_str = self.type_to_c(&element_type);
-                let mut element_exprs = Vec::new();
-
-                for elem in elements {
-                    element_exprs.push(self.emit_expr(elem)?);
-                }
-
-                let elements_str = element_exprs.join(", ");
-
                 self.includes.borrow_mut().insert("<stdlib.h>".to_string());
 
-                let temp_var = format!("_array_stack_{}", info.span.start());
                 let temp_var_ptr = format!("_array_ptr_{}", info.span.start());
-                let size = elements.len();
-                Ok(format!(
-                    "({{ \
-                    {} {}[] = {{ {} }}; \
-                    {}* {} = ve_arena_alloc({} * sizeof({})); \
-                    if ({}) {{ \
+                
+                let mut has_spread = false;
+                for elem in elements {
+                    if let ast::Expr::Spread(_, _) = elem {
+                        has_spread = true;
+                        break;
+                    }
+                }
 
-                        for (int _i = 0; _i < {}; _i++) {{{}[_i] = {}[_i];}} \
-                    }} \
-                    {}; \
-                }})",
-                    element_type_str,
-                    temp_var,
-                    elements_str,
-                    element_type_str,
-                    temp_var_ptr,
-                    size,
-                    element_type_str,
-                    temp_var_ptr,
-                    size,
-                    temp_var_ptr,
-                    temp_var,
-                    temp_var_ptr
-                ))
+                if !has_spread {
+                    let mut element_exprs = Vec::new();
+                    for elem in elements {
+                        element_exprs.push(self.emit_expr(elem)?);
+                    }
+                    let elements_str = element_exprs.join(", ");
+                    let temp_var = format!("_array_stack_{}", info.span.start());
+                    let size = elements.len();
+                    
+                    if size == 0 {
+                        Ok(format!(
+                            "ve_array_create_empty(sizeof({}), 4)",
+                            element_type_str
+                        ))
+                    } else {
+                        Ok(format!(
+                            "({{ \
+                            {} {}[] = {{ {} }}; \
+                            {}* {} = ve_arena_alloc({} * sizeof({})); \
+                            if ({}) {{ \
+                                for (int _i = 0; _i < {}; _i++) {{{}[_i] = {}[_i];}} \
+                            }} \
+                            ve_array_create({}, {}, sizeof({})); \
+                        }})",
+                            element_type_str,
+                            temp_var,
+                            elements_str,
+                            element_type_str,
+                            temp_var_ptr,
+                            size,
+                            element_type_str,
+                            temp_var_ptr,
+                            size,
+                            temp_var_ptr,
+                            temp_var,
+                            temp_var_ptr,
+                            size,
+                            element_type_str
+                        ))
+                    }
+                } else {
+                    let base_id = info.span.start();
+                    let temp_offset = format!("_offset_{}", base_id);
+                    let temp_total_size = format!("_total_size_{}", base_id);
+
+                    let mut code = format!("({{ \
+                        size_t {} = 0; \
+                        ", temp_total_size);
+
+                    let mut spread_vars = Vec::new();
+                    let mut spread_counter = 0;
+                    
+                    for elem in elements {
+                        match elem {
+                            ast::Expr::Spread(spread_expr, _) => {
+                                let temp_spread_array = format!("_spread_array_{}_{}", base_id, spread_counter);
+                                let temp_spread_len = format!("_spread_len_{}_{}", base_id, spread_counter);
+                                let spread_code = self.emit_expr(spread_expr)?;
+                                
+                                code.push_str(&format!(
+                                    "ve_Array* {} = {}; \
+                                    size_t {} = ve_array_length({}); \
+                                    {} += {}; \
+                                    ", temp_spread_array, spread_code, temp_spread_len, temp_spread_array, temp_total_size, temp_spread_len));
+                                
+                                spread_vars.push((temp_spread_array, temp_spread_len));
+                                spread_counter += 1;
+                            }
+                            _ => {
+                                code.push_str(&format!("{} += 1; ", temp_total_size));
+                            }
+                        }
+                    }
+
+                    code.push_str(&format!(
+                        "{}* {} = ve_arena_alloc({} * sizeof({})); \
+                        size_t {} = 0; \
+                        ", element_type_str, temp_var_ptr, temp_total_size, element_type_str, temp_offset));
+
+                    let mut spread_var_index = 0;
+                    for elem in elements {
+                        match elem {
+                            ast::Expr::Spread(_, _) => {
+                                let (temp_spread_array, temp_spread_len) = &spread_vars[spread_var_index];
+                                code.push_str(&format!(
+                                    "for (size_t _i = 0; _i < {}; _i++) {{ \
+                                        {}[{} + _i] = (({}*)ve_array_data({}))[_i]; \
+                                    }} \
+                                    {} += {}; \
+                                    ", 
+                                    temp_spread_len,
+                                    temp_var_ptr, temp_offset, element_type_str, temp_spread_array,
+                                    temp_offset, temp_spread_len));
+                                spread_var_index += 1;
+                            }
+                            _ => {
+                                let elem_code = self.emit_expr(elem)?;
+                                code.push_str(&format!(
+                                    "{}[{}] = {}; \
+                                    {} += 1; \
+                                    ", temp_var_ptr, temp_offset, elem_code, temp_offset));
+                            }
+                        }
+                    }
+
+                    code.push_str(&format!(
+                        "ve_array_create({}, {}, sizeof({})); \
+                        }})", temp_var_ptr, temp_total_size, element_type_str));
+
+                    Ok(code)
+                }
             }
             ast::Expr::ArrayAccess(array, index, _info) => {
                 let array_expr = self.emit_expr(array)?;
@@ -1911,6 +2239,12 @@ impl CBackend {
                 match array_type {
                     Type::Pointer(inner_ty) => Ok(format!(
                         "(({}*){})[{}]",
+                        self.type_to_c(&inner_ty),
+                        array_expr,
+                        index_expr
+                    )),
+                    Type::Array(inner_ty) => Ok(format!(
+                        "(({}*)ve_array_data({}))[{}]",
                         self.type_to_c(&inner_ty),
                         array_expr,
                         index_expr
@@ -2239,6 +2573,9 @@ impl CBackend {
             
             Ok(code)
         }
+        ast::Expr::Spread(expr, _) => {
+            self.emit_expr(expr)
+        }
         ast::Expr::None(_) => Ok("NULL".to_string()),
         }
     }
@@ -2318,6 +2655,7 @@ impl CBackend {
                 }
                 s
             }
+            Type::Array(inner) => format!("array_{}", self.type_to_c_name(inner)),
             Type::Optional(inner) => format!("optional_{}", self.type_to_c_name(inner)),
             Type::NoneType => "none".to_string(),
             _ => "unknown".to_string(),
@@ -2363,7 +2701,13 @@ impl CBackend {
                 let ret_str = self.type_to_c(ret);
                 format!("{}(*)({})", ret_str, args_str)
             }
-            Type::Pointer(inner) | Type::Array(inner) | Type::SizedArray(inner, _) => {
+            Type::Pointer(inner) => {
+                format!("{}*", self.type_to_c(inner))
+            }
+            Type::Array(_) => {
+                "ve_Array*".to_string()
+            }
+            Type::SizedArray(inner, _) => {
                 format!("{}*", self.type_to_c(inner))
             }
         }
@@ -2432,8 +2776,22 @@ impl CBackend {
             Type::Optional(inner_type) => {
                 format!("({}.has_value ? {} : \"None\")", code, self.convert_to_c_str(&format!("{}.value", code), inner_type))
             }
-            Type::Array(_) => "[array]".to_string(),
-            Type::SizedArray(_, _) => "[sized array]".to_string(),
+            Type::Array(inner_type) => {
+                match inner_type.as_ref() {
+                    Type::I32 => format!("ve_array_i32_to_str({})", code),
+                    Type::String => format!("ve_array_string_to_str({})", code),
+                    Type::Bool => format!("ve_array_bool_to_str({})", code),
+                    _ => format!("ve_array_to_str({})", code),
+                }
+            },
+            Type::SizedArray(inner_type, _) => {
+                match inner_type.as_ref() {
+                    Type::I32 => format!("ve_array_i32_to_str({})", code),
+                    Type::String => format!("ve_array_string_to_str({})", code),
+                    Type::Bool => format!("ve_array_bool_to_str({})", code),
+                    _ => format!("ve_array_to_str({})", code),
+                }
+            },
             Type::Any => "[any]".to_string(),
             Type::Unknown => {
                 eprintln!("Warning: Unknown type in conversion to string. Check type inference.");
@@ -3052,7 +3410,17 @@ impl CBackend {
 
     fn emit_impl_block(&mut self, impl_block: &ast::ImplBlock) -> Result<(), CompileError> {
         for method in &impl_block.methods {
-            let mangled_name = format!("ve_method_{}_{}", impl_block.target_type, method.name);
+            let sanitized_type = if impl_block.target_type.starts_with("[]") {
+                let inner = &impl_block.target_type[2..];
+                format!("array_{}", inner)
+            } else {
+                impl_block.target_type.clone()
+            };
+            let mangled_name = format!("ve_method_{}_{}", sanitized_type, method.name);
+            
+            if impl_block.target_type.ends_with("[]") && self.generate_optimized_array_method(impl_block, method)? {
+                continue;
+            }
             
             let mut impl_function = method.clone();
             impl_function.name = mangled_name;
@@ -3061,5 +3429,64 @@ impl CBackend {
         }
         
         Ok(())
+    }
+
+    fn generate_optimized_array_method(&mut self, impl_block: &ast::ImplBlock, method: &ast::Function) -> Result<bool, CompileError> {
+        let inner_type = if impl_block.target_type.starts_with("[]") {
+            &impl_block.target_type[2..]
+        } else {
+            return Ok(false);
+        };
+        
+        let sanitized_type = format!("array_{}", inner_type);
+        let mangled_name = format!("ve_method_{}_{}", sanitized_type, method.name);
+        
+        match method.name.as_str() {
+            "length" => {
+                self.body.push_str(&format!(
+                    "int {}(ve_Array* self) {{\n",
+                    mangled_name
+                ));
+                self.body.push_str("    return (int)ve_array_length(self);\n");
+                self.body.push_str("}\n\n");
+                Ok(true)
+            }
+            "append" => {
+                let element_type = self.get_c_type_for_veil_type(inner_type);
+                let append_func = self.get_append_function_for_type(inner_type);
+                
+                self.body.push_str(&format!(
+                    "ve_Array* {}(ve_Array* self, {} item) {{\n",
+                    mangled_name, element_type
+                ));
+                self.body.push_str(&format!(
+                    "    return {}(self, item);\n",
+                    append_func
+                ));
+                self.body.push_str("}\n\n");
+                Ok(true)
+            }
+            _ => Ok(false)
+        }
+    }
+
+    fn get_c_type_for_veil_type(&self, veil_type: &str) -> String {
+        match veil_type {
+            "i32" => "int".to_string(),
+            "string" => "const char*".to_string(),
+            "bool" => "bool".to_string(),
+            "f32" => "float".to_string(),
+            "f64" => "double".to_string(),
+            _ => "void*".to_string(),
+        }
+    }
+
+    fn get_append_function_for_type(&self, veil_type: &str) -> String {
+        match veil_type {
+            "i32" => "ve_array_append_i32".to_string(),
+            "string" => "ve_array_append_string".to_string(),
+            "bool" => "ve_array_append_bool".to_string(),
+            _ => "ve_array_append_element".to_string(),
+        }
     }
 }

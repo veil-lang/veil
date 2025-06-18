@@ -215,7 +215,11 @@ impl TypeChecker {
     fn check_stmt(&mut self, stmt: &mut Stmt) -> Result<(), Vec<Diagnostic<FileId>>> {
         match stmt {
             Stmt::Let(name, decl_ty, expr, var_span, _) => {
-                let expr_ty = self.check_expr(expr).unwrap_or(Type::Unknown);
+                let expr_ty = if let Some(decl_ty) = decl_ty {
+                    self.check_expr_with_expected(expr, decl_ty).unwrap_or(Type::Unknown)
+                } else {
+                    self.check_expr(expr).unwrap_or(Type::Unknown)
+                };
 
                 if expr_ty == Type::Void {
                     self.report_error("Cannot assign void expression to variable",
@@ -738,7 +742,17 @@ impl TypeChecker {
                 if name.starts_with("<method>.") {
                     let method_name = &name[9..]; 
                     if let Some(obj_expr) = args.first_mut() {
-                        let obj_type = self.check_expr(obj_expr)?;
+                        let (obj_type, is_static_call) = match obj_expr {
+                            Expr::Var(var_name, var_info) => {
+                                if self.context.struct_defs.contains_key(var_name) {
+                                    var_info.ty = Type::Struct(var_name.clone());
+                                    (Type::Struct(var_name.clone()), true)
+                                } else {
+                                    (self.check_expr(obj_expr)?, false)
+                                }
+                            }
+                            _ => (self.check_expr(obj_expr)?, false)
+                        };
                         
                         let type_name = obj_type.to_string();
                         
@@ -770,10 +784,12 @@ impl TypeChecker {
                             return Ok(Type::Unknown);
                         }
                         
-                        if args.len() != expected_args {
+                        let actual_args = if is_static_call { args.len() - 1 } else { args.len() };
+                        
+                        if actual_args != expected_args {
                             self.report_error(
                                 &format!("Method '{}' expects {} arguments, got {}", 
-                                    method_name, expected_args, args.len()),
+                                    method_name, expected_args, actual_args),
                                 *span,
                             );
                         }
@@ -1020,22 +1036,54 @@ impl TypeChecker {
                     return Ok(Type::Unknown);
                 }
 
-                let first_type = self.check_expr(&mut elements[0])?;
+                let mut element_type: Option<Type> = None;
 
-                for (i, element) in elements.iter_mut().enumerate().skip(1) {
-                    let el_type = self.check_expr(element)?;
-                    if !Self::is_convertible(&el_type, &first_type) {
-                        self.report_error(
-                            &format!(
-                                "Array element {} has type {}, but expected {}",
-                                i, el_type, first_type
-                            ),
-                            element.span(),
-                        );
+                for (i, element) in elements.iter_mut().enumerate() {
+                    match element {
+                        Expr::Spread(spread_expr, _) => {
+                            let spread_type = self.check_expr(spread_expr)?;
+                            if let Type::Array(inner_type) = spread_type {
+                                if let Some(ref expected) = element_type {
+                                    if !Self::is_convertible(&inner_type, expected) {
+                                        self.report_error(
+                                            &format!(
+                                                "Spread array element type {} does not match expected {}",
+                                                inner_type, expected
+                                            ),
+                                            element.span(),
+                                        );
+                                    }
+                                } else {
+                                    element_type = Some(*inner_type);
+                                }
+                            } else {
+                                self.report_error(
+                                    &format!("Cannot spread non-array type {}", spread_type),
+                                    element.span(),
+                                );
+                            }
+                        }
+                        _ => {
+                            let el_type = self.check_expr(element)?;
+                            if let Some(ref expected) = element_type {
+                                if !Self::is_convertible(&el_type, expected) {
+                                    self.report_error(
+                                        &format!(
+                                            "Array element {} has type {}, but expected {}",
+                                            i, el_type, expected
+                                        ),
+                                        element.span(),
+                                    );
+                                }
+                            } else {
+                                element_type = Some(el_type);
+                            }
+                        }
                     }
                 }
 
-                let array_type = Type::Array(Box::new(first_type));
+                let final_element_type = element_type.unwrap_or(Type::Unknown);
+                let array_type = Type::Array(Box::new(final_element_type));
                 *expr_type = array_type.clone();
                 Ok(array_type)
             }
@@ -1198,6 +1246,8 @@ impl TypeChecker {
                                         | Type::F32
                                         | Type::F64
                                         | Type::Bool
+                                        | Type::Array(_)
+                                        | Type::SizedArray(_, _)
                                         | Type::Generic(_)
                                         | Type::Optional(_)  
                                 ) {
@@ -1225,6 +1275,8 @@ impl TypeChecker {
                                         | Type::F32
                                         | Type::F64
                                         | Type::Bool
+                                        | Type::Array(_)
+                                        | Type::SizedArray(_, _)
                                         | Type::Generic(_)
                                         | Type::Optional(_) 
                                 ) {
@@ -1428,6 +1480,11 @@ impl TypeChecker {
                 info.ty = loop_type.clone();
                 Ok(loop_type)
             }
+            Expr::Spread(expr, info) => {
+                let expr_ty = self.check_expr(expr)?;
+                info.ty = expr_ty.clone();
+                Ok(expr_ty)
+            }
             Expr::None(info) => {
                 info.ty = Type::NoneType;
                 Ok(Type::NoneType)
@@ -1458,6 +1515,8 @@ impl TypeChecker {
         (Type::Generic(_), Type::String) => true,
         (Type::RawPtr, Type::Pointer(_)) => true,
         (Type::Pointer(_), Type::RawPtr) => true,
+        (Type::Array(_), Type::RawPtr) => true,
+        (Type::RawPtr, Type::Array(_)) => true,
         (Type::Pointer(_), Type::I32) => true,
         (Type::I32, Type::Pointer(_)) => true,
         (Type::I32, Type::Bool) => true,
@@ -1598,6 +1657,8 @@ impl TypeChecker {
             (Type::Struct(n1), Type::I32) => n1 == "size_t",
             (Type::I32, Type::Struct(n2)) => n2 == "size_t",
             (Type::Pointer(inner), Type::String) => matches!(&**inner, Type::U8),
+            (Type::Array(_), Type::String) => true,
+            (Type::SizedArray(_, _), Type::String) => true,
             (Type::Array(a), Type::Array(b)) | (Type::Pointer(a), Type::Pointer(b)) =>
                 Self::is_convertible(a, b),
             (Type::SizedArray(a, n1), Type::SizedArray(b, n2)) =>
@@ -1651,6 +1712,12 @@ impl TypeChecker {
     }
     
     fn parse_type_name(&self, type_name: &str) -> Type {
+        if type_name.starts_with("[]") {
+            let inner_type_name = &type_name[2..];
+            let inner_type = self.parse_type_name(inner_type_name);
+            return Type::Array(Box::new(inner_type));
+        }
+        
         match type_name {
             "string" => Type::String,
             "i32" => Type::I32,

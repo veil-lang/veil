@@ -217,6 +217,7 @@ pub enum Expr {
     FieldAccess(Box<Expr>, String, ExprInfo),
     ArrayInit(Vec<Expr>, ExprInfo),
     ArrayAccess(Box<Expr>, Box<Expr>, ExprInfo),
+    Spread(Box<Expr>, ExprInfo),
     TemplateStr(Vec<TemplateStrPart>, ExprInfo),
     F32(f32, ExprInfo),
     FfiCall(String, Vec<Expr>, ExprInfo),
@@ -301,6 +302,7 @@ impl Expr {
             Expr::FieldAccess(_, _, info) => info.span,
             Expr::ArrayInit(_, info) => info.span,
             Expr::ArrayAccess(_, _, info) => info.span,
+            Expr::Spread(_, info) => info.span,
             Expr::TemplateStr(_, info) => info.span,
             Expr::F32(_, info) => info.span,
             Expr::FfiCall(_, _, info) => info.span,
@@ -333,6 +335,7 @@ impl Expr {
             Expr::FieldAccess(_, _, info) => info.ty.clone(),
             Expr::ArrayInit(_, info) => info.ty.clone(),
             Expr::ArrayAccess(_, _, info) => info.ty.clone(),
+            Expr::Spread(_, info) => info.ty.clone(),
             Expr::TemplateStr(_, info) => info.ty.clone(),
             Expr::F32(_, info) => info.ty.clone(),
             Expr::FfiCall(_, _, info) => info.ty.clone(),
@@ -365,6 +368,7 @@ impl Expr {
             Expr::FieldAccess(_, _, info) => info,
             Expr::ArrayInit(_, info) => info,
             Expr::ArrayAccess(_, _, info) => info,
+            Expr::Spread(_, info) => info,
             Expr::TemplateStr(_, info) => info,
             Expr::F32(_, info) => info,
             Expr::FfiCall(_, _, info) => info,
@@ -733,7 +737,8 @@ pub trait AstVisitor {
             | Expr::F32(_, _)
             | Expr::Void(_)
             | Expr::None(_)
-            | Expr::InfiniteRange(_, _) => {}
+            | Expr::InfiniteRange(_, _) 
+            | Expr::Spread(_, _) => {}
 
             Expr::BinOp(left, _, right, _) => {
                 self.visit_expr(left);
@@ -924,6 +929,7 @@ impl AstVisitor for GenericCallCollector {
             | Expr::Bool(_, _)
             | Expr::Str(_, _)
             | Expr::Var(_, _)
+            | Expr::Spread(_, _)
             | Expr::F32(_, _)
             | Expr::Void(_)
             | Expr::None(_)
@@ -1171,7 +1177,9 @@ pub trait AstTransformer {
             Expr::Void(info) => Expr::Void(info),
             Expr::None(info) => Expr::None(info),
             Expr::InfiniteRange(range_type, info) => Expr::InfiniteRange(range_type, info),
-            
+            Expr::Spread(expr, info) => {
+                Expr::Spread(Box::new(self.transform_expr(*expr)), info)
+            }
             Expr::BinOp(left, op, right, info) => {
                 Expr::BinOp(
                     Box::new(self.transform_expr(*left)),

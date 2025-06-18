@@ -520,6 +520,17 @@ fn parse_prefix(&mut self) -> Result<ast::Expr, Diagnostic<FileId>> {
                 },
             ))
         }
+        Token::Ellipsis => {
+            let op_span = self.peek_span();
+            self.advance();
+            let expr = self.parse_expr_bp(8)?;
+            let expr_span = expr.span();
+            Ok(ast::Expr::Spread(Box::new(expr), ast::ExprInfo {
+                span: Span::new(op_span.start(), expr_span.end()),
+                ty: ast::Type::Unknown,
+                is_tail: false,
+            }))
+        }
         _ => self.parse_atom(),
     }
 }
@@ -1946,6 +1957,7 @@ fn parse_prefix(&mut self) -> Result<ast::Expr, Diagnostic<FileId>> {
             ast::Expr::If(_, _, _, info) => info.is_tail = true,
             ast::Expr::Loop(_, info) => info.is_tail = true,
             ast::Expr::Void(info) => info.is_tail = true,
+            ast::Expr::Spread(_, info) => info.is_tail = true,
             ast::Expr::None(info) => info.is_tail = true,
         }
     }
