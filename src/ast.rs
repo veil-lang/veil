@@ -207,6 +207,7 @@ pub enum Expr {
     BinOp(Box<Expr>, BinOp, Box<Expr>, ExprInfo),
     UnaryOp(UnOp, Box<Expr>, ExprInfo),
     Call(String, Vec<Expr>, ExprInfo),
+    New(String, Vec<Expr>, ExprInfo),
     Cast(Box<Expr>, Type, ExprInfo),
     SafeBlock(Vec<Stmt>, ExprInfo),
     Deref(Box<Expr>, ExprInfo),
@@ -292,6 +293,7 @@ impl Expr {
             Expr::BinOp(_, _, _, info) => info.span,
             Expr::UnaryOp(_, _, info) => info.span,
             Expr::Call(_, _, info) => info.span,
+            Expr::New(_, _, info) => info.span,
             Expr::Cast(_, _, info) => info.span,
             Expr::SafeBlock(_, info) => info.span,
             Expr::Deref(_, info) => info.span,
@@ -325,6 +327,7 @@ impl Expr {
             Expr::BinOp(_, _, _, info) => info.ty.clone(),
             Expr::UnaryOp(_, _, info) => info.ty.clone(),
             Expr::Call(_, _, info) => info.ty.clone(),
+            Expr::New(_, _, info) => info.ty.clone(),
             Expr::Cast(_, _, info) => info.ty.clone(),
             Expr::SafeBlock(_, info) => info.ty.clone(),
             Expr::Deref(_, info) => info.ty.clone(),
@@ -358,6 +361,7 @@ impl Expr {
             Expr::BinOp(_, _, _, info) => info,
             Expr::UnaryOp(_, _, info) => info,
             Expr::Call(_, _, info) => info,
+            Expr::New(_, _, info) => info,
             Expr::Cast(_, _, info) => info,
             Expr::SafeBlock(_, info) => info,
             Expr::Deref(_, info) => info,
@@ -752,6 +756,11 @@ pub trait AstVisitor {
                     self.visit_expr(arg);
                 }
             }
+            Expr::New(_, args, _) => {
+                for arg in args {
+                    self.visit_expr(arg);
+                }
+            }
             Expr::Cast(expr, ty, _) => {
                 self.visit_expr(expr);
                 self.visit_type(ty);
@@ -942,6 +951,11 @@ impl AstVisitor for GenericCallCollector {
                 self.visit_expr(expr);
             }
             Expr::Call(_, args, _) => {
+                for arg in args {
+                    self.visit_expr(arg);
+                }
+            }
+            Expr::New(_, args, _) => {
                 for arg in args {
                     self.visit_expr(arg);
                 }
@@ -1194,6 +1208,13 @@ pub trait AstTransformer {
             Expr::Call(name, args, info) => {
                 Expr::Call(
                     self.transform_call_name(name, &args, &info),
+                    args.into_iter().map(|a| self.transform_expr(a)).collect(),
+                    info,
+                )
+            }
+            Expr::New(name, args, info) => {
+                Expr::New(
+                    name,
                     args.into_iter().map(|a| self.transform_expr(a)).collect(),
                     info,
                 )

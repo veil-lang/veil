@@ -43,6 +43,10 @@ pub enum Token {
     KwStruct,
     #[token("impl")]
     KwImpl,
+    #[token("new")]
+    KwNew,
+    #[token("constructor")]
+    KwConstructor,
     #[token("enum")]
     KwEnum,
     #[token("match")]

@@ -122,6 +122,18 @@ impl TypeChecker {
                 .insert(func.name.clone(), (params, func.return_type.clone()));
         }
 
+        for impl_block in &program.impls {
+            let _target_type = self.parse_type_name(&impl_block.target_type);
+            
+            for method in &impl_block.methods {
+                if method.name == "constructor" {
+                    let params: Vec<Type> = method.params.iter().map(|(_, t)| t.clone()).collect();
+                    let constructor_name = format!("{}.constructor", impl_block.target_type);
+                    self.functions.insert(constructor_name, (params, method.return_type.clone()));
+                }
+            }
+        }
+
         for stmt in &mut program.stmts {
             self.check_stmt(stmt)?;
         }
@@ -847,6 +859,62 @@ impl TypeChecker {
                 *expr_type = return_type.clone();
 
                 Ok(return_type.clone())
+            }
+            Expr::New(
+                struct_name,
+                args,
+                ast::ExprInfo {
+                    span,
+                    ty: expr_type,
+                    is_tail: _,
+                },
+            ) => {
+                if let Some(_struct_def) = self.context.struct_defs.get(struct_name) {
+                    let constructor_name = format!("{}.constructor", struct_name);
+                    let constructor_info = self.functions.get(&constructor_name).cloned();
+                    
+                    if let Some((param_types, return_type)) = constructor_info {
+                        let has_ellipsis = param_types.last() == Some(&Type::Ellipsis);
+                        let min_args = if has_ellipsis {
+                            param_types.len() - 1
+                        } else {
+                            param_types.len()
+                        };
+
+                        if args.len() < min_args || (!has_ellipsis && args.len() > min_args) {
+                            self.report_error(
+                                &format!(
+                                    "Expected {}{} arguments for constructor, got {}",
+                                    min_args,
+                                    if has_ellipsis { "+" } else { "" },
+                                    args.len()
+                                ),
+                                *span,
+                            );
+                        }
+
+                        for (arg, param_ty) in args.iter_mut().zip(param_types.iter()).take(min_args) {
+                            let arg_ty = self.check_expr(arg).unwrap_or(Type::Unknown);
+                            if !Self::is_convertible(&arg_ty, param_ty) {
+                                self.report_error(
+                                    &format!("Expected {}, got {}", param_ty, arg_ty),
+                                    arg.span(),
+                                );
+                            }
+                        }
+
+                        *expr_type = return_type.clone();
+                        Ok(return_type.clone())
+                    } else {
+                        self.report_error(&format!("No constructor found for struct '{}'", struct_name), *span);
+                        *expr_type = Type::Unknown;
+                        Ok(Type::Unknown)
+                    }
+                } else {
+                    self.report_error(&format!("Unknown struct '{}'", struct_name), *span);
+                    *expr_type = Type::Unknown;
+                    Ok(Type::Unknown)
+                }
             }
             Expr::SafeBlock(stmts, _) => {
                 let old_in_safe = self.context.in_safe;
@@ -1702,6 +1770,12 @@ impl TypeChecker {
                 if param_name == "self" {
                     *param_type = target_type.clone();
                 }
+            }
+            
+            if method.name == "constructor" {
+                let params: Vec<Type> = method.params.iter().map(|(_, t)| t.clone()).collect();
+                let constructor_name = format!("{}.constructor", impl_block.target_type);
+                self.functions.insert(constructor_name, (params, method.return_type.clone()));
             }
             
             self.context.current_return_type = method.return_type.clone();

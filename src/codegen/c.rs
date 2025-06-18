@@ -2094,7 +2094,15 @@ impl CBackend {
             ast::Expr::FieldAccess(obj, field_name, _info) => {
                 let obj_code = self.emit_expr(obj)?;
                 Ok(format!("{}.{}", obj_code, field_name))
-            }            ast::Expr::ArrayInit(elements, info) => {
+            }
+            ast::Expr::New(name, args, _info) => {
+                let mut arg_codes = Vec::new();
+                for arg in args {
+                    arg_codes.push(self.emit_expr(arg)?);
+                }
+                Ok(format!("ve_method_{}_constructor({})", name, arg_codes.join(", ")))
+            }
+            ast::Expr::ArrayInit(elements, info) => {
                 let element_type = match &info.ty {
                     Type::Array(inner) => inner.clone(),
                     _ => {

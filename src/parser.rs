@@ -531,6 +531,21 @@ fn parse_prefix(&mut self) -> Result<ast::Expr, Diagnostic<FileId>> {
                 is_tail: false,
             }))
         }
+        Token::KwNew => {
+            let new_span = self.peek_span();
+            self.advance();
+            let (struct_name, name_span) = self.consume_ident()?;
+            let (args, args_span) = self.parse_call_args()?;
+            Ok(ast::Expr::New(
+                struct_name,
+                args,
+                ast::ExprInfo {
+                    span: Span::new(new_span.start(), args_span.end()),
+                    ty: ast::Type::Unknown,
+                    is_tail: false,
+                },
+            ))
+        }
         _ => self.parse_atom(),
     }
 }
@@ -1446,6 +1461,20 @@ fn parse_prefix(&mut self) -> Result<ast::Expr, Diagnostic<FileId>> {
     fn parse_atom(&mut self) -> Result<ast::Expr, Diagnostic<FileId>> {
         let current = self.advance().cloned();
         match current {
+            Some((Token::KwNew, span)) => {
+                let (struct_name, _) = self.consume_ident()?;
+                let args = if self.check(Token::LParen) {
+                    let (args, _) = self.parse_call_args()?;
+                    args
+                } else {
+                    Vec::new()
+                };
+                Ok(ast::Expr::New(struct_name.clone(), args, ast::ExprInfo {
+                    span,
+                    ty: ast::Type::Struct(struct_name),
+                    is_tail: false,
+                }))
+            }
             Some((Token::Int(s), span)) => {
                 match s.parse::<i32>() {
                     Ok(val) => Ok(ast::Expr::Int(val, ast::ExprInfo {
@@ -1939,6 +1968,7 @@ fn parse_prefix(&mut self) -> Result<ast::Expr, Diagnostic<FileId>> {
             ast::Expr::BinOp(_, _, _, info) => info.is_tail = true,
             ast::Expr::UnaryOp(_, _, info) => info.is_tail = true,
             ast::Expr::Call(_, _, info) => info.is_tail = true,
+            ast::Expr::New(_, _, info) => info.is_tail = true,
             ast::Expr::Cast(_, _, info) => info.is_tail = true,
             ast::Expr::SafeBlock(_, info) => info.is_tail = true,
             ast::Expr::Deref(_, info) => info.is_tail = true,
@@ -2132,9 +2162,11 @@ fn parse_prefix(&mut self) -> Result<ast::Expr, Diagnostic<FileId>> {
         while !self.check(Token::RBrace) {
             if self.check(Token::KwFn) {
                 methods.push(self.parse_function()?);
+            } else if self.check(Token::KwConstructor) {
+                methods.push(self.parse_constructor()?);
             } else {
                 let span = self.peek_span();
-                return self.error("Expected function in impl block", span);
+                return self.error("Expected function or constructor in impl block", span);
             }
         }
         
@@ -2147,11 +2179,62 @@ fn parse_prefix(&mut self) -> Result<ast::Expr, Diagnostic<FileId>> {
         })
     }
 
+    fn parse_constructor(&mut self) -> Result<ast::Function, Diagnostic<FileId>> {
+        let start_span = self.consume(Token::KwConstructor, "Expected 'constructor'")?;
+        
+        self.expect(Token::LParen)?;
+        let mut params = Vec::new();
+        
+        if !self.check(Token::RParen) {
+            loop {
+                let (param_name, _) = self.consume_ident()?;
+                self.expect(Token::Colon)?;
+                let param_type = self.parse_type()?;
+                params.push((param_name, param_type));
+                
+                if self.check(Token::Comma) {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+        }
+        
+        self.expect(Token::RParen)?;
+        self.expect(Token::Arrow)?;
+        let return_type = self.parse_type()?;
+        self.expect(Token::LBrace)?;
+        
+        let mut body = Vec::new();
+        
+        while !self.check(Token::RBrace) {
+            let stmt = self.parse_stmt()?;
+            body.push(stmt);
+        }
+        
+        if let Some(&mut ast::Stmt::Expr(ref mut expr, _)) = body.last_mut() {
+            self.mark_as_tail(expr);
+        }
+        
+        let end_span = self.expect(Token::RBrace)?;
+        
+        Ok(ast::Function {
+            name: "constructor".to_string(),
+            generic_params: Vec::new(),
+            params,
+            return_type,
+            body,
+            span: Span::new(start_span.start(), end_span.end()),
+            visibility: ast::Visibility::Private,
+        })
+    }
+
     fn parse_export_import(&mut self) -> Result<ast::ImportDeclaration, Diagnostic<FileId>> {
         self.expect(Token::KwImport)?;
         
         let result = if self.check(Token::Star) {
             self.advance();
+           
             self.expect(Token::KwFrom)?;
             let import_all = self.parse_import_all()?;
             match import_all {

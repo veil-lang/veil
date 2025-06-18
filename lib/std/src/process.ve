@@ -7,7 +7,7 @@ export struct Command {
 }
 
 impl Command {
-    fn new(program: string) -> Command {        
+    constructor(program: string) -> Command {        
         Command {
             program: program,
             args: [],
@@ -19,7 +19,9 @@ impl Command {
             program: self.program,
             args: self.args.append(arg),
         }
-    }    fn args(self, new_args: string[]) -> Command {
+    }
+    
+    fn args(self, new_args: string[]) -> Command {
         let combined_args = self.args;
         let i = 0;
         while i < new_args.length() {
