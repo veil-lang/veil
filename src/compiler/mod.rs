@@ -23,14 +23,34 @@ pub enum ImportType {
 }
 
 pub fn resolve_standard_library_path(module_path: &str) -> Result<PathBuf> {
-    let base_path = std::env::var("VEIL_LIB_PATH")
-        .unwrap_or_else(|_| "lib".to_string());
+    let base_path = if let Ok(veil_lib_path) = std::env::var("VEIL_LIB_PATH") {
+        PathBuf::from(veil_lib_path)
+    } else {
+        let exe_path = std::env::current_exe()
+            .map_err(|e| anyhow!("Cannot determine executable path: {}", e))?;
+        let exe_dir = exe_path.parent()
+            .ok_or_else(|| anyhow!("Cannot determine executable directory"))?;
+        
+        let mut candidate_paths = vec![
+            exe_dir.join("lib"),
+            exe_dir.join("..").join("lib"),
+            exe_dir.join("..").join("..").join("lib"),
+        ];
+        
+        if let Ok(cargo_manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+            candidate_paths.push(PathBuf::from(cargo_manifest_dir).join("lib"));
+        }
+        
+        candidate_paths.into_iter()
+            .find(|path| path.exists())
+            .unwrap_or_else(|| PathBuf::from("lib"))
+    };
     
     let full_path = if module_path.starts_with("std/") {
         let module_name = &module_path[4..];
-        PathBuf::from(base_path).join("std").join("src").join(format!("{}.ve", module_name))
+        base_path.join("std").join("src").join(format!("{}.ve", module_name))
     } else {
-        PathBuf::from(base_path).join("src").join(format!("{}.ve", module_path))
+        base_path.join("src").join(format!("{}.ve", module_path))
     };
     
     if full_path.exists() {
