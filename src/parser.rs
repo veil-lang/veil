@@ -15,7 +15,7 @@ pub struct Parser<'a> {
     #[allow(dead_code)]
     files: &'a Files<String>,
     file_id: FileId,
-    token_vec: &'a [(Token, Span)],
+    _token_vec: &'a [(Token, Span)],
     previous_token: Option<(Token, Span)>,
 }
 
