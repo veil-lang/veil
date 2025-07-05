@@ -217,6 +217,27 @@ pub fn prepare_windows_clang_args(
     Ok(clang_args)
 }
 
+pub fn get_bundled_clang_path() -> Result<PathBuf> {
+    let exe_dir = std::env::current_exe()?.parent().unwrap().to_path_buf();
+
+    let platform = if cfg!(target_os = "windows") {
+        "windows-x64"
+    } else if cfg!(target_os = "macos") {
+        "macos-x64"
+    } else {
+        "linux-x64"
+    };
+
+    let clang_name = if cfg!(windows) { "clang.exe" } else { "clang" };
+    let bundled = exe_dir.join("tools").join(platform).join(clang_name);
+
+    if bundled.exists() {
+        return Ok(bundled);
+    }
+    which::which("clang").map_err(|_| anyhow::anyhow!("No C compiler found"))
+}
+
+
 #[cfg(target_os = "windows")]
 fn get_msvc_lib_paths() -> Result<Vec<String>> {
     use std::env;

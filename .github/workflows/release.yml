@@ -1,0 +1,73 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            suffix: .exe
+            llvm_url: https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.5/clang+llvm-18.1.5-x86_64-pc-windows-msvc.tar.xz
+            platform: windows-x64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            suffix: ""
+            llvm_url: https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.5/clang+llvm-18.1.5-x86_64-linux-gnu-ubuntu-20.04.tar.xz
+            platform: linux-x64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            suffix: ""
+            llvm_url: https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.5/clang+llvm-18.1.5-x86_64-apple-darwin.tar.xz
+            platform: macos-x64
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Download LLVM
+        run: |
+          mkdir -p tools/${{ matrix.platform }}
+          curl -LO ${{ matrix.llvm_url }}
+          tar -xf clang+llvm-*.tar.xz
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            cp clang+llvm-*/bin/clang.exe tools/${{ matrix.platform }}/
+            cp clang+llvm-*/bin/lld-link.exe tools/${{ matrix.platform }}/
+          else
+            cp clang+llvm-*/bin/clang tools/${{ matrix.platform }}/
+            cp clang+llvm-*/bin/lld tools/${{ matrix.platform }}/
+            chmod +x tools/${{ matrix.platform }}/clang
+            chmod +x tools/${{ matrix.platform }}/lld
+          fi
+
+      - name: Build release
+        run: |
+          cargo build --release --target ${{ matrix.target }}
+
+      - name: Package artifacts
+        run: |
+          mkdir dist
+          cp target/${{ matrix.target }}/release/ve${{ matrix.suffix }} dist/
+          cp -r lib dist/ 2>/dev/null || echo "No lib directory"
+          cp -r tools dist/
+
+      - name: Create archive
+        run: |
+          cd dist
+          tar -czf ../veil-${{ matrix.target }}.tar.gz *
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: veil-${{ matrix.target }}.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

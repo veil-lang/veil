@@ -1,6 +1,6 @@
-
 #[cfg(target_os = "windows")]
 use crate::helpers::prepare_windows_clang_args;
+use crate::helpers::get_bundled_clang_path;
 use crate::{codegen, typeck};
 use anyhow::{Context, anyhow};
 use codespan::Files;
@@ -11,6 +11,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use crate::compiler::incremental::IncrementalCompiler;
+
 pub fn run_benchmark(input: PathBuf, iterations: usize, verbose: bool) -> anyhow::Result<()> {
     let build_dir = input
         .parent()
@@ -78,7 +79,7 @@ pub fn run_benchmark(input: PathBuf, iterations: usize, verbose: bool) -> anyhow
     stdout.flush()?;
     let mut module_compiler = IncrementalCompiler::new(&build_dir);
     module_compiler.build_dependency_graph(&input)?;
-    
+
     let compiled_modules = module_compiler.compile_all_modules(&mut files, verbose)?;
     if verbose && !compiled_modules.is_empty() {
         println!("{} modules were recompiled", compiled_modules.len());
@@ -105,7 +106,6 @@ pub fn run_benchmark(input: PathBuf, iterations: usize, verbose: bool) -> anyhow
             stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)).set_bold(true))?;
             writeln!(&mut stdout, "FAILED")?;
             stdout.reset()?;
-
             let writer = StandardStream::stderr(ColorChoice::Auto);
             let config = term::Config::default();
 
@@ -209,7 +209,8 @@ pub fn run_benchmark(input: PathBuf, iterations: usize, verbose: bool) -> anyhow
         output.to_str().unwrap().into(),
     ];
 
-    let status = std::process::Command::new("clang")
+    let clang_path = get_bundled_clang_path()?;
+    let status = std::process::Command::new(clang_path)
         .args(&clang_args)
         .status()
         .context("Failed to execute C compiler")?;
@@ -355,4 +356,3 @@ pub fn run_benchmark(input: PathBuf, iterations: usize, verbose: bool) -> anyhow
 
     Ok(())
 }
-

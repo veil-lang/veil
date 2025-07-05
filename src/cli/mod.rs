@@ -5,6 +5,7 @@ pub mod upgrade;
 pub mod test;
 
 use crate::helpers::validate_ve_file;
+use crate::helpers::get_bundled_clang_path;
 use crate::compiler::incremental::IncrementalCompiler;
 #[cfg(target_os = "windows")]
 use crate::helpers::{prepare_windows_clang_args, validate_ve_file};
@@ -144,14 +145,14 @@ enum Command {
         channel: Option<crate::cli::upgrade::Channel>,
     },
     Test {
-       #[arg(value_parser = validate_ve_file)]
-       input: PathBuf,
-       #[arg(short, long)]
-       test_name: Option<String>,
-       #[arg(short, long)]
-       verbose: bool,
-       #[arg(long, help = "List available tests")]
-       list: bool,
+        #[arg(value_parser = validate_ve_file)]
+        input: PathBuf,
+        #[arg(short, long)]
+        test_name: Option<String>,
+        #[arg(short, long)]
+        verbose: bool,
+        #[arg(long, help = "List available tests")]
+        list: bool,
     }
 }
 
@@ -168,12 +169,12 @@ pub fn parse() -> anyhow::Result<CliCommand> {
 
     match args.command {
         Some(Command::Build {
-            input,
-            output,
-            optimize,
-            target_triple,
-            verbose,
-        }) => Ok(CliCommand::Build {
+                 input,
+                 output,
+                 optimize,
+                 target_triple,
+                 verbose,
+             }) => Ok(CliCommand::Build {
             input,
             output,
             optimize,
@@ -181,39 +182,39 @@ pub fn parse() -> anyhow::Result<CliCommand> {
             verbose,
         }),
         Some(Command::Init {
-            directory,
-            project_name,
-        }) => Ok(CliCommand::Init {
+                 directory,
+                 project_name,
+             }) => Ok(CliCommand::Init {
             directory,
             project_name,
         }),
         Some(Command::Run { input, verbose }) => Ok(CliCommand::Run { input, verbose }),
         Some(Command::Benchmark {
-            input,
-            iterations,
-            verbose,
-        }) => Ok(CliCommand::Benchmark {
+                 input,
+                 iterations,
+                 verbose,
+             }) => Ok(CliCommand::Benchmark {
             input,
             iterations,
             verbose,
         }),
         Some(Command::Upgrade {
-            no_remind,
-            force,
-            verbose,
-            channel,
-        }) => Ok(CliCommand::Upgrade {
+                 no_remind,
+                 force,
+                 verbose,
+                 channel,
+             }) => Ok(CliCommand::Upgrade {
             no_remind,
             force,
             verbose,
             channel: channel.unwrap_or_default(),
         }),
         Some(Command::Test {
-            input,
-            test_name,
-            verbose,
-            list,
-        }) => Ok(CliCommand::Test {
+                 input,
+                 test_name,
+                 verbose,
+                 list,
+             }) => Ok(CliCommand::Test {
             input,
             test_name,
             verbose,
@@ -258,7 +259,7 @@ pub fn process_build(
         if verbose {
             println!("{}", format!("Cleaning build directory: {}", build_dir.display()).yellow());
         }
-        
+
 
         for entry in std::fs::read_dir(&build_dir)? {
             let entry = entry?;
@@ -271,7 +272,7 @@ pub fn process_build(
                 }
             }
         }
-        
+
         if verbose {
             println!("{}", "Cache preserved".green());
         }
@@ -334,21 +335,20 @@ pub fn process_build(
         Err(errors) => {
             let writer = StandardStream::stderr(ColorChoice::Auto);
             let config = term::Config::default();
-
             println!("=== TYPE CHECKER ERRORS ===");
             println!("Found {} errors", errors.len());
             for (i, error) in errors.iter().enumerate() {
                 println!("Error {}: {}", i + 1, error.message);
-                
+
                 if let Some(label) = error.labels.get(0) {
                     println!("  Location: {}..{}", label.range.start, label.range.end);
                     println!("  Detail: {}", label.message);
                 }
-                
+
                 for note in &error.notes {
                     println!("  Note: {}", note);
                 }
-                
+
                 if let Err(emit_err) = term::emit(&mut writer.lock(), &config, &files, &error) {
                     println!("  (Failed to emit formatted error: {})", emit_err);
                 }
@@ -399,8 +399,8 @@ pub fn process_build(
                 for note in &error.notes {
                     eprintln!("  note: {}", note);
                 }
-                
-                println!(""); 
+
+                println!("");
             }
 
             return Err(anyhow!("Type check failed"));
@@ -438,10 +438,10 @@ pub fn process_build(
         clang_args.push("-DVE_DEBUG_MEMORY".to_string());
     }
 
-    let output_result = std::process::Command::new("clang")
+    let clang_path = get_bundled_clang_path()?;
+    let output_result = std::process::Command::new(clang_path)
         .args(&clang_args)
         .output()
-        .or_else(|_| std::process::Command::new("gcc").args(&clang_args).output())
         .map_err(|e| anyhow!("Failed to compile C code: {}", e))?;
 
     if !output_result.status.success() {
