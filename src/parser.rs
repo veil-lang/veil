@@ -15,7 +15,6 @@ pub struct Parser<'a> {
     #[allow(dead_code)]
     files: &'a Files<String>,
     file_id: FileId,
-    token_vec: &'a [(Token, Span)],
     previous_token: Option<(Token, Span)>,
 }
 
@@ -34,7 +33,6 @@ impl<'a> Parser<'a> {
             tokens: leaked_tokens.iter().peekable(),
             files: lexer.files,
             file_id: lexer.file_id,
-            token_vec: leaked_tokens,
             previous_token: None,
         }
     }
