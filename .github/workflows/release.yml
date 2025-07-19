@@ -55,9 +55,13 @@ jobs:
         shell: bash
         run: |
           mkdir dist
-          cp target/${{ matrix.target }}/release/veil${{ matrix.suffix }} dist/
+          cp target/${{ matrix.target }}/release/ve${{ matrix.suffix }} dist/
           cp -r lib dist/ 2>/dev/null || echo "No lib directory found"
           cp -r tools dist/
+
+
+
+
 
       - name: Create archive
         shell: bash
