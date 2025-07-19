@@ -7,22 +7,23 @@ on:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             suffix: .exe
-            llvm_url: https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.5/clang+llvm-18.1.5-x86_64-pc-windows-msvc.tar.xz
+            llvm_url: https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-pc-windows-msvc.tar.xz
             platform: windows-x64
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             suffix: ""
-            llvm_url: https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.5/clang+llvm-18.1.5-x86_64-linux-gnu-ubuntu-20.04.tar.xz
+            llvm_url: https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz
             platform: linux-x64
           - os: macos-latest
             target: x86_64-apple-darwin
             suffix: ""
-            llvm_url: https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.5/clang+llvm-18.1.5-x86_64-apple-darwin.tar.xz
+            llvm_url: https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-apple-darwin.tar.xz
             platform: macos-x64
 
     runs-on: ${{ matrix.os }}
@@ -35,10 +36,12 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Download LLVM
+        shell: bash
         run: |
           mkdir -p tools/${{ matrix.platform }}
-          curl -LO ${{ matrix.llvm_url }}
-          tar -xf clang+llvm-*.tar.xz
+          echo "Downloading LLVM from: ${{ matrix.llvm_url }}"
+          curl -L --fail --retry 3 --retry-delay 5 -o llvm.tar.xz "${{ matrix.llvm_url }}"
+          tar -xf llvm.tar.xz
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             cp clang+llvm-*/bin/clang.exe tools/${{ matrix.platform }}/
             cp clang+llvm-*/bin/lld-link.exe tools/${{ matrix.platform }}/
@@ -54,13 +57,15 @@ jobs:
           cargo build --release --target ${{ matrix.target }}
 
       - name: Package artifacts
+        shell: bash
         run: |
           mkdir dist
-          cp target/${{ matrix.target }}/release/ve${{ matrix.suffix }} dist/
-          cp -r lib dist/ 2>/dev/null || echo "No lib directory"
+          cp target/${{ matrix.target }}/release/veil${{ matrix.suffix }} dist/
+          cp -r lib dist/ 2>/dev/null || echo "No lib directory found"
           cp -r tools dist/
 
       - name: Create archive
+        shell: bash
         run: |
           cd dist
           tar -czf ../veil-${{ matrix.target }}.tar.gz *
