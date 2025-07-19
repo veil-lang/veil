@@ -1,79 +1,48 @@
-# VeLang Installation Script for Windows PowerShell
-# Requires Git and Rust/Cargo
-
-param(
-    [string]$Branch = $env:VELANG_BRANCH
-)
+# VeLang Installation Script for Windows PowerShell (binary release, July 2025)
+# Does NOT require Git/Rust for install from released binaries
+# Install: powershell -ExecutionPolicy Bypass -File install.ps1
 
 $INSTALL_DIR = Join-Path $env:USERPROFILE ".veil"
 $TEMP_DIR = Join-Path $env:TEMP "veil-install"
 
-# Function to display formatted messages
 function Write-Message {
     param(
         [string]$Type,
         [string]$Message
     )
-    
     switch ($Type) {
-        "INFO" { Write-Host "[INFO] $Message" -ForegroundColor Cyan }
+        "INFO"    { Write-Host "[INFO] $Message"    -ForegroundColor Cyan }
         "SUCCESS" { Write-Host "[SUCCESS] $Message" -ForegroundColor Green }
         "WARNING" { Write-Host "[WARNING] $Message" -ForegroundColor Yellow }
-        "ERROR" { Write-Host "[ERROR] $Message" -ForegroundColor Red }
+        "ERROR"   { Write-Host "[ERROR] $Message"   -ForegroundColor Red }
     }
 }
 
-# Function to check if command exists
-function Test-Command {
-    param([string]$Command)
-    
-    try {
-        Get-Command $Command -ErrorAction Stop | Out-Null
-        return $true
-    }
-    catch {
-        return $false
-    }
-}
-
-# Function to exit with pause
 function Exit-WithPause {
     Write-Host "Press any key to exit..."
     $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
     exit 1
 }
 
+Write-Message 'INFO' 'Checking PowerShell version and tar/curl...'
 
-Write-Message 'INFO' 'Checking dependencies...'
-
-# Check for Git
-if (-not (Test-Command "git")) {
-    Write-Message "ERROR" "Git is not installed or not in PATH"
-    Write-Host "Please install Git from: https://git-scm.com/download/win"
+# Powershell 5+ and tar/curl required
+if ($PSVersionTable.PSVersion.Major -lt 5) {
+    Write-Message 'ERROR' "PowerShell 5.0 or newer required."
     Exit-WithPause
 }
 
-# Check for Rust/Cargo
-if (-not (Test-Command "cargo")) {
-    Write-Message "ERROR" "Rust/Cargo is not installed"
-    Write-Host "Please install Rust from: https://rustup.rs/"
+if (-not (Get-Command "tar" -ErrorAction SilentlyContinue)) {
+    Write-Message 'ERROR' "The 'tar' utility (Windows 10+) is required."
     Exit-WithPause
 }
 
-# Check for Visual Studio Build Tools or MSVC
-if (-not (Test-Command "cl")) {
-    Write-Message "WARNING" "Visual Studio Build Tools not detected"
-    Write-Host "VeLang requires MSVC compiler for C code generation"
-    Write-Host "Please install Visual Studio Build Tools from:"
-    Write-Host "https://visualstudio.microsoft.com/visual-cpp-build-tools/"
-    Write-Host ""
-    $continue = Read-Host 'Continue anyway? (y/N)'
-    if ($continue.ToLower() -ne "y") {
-        exit 1
-    }
+if (-not (Get-Command "curl" -ErrorAction SilentlyContinue) -and -not (Get-Command "Invoke-WebRequest" -ErrorAction SilentlyContinue)) {
+    Write-Message 'ERROR' "curl or Invoke-WebRequest required (should be present by default)."
+    Exit-WithPause
 }
 
-Write-Message "SUCCESS" "Dependencies check completed"
+Write-Message 'SUCCESS' "Dependencies check completed"
 
 # Create temporary directory
 Write-Message "INFO" "Creating temporary directory..."
@@ -82,121 +51,94 @@ if (Test-Path $TEMP_DIR) {
 }
 New-Item -ItemType Directory -Path $TEMP_DIR -Force | Out-Null
 
-# Download VeLang source code
-Write-Message "INFO" "Downloading VeLang source code..."
-$originalLocation = Get-Location
-Set-Location $TEMP_DIR
-
-# Determine which branch to use - priority order:
-# 1. Parameter/VELANG_BRANCH environment variable
-# 2. Auto-detection from script context
-# 3. Default to main
-if (-not $Branch) {
-    $Branch = "main"
-    # Check if we're being run from feature/installer context
-    if ($PSCommandPath -like "*feature/installer*") {
-        $Branch = "feature/installer"
-        Write-Message "INFO" "Auto-detected development branch: $Branch"
-    }
-} else {
-    Write-Message "INFO" "Using branch from environment: $Branch"
-}
-
+# Download latest VeLang release metadata
+Write-Message "INFO" "Checking latest VeLang release..."
+$apiUrl = "https://api.github.com/repos/veil-lang/veil/releases/latest"
 try {
-    git clone -b $Branch https://github.com/veil-lang/veil.git --quiet 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        throw "Git clone failed"
-    }
-}
-catch {
-    Write-Message "ERROR" "Failed to clone VeLang repository from branch '$Branch'"
+    $release = Invoke-RestMethod -UseBasicParsing -Headers @{ "User-Agent" = "VeLangInstaller" } -Uri $apiUrl
+} catch {
+    Write-Message "ERROR" "Could not fetch release info. Check your internet connection/GitHub status."
     Exit-WithPause
 }
 
-Write-Message "SUCCESS" "Source code downloaded successfully"
-
-Set-Location "ve"
-
-# Build VeLang
-Write-Message "INFO" "Building VeLang..."
-try {
-    cargo build --release --quiet 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        throw "Cargo build failed"
-    }
-}
-catch {
-    Write-Message "ERROR" "Failed to build VeLang"
+# Locate Windows asset
+$asset = $release.assets | Where-Object { $_.name -like "veil-x86_64-pc-windows-msvc.tar.gz" } | Select-Object -First 1
+if (-not $asset) {
+    Write-Message "ERROR" "No prebuilt VeLang binary for Windows found in latest release."
     Exit-WithPause
 }
 
-Write-Message "SUCCESS" "VeLang built successfully"
-
-# Install VeLang
-Write-Message "INFO" "Installing VeLang..."
-if (-not (Test-Path $INSTALL_DIR)) {
-    New-Item -ItemType Directory -Path $INSTALL_DIR -Force | Out-Null
+# Download archive
+Write-Message "INFO" "Downloading $($asset.name)..."
+$zipPath = Join-Path $TEMP_DIR $asset.name
+try {
+    if (Get-Command "curl" -ErrorAction SilentlyContinue) {
+        curl.exe -L $asset.browser_download_url -o $zipPath
+    } else {
+        Invoke-WebRequest -Headers @{ "User-Agent" = "VeLangInstaller" } -Uri $asset.browser_download_url -OutFile $zipPath
+    }
+} catch {
+    Write-Message "ERROR" "Failed to download VeLang archive."
+    Exit-WithPause
 }
 
-$sourceExe = Join-Path (Join-Path "target" "release") "ve.exe"
-$targetExe = Join-Path $INSTALL_DIR "ve.exe"
-Copy-Item $sourceExe $targetExe -Force
+Write-Message "SUCCESS" "Archive downloaded."
 
-# Copy standard library
-if (Test-Path "lib") {
-    Write-Message "INFO" "Installing standard library..."
-    $libTarget = Join-Path $INSTALL_DIR "lib"
-    Copy-Item "lib" $libTarget -Recurse -Force
-    Write-Message "SUCCESS" "Standard library installed"
-} else {
-    Write-Message "WARNING" "Standard library directory not found - some imports may fail"
+# Extract to installation directory
+Write-Message "INFO" "Extracting to $INSTALL_DIR..."
+if (Test-Path $INSTALL_DIR) { Remove-Item $INSTALL_DIR -Recurse -Force }
+New-Item -ItemType Directory -Path $INSTALL_DIR | Out-Null
+
+try {
+    tar -xzf $zipPath -C $INSTALL_DIR
+} catch {
+    Write-Message "ERROR" "Failed to extract archive. Make sure Windows tar is available."
+    Exit-WithPause
 }
+
+Write-Message "SUCCESS" "Files extracted."
 
 # Add to PATH
 Write-Message "INFO" "Adding VeLang to system PATH..."
-
 try {
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     if ($userPath -notlike "*$($INSTALL_DIR)*") {
-        if ($userPath) {
-            $newPath = $userPath + ';' + $INSTALL_DIR
-        } else {
-            $newPath = $INSTALL_DIR
-        }
+        $newPath = ($userPath ? ($userPath + ";") : "") + $INSTALL_DIR
         [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
-        Write-Message 'SUCCESS' 'Added VeLang directory to user PATH'
+        Write-Message 'SUCCESS' "Added $INSTALL_DIR to user PATH."
     } else {
-        Write-Message 'INFO' 'VeLang directory already in PATH, skipping'
+        Write-Message 'INFO' 'VeLang directory already in PATH, skipping.'
     }
-}
-catch {
+} catch {
     Write-Message 'WARNING' 'Failed to add VeLang to PATH. You may need to add it manually.'
 }
 
-Write-Message 'SUCCESS' "VeLang installed to $INSTALL_DIR"
+# Check for success & verify
+Write-Message 'INFO' 'Verifying installation...'
+$veExe = Join-Path $INSTALL_DIR 've.exe'
+if (Test-Path $veExe) {
+    try {
+        & $veExe --version 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Message 'SUCCESS' 'VeLang is working correctly'
+        } else {
+            Write-Message 'WARNING' 'VeLang binary exists but may not be working correctly'
+        }
+    } catch {
+        Write-Message 'WARNING' 'VeLang binary exists but may not be working correctly'
+    }
+} else {
+    Write-Message 'ERROR' "VeLang binary ve.exe not found in $INSTALL_DIR"
+    Exit-WithPause
+}
 
 # Cleanup
 Write-Message 'INFO' 'Cleaning up...'
-Set-Location $originalLocation
 Remove-Item $TEMP_DIR -Recurse -Force
 
-# Verify installation
-Write-Message 'INFO' 'Verifying installation...'
-try {
-    $veExe = Join-Path $INSTALL_DIR 've.exe'
-    & $veExe --version 2>$null | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        throw 'VeLang verification failed'
-    }
-    Write-Message 'SUCCESS' 'VeLang is working correctly'
-}
-catch {
-    Write-Message 'WARNING' 'VeLang binary exists but may not be working correctly'
-}
-
-# Final success message
+# Final messages
 Write-Host ''
-Write-Message 'SUCCESS' 'VeLang installation completed!'
+Write-Message 'SUCCESS' "VeLang installation completed! ($INSTALL_DIR)"
 Write-Host ''
 Write-Host 'To get started:'
 Write-Host '  ve --help                 # Show help'
@@ -208,7 +150,6 @@ Write-Host ''
 Write-Message 'INFO' 'Please restart your command prompt to use ''ve'' command'
 Write-Host ''
 
-# Pause for interactive sessions
 if ($Host.Name -eq 'ConsoleHost') {
     Write-Host 'Press any key to exit...'
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
