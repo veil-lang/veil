@@ -20,11 +20,6 @@ jobs:
             suffix: ""
             llvm_url: https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz
             platform: linux-x64
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            suffix: ""
-            llvm_url: https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-apple-darwin.tar.xz
-            platform: macos-x64
 
     runs-on: ${{ matrix.os }}
     steps:

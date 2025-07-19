@@ -8,7 +8,7 @@ use crate::helpers::validate_ve_file;
 use crate::helpers::get_bundled_clang_path;
 use crate::compiler::incremental::IncrementalCompiler;
 #[cfg(target_os = "windows")]
-use crate::helpers::{prepare_windows_clang_args, validate_ve_file};
+use crate::helpers::{prepare_windows_clang_args};
 use crate::{codegen, typeck};
 use anyhow::anyhow;
 use clap::{Parser, Subcommand};
