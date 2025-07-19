@@ -103,7 +103,11 @@ Write-Message "INFO" "Adding VeLang to system PATH..."
 try {
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     if ($userPath -notlike "*$($INSTALL_DIR)*") {
-        $newPath = ($userPath ? ($userPath + ";") : "") + $INSTALL_DIR
+        if ($userPath) {
+            $newPath = $userPath + ";" + $INSTALL_DIR
+        } else {
+            $newPath = $INSTALL_DIR
+        }
         [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
         Write-Message 'SUCCESS' "Added $INSTALL_DIR to user PATH."
     } else {
@@ -112,6 +116,7 @@ try {
 } catch {
     Write-Message 'WARNING' 'Failed to add VeLang to PATH. You may need to add it manually.'
 }
+
 
 # Check for success & verify
 Write-Message 'INFO' 'Verifying installation...'
