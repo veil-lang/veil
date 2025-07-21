@@ -49,15 +49,6 @@ print_msg 'SUCCESS' "Dependencies check completed"
 print_msg "INFO" "Creating temporary directory..."
 mkdir -p "$TEMP_DIR"
 
-# Download latest Veil release metadata
-print_msg "INFO" "Checking latest Veil release..."
-api_url="https://api.github.com/repos/veil-lang/veil/releases/latest"
-
-if ! release_data=$(curl -s -H "User-Agent: VeilInstaller" "$api_url"); then
-    print_msg "ERROR" "Could not fetch release info. Check your internet connection/GitHub status."
-    exit_with_pause
-fi
-
 # Detect architecture
 arch=$(uname -m)
 case "$arch" in
@@ -69,12 +60,54 @@ case "$arch" in
         ;;
 esac
 
-# Find appropriate Linux asset
 asset_pattern="veil-${asset_arch}-unknown-linux-gnu.tar.gz"
-download_url=$(echo "$release_data" | grep -o "\"browser_download_url\": \"[^\"]*${asset_pattern}\"" | cut -d '"' -f 4)
+download_url=""
+
+# Try to get latest release first
+print_msg "INFO" "Checking latest Veil release..."
+api_url="https://api.github.com/repos/veil-lang/veil/releases/latest"
+
+if release_data=$(curl -s -H "User-Agent: VeilInstaller" "$api_url" 2>/dev/null); then
+    # Better JSON parsing - try multiple methods
+    if command -v jq &> /dev/null; then
+        # Use jq if available
+        download_url=$(echo "$release_data" | jq -r ".assets[] | select(.name | test(\"$asset_pattern\")) | .browser_download_url" 2>/dev/null | head -1)
+    else
+        # Fallback to grep/sed parsing
+        download_url=$(echo "$release_data" | grep -o "\"browser_download_url\":\"[^\"]*$asset_pattern\"" | sed 's/.*"\([^"]*\)".*/\1/' | head -1)
+    fi
+fi
+
+# If latest release doesn't have Linux binary, try all releases
+if [ -z "$download_url" ]; then
+    print_msg "WARNING" "No Linux binary in latest release, checking all releases..."
+    api_url="https://api.github.com/repos/veil-lang/veil/releases"
+
+    if releases_data=$(curl -s -H "User-Agent: VeilInstaller" "$api_url" 2>/dev/null); then
+        if command -v jq &> /dev/null; then
+            download_url=$(echo "$releases_data" | jq -r ".[].assets[] | select(.name | test(\"$asset_pattern\")) | .browser_download_url" 2>/dev/null | head -1)
+        else
+            download_url=$(echo "$releases_data" | grep -o "\"browser_download_url\":\"[^\"]*$asset_pattern\"" | sed 's/.*"\([^"]*\)".*/\1/' | head -1)
+        fi
+    fi
+fi
+
+# Final fallback to known v0.2-beta URL
+if [ -z "$download_url" ]; then
+    print_msg "WARNING" "API search failed, trying known v0.2-beta release..."
+    download_url="https://github.com/veil-lang/veil/releases/download/v0.2-beta/veil-${asset_arch}-unknown-linux-gnu.tar.gz"
+fi
 
 if [ -z "$download_url" ]; then
-    print_msg "ERROR" "No prebuilt Veil binary for Linux ($asset_arch) found in latest release."
+    print_msg "ERROR" "No prebuilt Veil binary for Linux ($asset_arch) found."
+    print_msg "INFO" "You may need to build from source or check https://github.com/veil-lang/veil/releases"
+    exit_with_pause
+fi
+
+# Test if download URL is accessible
+print_msg "INFO" "Testing download URL..."
+if ! curl -s -I "$download_url" | grep -q "200 OK"; then
+    print_msg "ERROR" "Download URL is not accessible: $download_url"
     exit_with_pause
 fi
 
