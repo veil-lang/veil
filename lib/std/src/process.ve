@@ -1,0 +1,56 @@
+#[header="stdlib.h"]
+foreign fn system(command: string) -> i32;
+
+export struct Command {
+    program: string,
+    args: string[],
+}
+
+impl Command {
+    constructor(program: string) -> Command {        
+        Command {
+            program: program,
+            args: [],
+        }
+    }
+
+    fn arg(self, arg: string) -> Command {
+        Command {
+            program: self.program,
+            args: self.args.append(arg),
+        }
+    }
+    
+    fn args(self, new_args: string[]) -> Command {
+        let combined_args = self.args;
+        let i = 0;
+        while i < new_args.length() {
+            let arg = new_args[i];
+            combined_args = combined_args.append(arg);
+            i = i + 1;
+        }
+        Command {
+            program: self.program,
+            args: combined_args,
+        }
+    }
+    
+    fn build_command(self) -> string {
+        let command = self.program;
+        let i = 0;
+        while i < self.args.length() {
+            command = command + " " + self.args[i];
+            i = i + 1;
+        }
+        command
+    }
+    
+    fn spawn(self) -> i32 {
+        let full_command = self.build_command();
+        system(full_command)
+    }
+    
+    fn output(self) -> string {
+        ""
+    }
+}
