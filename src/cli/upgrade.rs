@@ -3,8 +3,10 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use ureq;
 
 const REPO_URL: &str = "https://github.com/veil-lang/veil.git";
+const GITHUB_API_URL: &str = "https://api.github.com/repos/veil-lang/veil/releases/latest";
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug, Clone, PartialEq)]
@@ -40,6 +42,18 @@ struct UpdateConfig {
     last_check: Option<String>,
     #[serde(default = "default_remind_updates")]
     remind_updates: bool,
+}
+
+#[derive(Deserialize)]
+struct GitHubRelease {
+    tag_name: String,
+    assets: Vec<GitHubAsset>,
+}
+
+#[derive(Deserialize)]
+struct GitHubAsset {
+    name: String,
+    browser_download_url: String,
 }
 
 impl Default for UpdateConfig {
@@ -90,6 +104,15 @@ fn save_config(config: &UpdateConfig) -> Result<()> {
 }
 
 fn check_for_updates(channel: &Channel) -> Result<Option<String>> {
+    let install_dir = get_veil_install_dir().ok();
+    let is_binary_install = install_dir.as_ref()
+        .map(|dir| dir.exists())
+        .unwrap_or(false);
+
+    if is_binary_install && channel == &Channel::Stable {
+        return check_for_updates_binary();
+    }
+
     let temp_dir = std::env::temp_dir().join(format!("veil_check_{}", std::process::id()));
     fs::create_dir_all(&temp_dir)?;
 
@@ -132,6 +155,26 @@ fn check_for_updates(channel: &Channel) -> Result<Option<String>> {
     }
 
     Ok(None)
+}
+
+fn check_for_updates_binary() -> Result<Option<String>> {
+    let client = ureq::Agent::new();
+    let response = client
+        .get(GITHUB_API_URL)
+        .set("User-Agent", "VeilUpgrade")
+        .call()
+        .map_err(|e| anyhow!("Failed to fetch release info: {}", e))?;
+
+    let release: GitHubRelease = response.into_json()
+        .map_err(|e| anyhow!("Failed to parse release info: {}", e))?;
+
+    let latest_version = release.tag_name.trim_start_matches('v');
+
+    if latest_version != CURRENT_VERSION {
+        Ok(Some(latest_version.to_string()))
+    } else {
+        Ok(None)
+    }
 }
 
 pub fn check_and_notify_updates() -> Result<()> {
@@ -213,6 +256,179 @@ pub fn run_upgrade(no_remind: bool, force: bool, verbose: bool, channel: Channel
 }
 
 fn upgrade_veil(verbose: bool, channel: &Channel) -> Result<()> {
+    let install_dir = get_veil_install_dir()?;
+    let is_binary_install = install_dir.exists();
+
+    if is_binary_install && channel == &Channel::Stable {
+        upgrade_veil_binary(verbose)?;
+    } else {
+        upgrade_veil_source(verbose, channel)?;
+    }
+
+    Ok(())
+}
+
+fn upgrade_veil_binary(verbose: bool) -> Result<()> {
+    println!("📥 Downloading latest Veil binary...");
+
+    // Pobierz informacje o najnowszym release
+    let client = ureq::Agent::new();
+    let response = client
+        .get(GITHUB_API_URL)
+        .set("User-Agent", "VeilUpgrade")
+        .call()
+        .map_err(|e| anyhow!("Failed to fetch release info: {}", e))?;
+
+    let release: GitHubRelease = response.into_json()
+        .map_err(|e| anyhow!("Failed to parse release info: {}", e))?;
+
+    // Znajdź odpowiedni asset dla Windows
+    let asset_name = if cfg!(windows) {
+        "veil-x86_64-pc-windows-msvc.tar.gz"
+    } else if cfg!(target_os = "macos") {
+        "veil-x86_64-apple-darwin.tar.gz"
+    } else {
+        "veil-x86_64-unknown-linux-gnu.tar.gz"
+    };
+
+    let asset = release.assets.iter()
+        .find(|a| a.name == asset_name)
+        .ok_or_else(|| anyhow!("No prebuilt binary found for this platform"))?;
+
+    if verbose {
+        println!("   Found asset: {}", asset.name);
+        println!("   Download URL: {}", asset.browser_download_url);
+    }
+
+    // Utwórz katalog tymczasowy
+    let temp_dir = std::env::temp_dir().join(format!("veil_upgrade_{}", std::process::id()));
+    fs::create_dir_all(&temp_dir)?;
+
+    // Pobierz archiwum
+    let archive_path = temp_dir.join(&asset.name);
+    if verbose {
+        println!("   Downloading to: {}", archive_path.display());
+    }
+
+    let response = client
+        .get(&asset.browser_download_url)
+        .set("User-Agent", "VeilUpgrade")
+        .call()
+        .map_err(|e| anyhow!("Failed to download binary: {}", e))?;
+
+    let mut file = fs::File::create(&archive_path)?;
+    std::io::copy(&mut response.into_reader(), &mut file)?;
+
+    if verbose {
+        println!("   Archive downloaded successfully");
+    }
+
+    println!("📦 Extracting and installing...");
+
+    // Wypakuj archiwum
+    let extract_dir = temp_dir.join("extracted");
+    fs::create_dir_all(&extract_dir)?;
+
+    #[cfg(windows)]
+    {
+        // Użyj systemu tar na Windows 10+
+        let tar_status = Command::new("tar")
+            .args(&["-xzf", archive_path.to_str().unwrap(), "-C", extract_dir.to_str().unwrap()])
+            .status()?;
+
+        if !tar_status.success() {
+            return Err(anyhow!("Failed to extract archive"));
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        let tar_status = Command::new("tar")
+            .args(&["-xzf", archive_path.to_str().unwrap(), "-C", extract_dir.to_str().unwrap()])
+            .status()?;
+
+        if !tar_status.success() {
+            return Err(anyhow!("Failed to extract archive"));
+        }
+    }
+
+    // Znajdź wypakowany plik wykonywalny
+    let exe_name = if cfg!(windows) { "ve.exe" } else { "ve" };
+    let source_exe = extract_dir.join(exe_name);
+
+    if !source_exe.exists() {
+        return Err(anyhow!("Executable not found in downloaded archive"));
+    }
+
+    // Zainstaluj nowy plik wykonywalny
+    let install_dir = get_veil_install_dir()?;
+    let target_exe = install_dir.join(exe_name);
+
+    if verbose {
+        println!("   Installing to: {}", install_dir.display());
+    }
+
+    // Zatrzymaj inne procesy Veil
+    #[cfg(windows)]
+    stop_other_veil_processes(verbose)?;
+    #[cfg(not(windows))]
+    stop_other_veil_processes_unix(verbose)?;
+
+    // Utwórz backup obecnego pliku
+    if target_exe.exists() {
+        let backup_name = if cfg!(windows) { "ve_old.exe" } else { "ve_old" };
+        let backup_exe = install_dir.join(backup_name);
+
+        if backup_exe.exists() {
+            let _ = fs::remove_file(&backup_exe);
+        }
+
+        if let Err(e) = fs::rename(&target_exe, &backup_exe) {
+            if verbose {
+                println!("   Warning: Could not backup current executable: {}", e);
+            }
+        }
+    }
+
+    // Skopiuj nowy plik wykonywalny
+    fs::copy(&source_exe, &target_exe)?;
+
+    #[cfg(not(windows))]
+    {
+        // Ustaw uprawnienia wykonywania na Unix
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&target_exe)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&target_exe, perms)?;
+    }
+
+    // Skopiuj biblioteki standardowe jeśli istnieją
+    let lib_source = extract_dir.join("lib");
+    if lib_source.exists() {
+        let lib_target = install_dir.join("lib");
+        if lib_target.exists() {
+            fs::remove_dir_all(&lib_target)?;
+        }
+        copy_dir_all(&lib_source, &lib_target)?;
+        if verbose {
+            println!("   Standard library copied");
+        }
+    }
+
+    // Wyczyść stare instalacje cargo
+    cleanup_cargo_installation(verbose)?;
+
+    // Wyczyść katalog tymczasowy
+    fs::remove_dir_all(&temp_dir)?;
+
+    if verbose {
+        println!("   Cleanup completed");
+    }
+
+    Ok(())
+}
+
+fn upgrade_veil_source(verbose: bool, channel: &Channel) -> Result<()> {
     println!("📥 Downloading latest Veil source...");
 
     let temp_dir = std::env::temp_dir().join(format!("veil_upgrade_{}", std::process::id()));
@@ -266,7 +482,9 @@ fn upgrade_veil(verbose: bool, channel: &Channel) -> Result<()> {
         .join("target")
         .join("release")
         .join(if cfg!(windows) { "ve.exe" } else { "ve" });
-    let target_exe = install_dir.join(if cfg!(windows) { "ve.exe" } else { "ve" });    #[cfg(windows)]
+    let target_exe = install_dir.join(if cfg!(windows) { "ve.exe" } else { "ve" });
+
+    #[cfg(windows)]
     {
         if verbose {
             println!("   Preparing to replace executable...");
@@ -348,7 +566,9 @@ fn upgrade_veil(verbose: bool, channel: &Channel) -> Result<()> {
                     );
                 }
 
-                std::thread::sleep(std::time::Duration::from_millis((retry_count * 500) as u64));                #[cfg(windows)]
+                std::thread::sleep(std::time::Duration::from_millis((retry_count * 500) as u64));
+
+                #[cfg(windows)]
                 {
                     if retry_count == 3 || retry_count == 6 {
                         let _ = stop_other_veil_processes(false);
@@ -387,7 +607,9 @@ fn upgrade_veil(verbose: bool, channel: &Channel) -> Result<()> {
                 ));
             }
         }
-    }    #[cfg(windows)]
+    }
+
+    #[cfg(windows)]
     {
         let backup_exe = install_dir.join("ve_old.exe");
         if backup_exe.exists() {

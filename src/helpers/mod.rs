@@ -193,7 +193,6 @@ pub fn prepare_windows_clang_args(
     optimize: bool,
     c_file: &Path,
 ) -> Result<Vec<String>> {
-    let msvc_lib_paths = get_msvc_lib_paths()?;
     let mut clang_args = vec![
         if optimize { "-O3" } else { "-O0" }.to_string(),
         "-pipe".to_string(),
@@ -202,17 +201,24 @@ pub fn prepare_windows_clang_args(
         "-o".to_string(),
         output.to_str().unwrap().into(),
     ];
+    
+    match get_msvc_lib_paths() {
+        Ok(msvc_lib_paths) => {
+            for path in msvc_lib_paths {
+                clang_args.push("-L".to_string());
+                clang_args.push(path);
+            }
 
-    for path in msvc_lib_paths {
-        clang_args.push("-L".to_string());
-        clang_args.push(path);
+            clang_args.extend_from_slice(&[
+                "-lmsvcrt".to_string(),
+                "-Xlinker".to_string(),
+                "/NODEFAULTLIB:libcmt".to_string(),
+            ]);
+        }
+        Err(_) => {
+            eprintln!("Warning: MSVC libraries not found, using basic clang configuration");
+        }
     }
-
-    clang_args.extend_from_slice(&[
-        "-lmsvcrt".to_string(),
-        "-Xlinker".to_string(),
-        "/NODEFAULTLIB:libcmt".to_string(),
-    ]);
 
     Ok(clang_args)
 }
@@ -379,4 +385,3 @@ fn get_msvc_lib_paths() -> Result<Vec<String>> {
 
     Ok(existing_paths)
 }
-  
