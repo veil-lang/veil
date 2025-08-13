@@ -193,31 +193,28 @@ pub fn prepare_windows_clang_args(
     optimize: bool,
     c_file: &Path,
 ) -> Result<Vec<String>> {
+    // Use a fully self-contained llvm-mingw toolchain. No MSVC/Build Tools.
     let mut clang_args = vec![
         if optimize { "-O3" } else { "-O0" }.to_string(),
         "-pipe".to_string(),
         "-fno-exceptions".to_string(),
+        "-fuse-ld=lld".to_string(),
+        "-target".to_string(),
+        "x86_64-w64-windows-gnu".to_string(),
         c_file.to_str().unwrap().into(),
         "-o".to_string(),
         output.to_str().unwrap().into(),
     ];
-    
-    match get_msvc_lib_paths() {
-        Ok(msvc_lib_paths) => {
-            for path in msvc_lib_paths {
-                clang_args.push("-L".to_string());
-                clang_args.push(path);
-            }
 
-            clang_args.extend_from_slice(&[
-                "-lmsvcrt".to_string(),
-                "-Xlinker".to_string(),
-                "/NODEFAULTLIB:libcmt".to_string(),
-            ]);
-        }
-        Err(_) => {
-            eprintln!("Warning: MSVC libraries not found, using basic clang configuration");
-        }
+    // Point clang at the bundled sysroot explicitly to avoid depending on system state
+    let exe_dir = std::env::current_exe()?.parent().unwrap().to_path_buf();
+    let sysroot = exe_dir
+        .join("tools")
+        .join("windows-x64")
+        .join("llvm-mingw");
+    if sysroot.exists() {
+        clang_args.push("--sysroot".to_string());
+        clang_args.push(sysroot.to_string_lossy().to_string());
     }
 
     Ok(clang_args)
@@ -235,153 +232,32 @@ pub fn get_bundled_clang_path() -> Result<PathBuf> {
     };
 
     let clang_name = if cfg!(windows) { "clang.exe" } else { "clang" };
-    let bundled = exe_dir.join("tools").join(platform).join(clang_name);
 
+    // Prefer llvm-mingw layout first (self-contained sysroot)
+    if cfg!(target_os = "windows") {
+        let bin_dir = exe_dir
+            .join("tools")
+            .join(platform)
+            .join("llvm-mingw")
+            .join("bin");
+        let wrapper = bin_dir.join("x86_64-w64-mingw32-clang.exe");
+        if wrapper.exists() {
+            return Ok(wrapper);
+        }
+        let mingw_path = bin_dir.join(clang_name);
+        if mingw_path.exists() {
+            return Ok(mingw_path);
+        }
+    }
+
+    // Fallback to flat layout
+    let bundled = exe_dir.join("tools").join(platform).join(clang_name);
     if bundled.exists() {
         return Ok(bundled);
     }
+
     which::which("clang").map_err(|_| anyhow::anyhow!("No C compiler found"))
 }
 
 
-#[cfg(target_os = "windows")]
-fn get_msvc_lib_paths() -> Result<Vec<String>> {
-    use std::env;
-    use std::fs;
-    
-    let mut paths = Vec::new();
-
-    if let Ok(vc_dir) = env::var("VCINSTALLDIR") {
-        let lib_path = format!("{}\\Lib\\x64", vc_dir.trim_end_matches('\\'));
-        if Path::new(&lib_path).exists() {
-            paths.push(lib_path);
-        }
-    }
-
-    if let Ok(windows_sdk_dir) = env::var("WindowsSdkDir") {
-        let version = env::var("WindowsSDKVersion").unwrap_or_else(|_| {
-            let lib_dir = format!("{}\\Lib", windows_sdk_dir.trim_end_matches('\\'));
-            if let Ok(entries) = fs::read_dir(&lib_dir) {
-                let mut versions: Vec<String> = entries
-                    .filter_map(|entry| entry.ok())
-                    .filter(|entry| entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
-                    .filter_map(|entry| entry.file_name().to_str().map(|s| s.to_string()))
-                    .filter(|name| name.starts_with("10.0."))
-                    .collect();
-                versions.sort();
-                versions.last().unwrap_or(&"10.0.22621.0".to_string()).clone()
-            } else {
-                "10.0.22621.0".to_string()
-            }
-        });
-        
-        let um_path = format!(
-            "{}\\Lib\\{}\\um\\x64",
-            windows_sdk_dir.trim_end_matches('\\'),
-            version.trim_end_matches('\\')
-        );
-        let ucrt_path = format!(
-            "{}\\Lib\\{}\\ucrt\\x64",
-            windows_sdk_dir.trim_end_matches('\\'),
-            version.trim_end_matches('\\')
-        );
-        
-        if Path::new(&um_path).exists() {
-            paths.push(um_path);
-        }
-        if Path::new(&ucrt_path).exists() {
-            paths.push(ucrt_path);
-        }
-    }
-
-    if paths.is_empty() {
-        let possible_vs_paths = vec![
-            "C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise",
-            "C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional", 
-            "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community",
-            "C:\\Program Files\\Microsoft Visual Studio\\2022\\BuildTools",
-            "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Enterprise",
-            "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Professional",
-            "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Community",
-            "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools",
-        ];
-
-        for vs_path in possible_vs_paths {
-            let vc_tools_path = format!("{}\\VC\\Tools\\MSVC", vs_path);
-            if let Ok(entries) = fs::read_dir(&vc_tools_path) {
-                let mut versions: Vec<String> = entries
-                    .filter_map(|entry| entry.ok())
-                    .filter(|entry| entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
-                    .filter_map(|entry| entry.file_name().to_str().map(|s| s.to_string()))
-                    .collect();
-                versions.sort();
-                
-                if let Some(latest_version) = versions.last() {
-                    let lib_path = format!("{}\\VC\\Tools\\MSVC\\{}\\lib\\x64", vs_path, latest_version);
-                    if Path::new(&lib_path).exists() {
-                        paths.push(lib_path);
-                        break;
-                    }
-                }
-            }
-        }
-
-        let sdk_paths = vec![
-            "C:\\Program Files (x86)\\Windows Kits\\10\\Lib",
-            "C:\\Program Files\\Windows Kits\\10\\Lib",
-        ];
-
-        for sdk_path in sdk_paths {
-            if let Ok(entries) = fs::read_dir(sdk_path) {
-                let mut versions: Vec<String> = entries
-                    .filter_map(|entry| entry.ok())
-                    .filter(|entry| entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
-                    .filter_map(|entry| entry.file_name().to_str().map(|s| s.to_string()))
-                    .filter(|name| name.starts_with("10.0."))
-                    .collect();
-                versions.sort();
-                
-                if let Some(latest_version) = versions.last() {
-                    let um_path = format!("{}\\{}\\um\\x64", sdk_path, latest_version);
-                    let ucrt_path = format!("{}\\{}\\ucrt\\x64", sdk_path, latest_version);
-                    
-                    if Path::new(&um_path).exists() {
-                        paths.push(um_path);
-                    }
-                    if Path::new(&ucrt_path).exists() {
-                        paths.push(ucrt_path);
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
-    if paths.is_empty() {
-        return Err(anyhow::anyhow!(
-            "Could not find MSVC libraries. Please ensure Visual Studio Build Tools are installed.\n\
-            Install from: https://aka.ms/vs/17/release/vs_BuildTools.exe\n\
-            Or run: vcvars64.bat to set up the environment."
-        ));
-    }
-
-    for path in &paths {
-        if !Path::new(path).exists() {
-            eprintln!("Warning: Library path does not exist: {}", path);
-        }
-    }
-
-    let existing_paths: Vec<String> = paths
-        .into_iter()
-        .filter(|path| Path::new(path).exists())
-        .collect();
-
-    if existing_paths.is_empty() {
-        return Err(anyhow::anyhow!(
-            "No valid MSVC library paths found. Please install Visual Studio Build Tools.\n\
-            Install from: https://aka.ms/vs/17/release/vs_BuildTools.exe"
-        ));
-    }
-
-    Ok(existing_paths)
-}
+// Removed legacy MSVC discovery: we fully rely on bundled llvm-mingw toolchain

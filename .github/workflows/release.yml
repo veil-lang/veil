@@ -15,7 +15,7 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             suffix: .exe
-            llvm_url: https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-pc-windows-msvc.tar.xz
+            llvm_url: https://github.com/mstorsjo/llvm-mingw/releases/download/20240619/llvm-mingw-20240619-ucrt-x86_64.zip
             platform: windows-x64
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
@@ -32,22 +32,30 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Download LLVM
+      - name: Download LLVM toolchain (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path tools\${{ matrix.platform }} | Out-Null
+          Write-Host "Downloading llvm-mingw from: ${{ matrix.llvm_url }}"
+          Invoke-WebRequest -Uri "${{ matrix.llvm_url }}" -OutFile llvm-mingw.zip
+          Expand-Archive -Path llvm-mingw.zip -DestinationPath . -Force
+          $extracted = Get-ChildItem . -Directory -Filter "llvm-mingw-*" | Select-Object -First 1
+          if (-not $extracted) { throw "Failed to find extracted llvm-mingw directory" }
+          Move-Item -Force $extracted.FullName tools\${{ matrix.platform }}\llvm-mingw
+
+      - name: Download LLVM toolchain (Linux)
+        if: matrix.os == 'ubuntu-latest'
         shell: bash
         run: |
           mkdir -p tools/${{ matrix.platform }}
           echo "Downloading LLVM from: ${{ matrix.llvm_url }}"
           curl -L --fail --retry 3 --retry-delay 5 -o llvm.tar.xz "${{ matrix.llvm_url }}"
           tar -xf llvm.tar.xz
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            cp clang+llvm-*/bin/clang.exe tools/${{ matrix.platform }}/
-            cp clang+llvm-*/bin/lld-link.exe tools/${{ matrix.platform }}/
-          else
-            cp clang+llvm-*/bin/clang tools/${{ matrix.platform }}/
-            cp clang+llvm-*/bin/lld tools/${{ matrix.platform }}/
-            chmod +x tools/${{ matrix.platform }}/clang
-            chmod +x tools/${{ matrix.platform }}/lld
-          fi
+          cp clang+llvm-*/bin/clang tools/${{ matrix.platform }}/
+          cp clang+llvm-*/bin/lld tools/${{ matrix.platform }}/
+          chmod +x tools/${{ matrix.platform }}/clang
+          chmod +x tools/${{ matrix.platform }}/lld
 
       - name: Build release
         run: |
