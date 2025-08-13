@@ -407,7 +407,7 @@ pub fn process_build(
         }
     }
 
-    let config = codegen::CodegenConfig { target_triple };
+    let config = codegen::CodegenConfig { target_triple: target_triple.clone() };
     let mut target = codegen::Target::create(
         config,
         file_id,
@@ -423,8 +423,13 @@ pub fn process_build(
         println!("{}", format!("Compiling generated C code: {}", c_file.display()).yellow());
     }
 
+    // Build platform-specific clang args
+    let mut clang_args: Vec<String>;
+
     #[cfg(target_os = "windows")]
-    let mut clang_args = prepare_windows_clang_args(&output, optimize, &c_file)?;
+    {
+        clang_args = prepare_windows_clang_args(&output, optimize, &c_file)?;
+    }
 
     #[cfg(not(target_os = "windows"))]
     let mut clang_args = vec![
@@ -435,6 +440,8 @@ pub fn process_build(
     ];
 
     if verbose {
+        // make clang verbose and enable debug memory
+        clang_args.insert(0, "-v".to_string());
         clang_args.push("-DVE_DEBUG_MEMORY".to_string());
     }
 
@@ -445,10 +452,17 @@ pub fn process_build(
         .map_err(|e| anyhow!("Failed to compile C code: {}", e))?;
 
     if !output_result.status.success() {
+        let stdout = String::from_utf8_lossy(&output_result.stdout);
         let stderr = String::from_utf8_lossy(&output_result.stderr);
-        for line in stderr.lines() {
-            if line.contains("error:") || line.contains("fatal error:") {
-                eprintln!("{}", line);
+        if verbose {
+            eprintln!("\n---- clang stdout ----\n{}", stdout);
+            eprintln!("\n---- clang stderr ----\n{}", stderr);
+            eprintln!("\nArgs: {:?}", clang_args);
+        } else {
+            for line in stderr.lines() {
+                if line.contains("error:") || line.contains("fatal error:") {
+                    eprintln!("{}", line);
+                }
             }
         }
         return Err(anyhow!("C compiler failed with status: {}", output_result.status));

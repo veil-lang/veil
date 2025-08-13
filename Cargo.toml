@@ -1,6 +1,6 @@
 [package]
 name = "ve"
-version = "0.2.0-beta"
+version = "0.2.0-beta.4"
 edition = "2024"
 
 [lib]
@@ -26,6 +26,7 @@ sha2 = "0.10"
 tempfile = "3.20.0"
 which = "8.0.0"
 ureq = { version = "2.10", features = ["json"] }
+shell-words = "1.1.0"
 
 [build-dependencies]
 winres = "0.1.12"

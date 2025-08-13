@@ -2,6 +2,7 @@ use anyhow::Result;
 use codespan::{FileId, Files};
 use codespan_reporting;
 use std::path::{Path, PathBuf};
+use std::fs;
 
 
 pub fn extract_line_col_from_error(
@@ -193,34 +194,98 @@ pub fn prepare_windows_clang_args(
     optimize: bool,
     c_file: &Path,
 ) -> Result<Vec<String>> {
-    // Use a fully self-contained llvm-mingw toolchain. No MSVC/Build Tools.
-    let mut clang_args = vec![
-        if optimize { "-O3" } else { "-O0" }.to_string(),
-        "-pipe".to_string(),
-        "-fno-exceptions".to_string(),
-        "-fuse-ld=lld".to_string(),
-        "-target".to_string(),
-        "x86_64-w64-windows-gnu".to_string(),
-        c_file.to_str().unwrap().into(),
-        "-o".to_string(),
-        output.to_str().unwrap().into(),
-    ];
+    // Dev-friendly behavior:
+    // 1) If bundled llvm-mingw sysroot exists or VEIL_FORCE_LLVM_MINGW=1 → use self-contained args
+    // 2) Otherwise assume system Clang environment (e.g., MSVC dev shell or system MinGW) → minimal args
 
-    // Point clang at the bundled sysroot explicitly to avoid depending on system state
+    let opt_flag = if optimize { "-O3" } else { "-O0" }.to_string();
+
+    // Bundled sysroot detection
     let exe_dir = std::env::current_exe()?.parent().unwrap().to_path_buf();
     let sysroot = exe_dir
         .join("tools")
         .join("windows-x64")
         .join("llvm-mingw");
-    if sysroot.exists() {
+
+    let force_llvm_mingw = std::env::var("VEIL_FORCE_LLVM_MINGW").ok().as_deref() == Some("1");
+
+    if force_llvm_mingw || sysroot.exists() {
+        // Self-contained llvm-mingw toolchain
+        let mut clang_args = vec![
+            opt_flag,
+            "-pipe".to_string(),
+            "-fno-exceptions".to_string(),
+            "-fuse-ld=lld".to_string(),
+            "-target".to_string(),
+            "x86_64-w64-windows-gnu".to_string(),
+            c_file.to_str().unwrap().into(),
+            "-o".to_string(),
+            output.to_str().unwrap().into(),
+        ];
+
         clang_args.push("--sysroot".to_string());
         clang_args.push(sysroot.to_string_lossy().to_string());
+        return Ok(clang_args);
     }
 
-    Ok(clang_args)
+    // System toolchain (dev) – auto-detect MSVC vs GNU (MinGW/llvm-mingw)
+    let prefer = std::env::var("VEIL_WINDOWS_TOOLCHAIN").unwrap_or_default();
+    let have_link = which::which("link.exe").is_ok();
+    let have_mingw = which::which("x86_64-w64-mingw32-clang").is_ok()
+        || which::which("x86_64-w64-mingw32-gcc").is_ok();
+
+    // Start with common args
+    let mut args = vec![
+        opt_flag,
+        c_file.to_str().unwrap().into(),
+        "-o".to_string(),
+        output.to_str().unwrap().into(),
+    ];
+
+    // Choose toolchain
+    let use_msvc = (prefer == "msvc" && have_link) || (prefer.is_empty() && have_link && !have_mingw);
+    let use_gnu = (prefer == "gnu" && have_mingw) || (prefer.is_empty() && (have_mingw || !have_link));
+
+    if use_msvc {
+        args.insert(1, "-fuse-ld=link".to_string());
+        args.insert(1, "-target".to_string());
+        args.insert(2, "x86_64-pc-windows-msvc".to_string());
+
+        for lib_path in discover_msvc_lib_paths() {
+            args.push("-Xlinker".to_string());
+            args.push(format!("/LIBPATH:{}", lib_path.to_string_lossy()));
+        }
+    } else if use_gnu {
+        args.insert(1, "-target".to_string());
+        args.insert(2, "x86_64-w64-windows-gnu".to_string());
+        if which::which("ld.lld").is_ok() || which::which("lld").is_ok() {
+            args.insert(1, "-fuse-ld=lld".to_string());
+        }
+    }
+    if std::env::var("VEIL_CLANG_VERBOSE").ok().as_deref() == Some("1") {
+        args.insert(1, "-v".to_string());
+    }
+    if let Ok(extra) = std::env::var("VEIL_EXTRA_CLANG_ARGS") {
+        let mut split: Vec<String> = shell_words::split(&extra).unwrap_or_default().into_iter().collect();  
+        args.splice(1..1, split.drain(..));
+    }
+
+    Ok(args)
 }
 
 pub fn get_bundled_clang_path() -> Result<PathBuf> {
+    if let Ok(custom) = std::env::var("VEIL_CLANG_PATH") {
+        let p = PathBuf::from(custom);
+        if p.exists() {
+            return Ok(p);
+        }
+    }
+    if std::env::var("VEIL_USE_SYSTEM_CLANG").ok().as_deref() == Some("1") {
+        if let Ok(p) = which::which("clang") {
+            return Ok(p);
+        }
+    }
+
     let exe_dir = std::env::current_exe()?.parent().unwrap().to_path_buf();
 
     let platform = if cfg!(target_os = "windows") {
@@ -233,7 +298,6 @@ pub fn get_bundled_clang_path() -> Result<PathBuf> {
 
     let clang_name = if cfg!(windows) { "clang.exe" } else { "clang" };
 
-    // Prefer llvm-mingw layout first (self-contained sysroot)
     if cfg!(target_os = "windows") {
         let bin_dir = exe_dir
             .join("tools")
@@ -250,7 +314,6 @@ pub fn get_bundled_clang_path() -> Result<PathBuf> {
         }
     }
 
-    // Fallback to flat layout
     let bundled = exe_dir.join("tools").join(platform).join(clang_name);
     if bundled.exists() {
         return Ok(bundled);
@@ -260,4 +323,30 @@ pub fn get_bundled_clang_path() -> Result<PathBuf> {
 }
 
 
-// Removed legacy MSVC discovery: we fully rely on bundled llvm-mingw toolchain
+#[cfg(target_os = "windows")]
+fn discover_msvc_lib_paths() -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    let vs_base = PathBuf::from(r"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC");
+    if let Ok(read_dir) = fs::read_dir(&vs_base) {
+        let mut versions: Vec<PathBuf> = read_dir.filter_map(|e| e.ok().map(|e| e.path())).collect();
+        versions.sort();
+        if let Some(latest) = versions.into_iter().last() {
+            let lib_host = latest.join("lib").join("x64");
+            if lib_host.exists() { paths.push(lib_host); }
+            let atlmfc = latest.join("atlmfc").join("lib").join("x64");
+            if atlmfc.exists() { paths.push(atlmfc); }
+        }
+    }
+    let sdk_base = PathBuf::from(r"C:\Program Files (x86)\Windows Kits\10\Lib");
+    if let Ok(read_dir) = fs::read_dir(&sdk_base) {
+        let mut versions: Vec<PathBuf> = read_dir.filter_map(|e| e.ok().map(|e| e.path())).collect();
+        versions.sort();
+        if let Some(latest) = versions.into_iter().last() {
+            for sub in ["ucrt", "um"] {
+                let p = latest.join(sub).join("x64");
+                if p.exists() { paths.push(p); }
+            }
+        }
+    }
+    paths
+}
