@@ -1,6 +1,6 @@
 # Programming Language Specification
 
-*Generated from parser analysis - Version 1.0*
+*Generated from parser analysis - Version 0.2*
 
 ## Table of Contents
 
