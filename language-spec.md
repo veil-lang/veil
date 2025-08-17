@@ -904,4 +904,4 @@ generic_args ::= '<' type (',' type)* '>'
 
 ---
 
-*This specification covers the complete syntax and semantics of the programming language as implemented in the provided parser. The language provides a modern, type-safe programming environment with comprehensive features for system programming, application development, and FFI integration.*
+*This specification covers the complete syntax and semantics of Veil.*
