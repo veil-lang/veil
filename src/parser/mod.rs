@@ -3,6 +3,7 @@ mod precedence;
 mod stmt;
 mod ffi;
 mod import_export;
+mod decl;
 
 use super::{
     ast,
@@ -1256,107 +1257,9 @@ impl<'a> Parser<'a> {
         ]))
     }
 
-    fn parse_struct(&mut self) -> Result<ast::StructDef, Diagnostic<FileId>> {
-        let start_span = self.consume(Token::KwStruct, "Expected 'struct'")?;
-        let (name, _) = self.consume_ident()?;
-        let generic_params = self.parse_generic_params()?;
 
-        self.expect(Token::LBrace)?;
 
-        let mut fields = Vec::new();
-        while !self.check(Token::RBrace) {
-            let (field_name, field_span) = self.consume_ident()?;
-            self.expect(Token::Colon)?;
-            let field_type = self.parse_type()?;
 
-            fields.push(ast::StructField {
-                name: field_name,
-                ty: field_type,
-                span: field_span,
-            });
-
-            if !self.check(Token::RBrace) {
-                self.expect(Token::Comma)?;
-            }
-        }
-
-        let end_span = self.expect(Token::RBrace)?;
-        Ok(ast::StructDef {
-            name,
-            generic_params,
-            fields,
-            span: Span::new(start_span.start(), end_span.end()),
-            visibility: ast::Visibility::Private,
-            repr: None,
-        })
-    }
-
-    fn parse_enum(&mut self) -> Result<ast::EnumDef, Diagnostic<FileId>> {
-        let start_span = self.consume(Token::KwEnum, "Expected 'enum'")?;
-        let (name, _) = self.consume_ident()?;
-        let generic_params = self.parse_generic_params()?;
-
-        self.expect(Token::LBrace)?;
-
-        let mut variants = Vec::new();
-        while !self.check(Token::RBrace) {
-            let (variant_name, variant_span) = self.consume_ident()?;
-
-            let value = if self.check(Token::Eq) {
-                self.advance();
-                if let Some((Token::Int(int_str), _)) = self.advance() {
-                    match int_str.parse::<i32>() {
-                        Ok(val) => Some(val),
-                        Err(_) => return self.error("Invalid integer value for enum variant", variant_span),
-                    }
-                } else {
-                    return self.error("Expected integer value after '=' in enum variant", variant_span);
-                }
-            } else {
-                None
-            };
-
-            let data = if self.check(Token::LParen) {
-                self.advance();
-                let mut types = Vec::new();
-
-                if !self.check(Token::RParen) {
-                    loop {
-                        types.push(self.parse_type()?);
-                        if !self.check(Token::Comma) {
-                            break;
-                        }
-                        self.advance();
-                    }
-                }
-
-                self.expect(Token::RParen)?;
-                Some(types)
-            } else {
-                None
-            };
-
-            variants.push(ast::EnumVariant {
-                name: variant_name,
-                data,
-                value,
-                span: variant_span,
-            });
-
-            if !self.check(Token::RBrace) {
-                self.expect(Token::Comma)?;
-            }
-        }
-
-        let end_span = self.expect(Token::RBrace)?;
-        Ok(ast::EnumDef {
-            name,
-            generic_params,
-            variants,
-            span: Span::new(start_span.start(), end_span.end()),
-            visibility: ast::Visibility::Private,
-        })
-    }
 
     fn can_start_struct_init(&mut self) -> bool {
         let mut temp_tokens = self.tokens.clone();
