@@ -21,7 +21,8 @@ pub(super) use precedence::Precedence;
 use crate::parser::ffi::ForeignItem;
 
 pub struct Parser<'a> {
-    tokens: Peekable<Iter<'a, (Token, Span)>>,
+    tokens: Vec<(Token, Span)>,
+    pos: usize,
     #[allow(dead_code)]
     files: &'a Files<String>,
     file_id: FileId,
@@ -30,10 +31,9 @@ pub struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     pub fn new(lexer: Lexer<'a>) -> Self {
-        let tokens_vec = lexer.tokens();
-        let leaked_tokens = Box::leak(tokens_vec.into_boxed_slice());
         Self {
-            tokens: leaked_tokens.iter().peekable(),
+            tokens: lexer.tokens(),
+            pos: 0,
             files: lexer.files,
             file_id: lexer.file_id,
             previous_token: None,
@@ -115,31 +115,36 @@ impl<'a> Parser<'a> {
         Ok(program)
     }
 
-    fn peek_token(&mut self) -> Token {
-        self.tokens
-            .peek()
-            .map(|(t, _)| (*t).clone())
-            .unwrap()
+    fn peek(&self) -> Option<&(Token, Span)> {
+        self.tokens.get(self.pos)
     }
-    fn peek_span(&mut self) -> Span {
-        self.tokens
-            .peek()
-            .map(|(_, s)| *s)
-            .unwrap_or(Span::new(0, 0))
+    fn advance(&mut self) -> Option<&(Token, Span)> {
+        let t = self.tokens.get(self.pos);
+        if let Some(ts) = t {
+            self.previous_token = Some(ts.clone());
+            self.pos += 1;
+        }
+        t
     }
+    fn is_at_end(&self) -> bool { self.pos >= self.tokens.len() }
+
+    fn peek_token(&self) -> Token {
+        self.peek().map(|(t, _)| t.clone()).unwrap()
+    }
+
+    fn peek_span(&self) -> Span {
+        self.peek().map(|(_, s)| *s).unwrap_or(Span::new(0, 0))
+    }
+
 
 
     fn consume(&mut self, expected: Token, err_msg: &str) -> Result<Span, Diagnostic<FileId>> {
         if self.check(expected.clone()) {
-            let span = self.tokens.peek().map(|(_, s)| *s).unwrap();
+            let span = self.peek().map(|(_, s)| *s).unwrap();
             self.advance();
             Ok(span)
         } else {
-            let span = self
-                .tokens
-                .peek()
-                .map(|(_, s)| *s)
-                .unwrap_or(Span::new(0, 0));
+            let span = self.peek().map(|(_, s)| *s).unwrap_or(Span::new(0, 0));
             self.error(err_msg, span)
         }
     }
@@ -163,31 +168,19 @@ impl<'a> Parser<'a> {
 
 
 
-    fn is_at_end(&mut self) -> bool {
-        self.tokens.peek().is_none()
+    fn check(&self, token: Token) -> bool {
+        matches!(self.peek(), Some((t, _)) if *t == token)
     }
-    fn check(&mut self, token: Token) -> bool {
-        matches!(self.tokens.peek(), Some((t, _)) if *t == token)
-    }
-    fn advance(&mut self) -> Option<&(Token, Span)> {
-        if let Some(token) = self.tokens.next() {
-            self.previous_token = Some(token.clone());
-            Some(token)
-        } else {
-            None
-        }
-    }
+
+
 
     fn previous(&self) -> Option<&(Token, Span)> {
         self.previous_token.as_ref()
     }
 
-    fn peek(&mut self) -> Option<&(Token, Span)> {
-        self.tokens.peek().map(|x| *x)
-    }
     fn expect(&mut self, token: Token) -> Result<Span, Diagnostic<FileId>> {
         if self.check(token.clone()) {
-            let span = self.tokens.peek().map(|(_, s)| *s).unwrap();
+            let span = self.peek().map(|(_, s)| *s).unwrap();
             self.advance();
             Ok(span)
         } else {
@@ -199,12 +192,7 @@ impl<'a> Parser<'a> {
                     return self.error(&format!("Expected {:?}", token), error_span);
                 }
             }
-
-            let span = self
-                .tokens
-                .peek()
-                .map(|(_, s)| *s)
-                .unwrap_or(Span::new(0, 0));
+            let span = self.peek().map(|(_, s)| *s).unwrap_or(Span::new(0, 0));
             self.error(&format!("Expected {:?}", token), span)
         }
     }

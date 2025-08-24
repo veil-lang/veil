@@ -65,7 +65,7 @@ impl<'a> super::super::Parser<'a> {
                 is_tail: false,
             })),
             Some((Token::DotDot, span)) => {
-                if let Some((next_token, _)) = self.tokens.peek() {
+                if let Some((next_token, _)) = self.peek() {
                     if matches!(next_token, Token::Int(_) | Token::Ident(_)) {
                         let rhs = self.parse_expr()?;
                         let end_span = rhs.span();
@@ -199,19 +199,17 @@ impl<'a> super::super::Parser<'a> {
         }
     }
 
-    pub fn can_start_struct_init(&mut self) -> bool {
-        let mut temp_tokens = self.tokens.clone();
-        if let Some((Token::LBrace, _)) = temp_tokens.peek() {
-            temp_tokens.next();
-
-            if let Some((Token::Ident(_), _)) = temp_tokens.peek() {
-                temp_tokens.next();
-                if let Some((Token::Colon, _)) = temp_tokens.peek() {
+    pub fn can_start_struct_init(&self) -> bool {
+        let mut i = self.pos;
+        if let Some((Token::LBrace, _)) = self.tokens.get(i) {
+            i += 1;
+            if let Some((Token::Ident(_), _)) = self.tokens.get(i) {
+                i += 1;
+                if let Some((Token::Colon, _)) = self.tokens.get(i) {
                     return true;
                 }
             }
         }
-
         false
     }
 }

@@ -54,36 +54,37 @@ impl<'a> Parser<'a> {
 
 
     pub fn is_last_expr_in_block(&mut self) -> bool {
-        let mut temp_tokens = self.tokens.clone();
-        let mut depth = 0;
+        let mut i = self.pos;
+        let mut depth = 0usize;
         let mut found_expr = false;
 
-        while let Some((token, _)) = temp_tokens.peek() {
+        while let Some((token, _)) = self.tokens.get(i) {
             match token {
-                Token::KwLet | Token::KwReturn | Token::KwWhile | Token::KwFor | Token::KwBreak | Token::KwContinue => {
+                Token::KwLet | Token::KwReturn | Token::KwWhile | Token::KwFor
+                | Token::KwBreak | Token::KwContinue => {
                     return false;
                 }
                 Token::LBrace => {
                     depth += 1;
-                    temp_tokens.next();
+                    i += 1;
                 }
                 Token::RBrace => {
                     if depth == 0 {
                         return found_expr;
                     }
                     depth -= 1;
-                    temp_tokens.next();
+                    i += 1;
                 }
                 Token::Semi => {
-                    temp_tokens.next();
-                    if let Some((Token::RBrace, _)) = temp_tokens.peek() {
+                    i += 1;
+                    if let Some((Token::RBrace, _)) = self.tokens.get(i) {
                         return found_expr;
                     }
                     return false;
                 }
                 _ => {
                     found_expr = true;
-                    temp_tokens.next();
+                    i += 1;
                 }
             }
         }
