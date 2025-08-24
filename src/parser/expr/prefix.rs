@@ -28,31 +28,26 @@ impl<'a> super::super::Parser<'a> {
                 match (&op_token, &expr) {
                     (Token::Minus, ast::Expr::Int(val, _)) => {
                         let negated = -(*val as i64);
-                        if negated >= i32::MIN as i64 && negated <= i32::MAX as i64 {
-                            Ok(ast::Expr::Int(negated as i32, ast::ExprInfo {
-                                span: op_span,
-                                ty: ast::Type::I32,
-                                is_tail: false,
-                            }))
-                        } else if negated >= i64::MIN && negated <= i64::MAX {
-                            Ok(ast::Expr::Int64(negated, ast::ExprInfo {
-                                span: op_span,
-                                ty: ast::Type::I64,
-                                is_tail: false,
-                            }))
+                        if (i32::MIN as i64..=i32::MAX as i64).contains(&negated) {
+                            Ok(ast::Expr::Int(
+                                negated as i32,
+                                ast::ExprInfo { span: op_span, ty: ast::Type::I32, is_tail: false },
+                            ))
                         } else {
-                            self.error(&format!("Negated integer {} is out of range", negated), op_span)
+                            Ok(ast::Expr::Int64(
+                                negated,
+                                ast::ExprInfo { span: op_span, ty: ast::Type::I64, is_tail: false },
+                            ))
                         }
                     }
                     (Token::Minus, ast::Expr::Int64(val, _)) => {
-                        if let Some(negated) = val.checked_neg() {
-                            Ok(ast::Expr::Int64(negated, ast::ExprInfo {
-                                span: op_span,
-                                ty: ast::Type::I64,
-                                is_tail: false,
-                            }))
+                        if let Some(neg) = val.checked_neg() {
+                            Ok(ast::Expr::Int64(
+                                neg,
+                                ast::ExprInfo { span: op_span, ty: ast::Type::I64, is_tail: false },
+                            ))
                         } else {
-                            self.error(&format!("Cannot negate {} as it would overflow i64", val), op_span)
+                            self.error(&format!("Cannot negate {val} as it would overflow i64"), op_span)
                         }
                     }
                     _ => {
@@ -64,11 +59,7 @@ impl<'a> super::super::Parser<'a> {
                                 _ => unreachable!(),
                             },
                             Box::new(expr),
-                            ast::ExprInfo {
-                                span,
-                                ty: ast::Type::Unknown,
-                                is_tail: false,
-                            },
+                            ast::ExprInfo { span, ty: ast::Type::Unknown, is_tail: false },
                         ))
                     }
                 }
