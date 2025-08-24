@@ -14,6 +14,7 @@ use std::iter::Peekable;
 use std::slice::Iter;
 
 pub(super) use precedence::Precedence;
+use crate::parser::ffi::ForeignItem;
 
 pub struct Parser<'a> {
     tokens: Peekable<Iter<'a, (Token, Span)>>,
@@ -21,11 +22,6 @@ pub struct Parser<'a> {
     files: &'a Files<String>,
     file_id: FileId,
     previous_token: Option<(Token, Span)>,
-}
-
-enum ForeignItem {
-    Function(ast::FfiFunction),
-    Variable(ast::FfiVariable),
 }
 
 

@@ -3,7 +3,14 @@ use codespan::{FileId, Span};
 use codespan_reporting::diagnostic::Diagnostic;
 use crate::ast;
 use crate::lexer::Token;
-use crate::parser::ForeignItem;
+
+
+pub enum ForeignItem {
+    Function(ast::FfiFunction),
+    Variable(ast::FfiVariable),
+}
+
+
 
 impl<'a> super::Parser<'a> {
 
