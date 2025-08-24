@@ -1,6 +1,6 @@
 
 <div align="center" style="display: grid; place-items: center; gap: 1rem;">
-     <img src="https://cdn.discordapp.com/app-assets/1382254020038627338/1382254808395812995.png" alt="Veil Logo" width="200">
+     <img src="https://avatars.githubusercontent.com/u/196317235?s=400&u=67bb160a766df001c98e70501ec7b496e90bf8b1&v=4" alt="Veil Logo" width="200">
 </div>
 
 
