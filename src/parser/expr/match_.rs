@@ -1,7 +1,7 @@
-use codespan::{FileId, Span};
-use codespan_reporting::diagnostic::Diagnostic;
 use crate::ast;
 use crate::lexer::Token;
+use codespan::{FileId, Span};
+use codespan_reporting::diagnostic::Diagnostic;
 
 impl<'a> super::super::Parser<'a> {
     pub fn parse_match(&mut self, start_span: Span) -> Result<ast::Expr, Diagnostic<FileId>> {
@@ -19,11 +19,15 @@ impl<'a> super::super::Parser<'a> {
 
         let end_span = self.expect(Token::RBrace)?;
 
-        Ok(ast::Expr::Match(Box::new(expr), arms, ast::ExprInfo {
-            span: Span::new(start_span.start(), end_span.end()),
-            ty: ast::Type::Unknown,
-            is_tail: false,
-        }))
+        Ok(ast::Expr::Match(
+            Box::new(expr),
+            arms,
+            ast::ExprInfo {
+                span: Span::new(start_span.start(), end_span.end()),
+                ty: ast::Type::Unknown,
+                is_tail: false,
+            },
+        ))
     }
 
     pub fn parse_match_arm(&mut self) -> Result<ast::MatchArm, Diagnostic<FileId>> {

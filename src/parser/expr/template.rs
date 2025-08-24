@@ -1,7 +1,7 @@
+use crate::parser::Parser;
+use crate::{ast, lexer};
 use codespan::{FileId, Span};
 use codespan_reporting::diagnostic::Diagnostic;
-use crate::{ast, lexer};
-use crate::parser::Parser;
 
 impl<'a> Parser<'a> {
     pub fn parse_template_string(
@@ -54,11 +54,14 @@ impl<'a> Parser<'a> {
             parts.push(ast::TemplateStrPart::Literal(current));
         }
 
-        Ok(ast::Expr::TemplateStr(parts, ast::ExprInfo {
-            span,
-            ty: ast::Type::String,
-            is_tail: false,
-        }))
+        Ok(ast::Expr::TemplateStr(
+            parts,
+            ast::ExprInfo {
+                span,
+                ty: ast::Type::String,
+                is_tail: false,
+            },
+        ))
     }
     pub fn parse_interpolated_expr(
         &mut self,
@@ -83,5 +86,4 @@ impl<'a> Parser<'a> {
 
         Ok(expr)
     }
-
 }

@@ -1,8 +1,8 @@
-use codespan::{FileId, Span};
-use codespan_reporting::diagnostic::Diagnostic;
 use crate::ast;
 use crate::lexer::Token;
 use crate::parser::Precedence;
+use codespan::{FileId, Span};
+use codespan_reporting::diagnostic::Diagnostic;
 
 impl<'a> super::super::Parser<'a> {
     pub fn parse_infix(
@@ -143,18 +143,28 @@ impl<'a> super::super::Parser<'a> {
 
                 if matches!(*op, Token::DotDotGt | Token::DotDotLt) {
                     let span = Span::new(lhs.span().start(), lhs.span().end());
-                    Ok(ast::Expr::InfiniteRange(range_type, ast::ExprInfo {
-                        span,
-                        ty: ast::Type::Unknown,
-                        is_tail: false,
-                    }))
-                } else {
-                    if self.check(Token::LBrace) || self.check(Token::RParen) || self.check(Token::Comma) || self.is_at_end() {
-                        let infinite_range = ast::Expr::InfiniteRange(ast::RangeType::Infinite, ast::ExprInfo {
-                            span: Span::new(lhs.span().end(), lhs.span().end()),
+                    Ok(ast::Expr::InfiniteRange(
+                        range_type,
+                        ast::ExprInfo {
+                            span,
                             ty: ast::Type::Unknown,
                             is_tail: false,
-                        });
+                        },
+                    ))
+                } else {
+                    if self.check(Token::LBrace)
+                        || self.check(Token::RParen)
+                        || self.check(Token::Comma)
+                        || self.is_at_end()
+                    {
+                        let infinite_range = ast::Expr::InfiniteRange(
+                            ast::RangeType::Infinite,
+                            ast::ExprInfo {
+                                span: Span::new(lhs.span().end(), lhs.span().end()),
+                                ty: ast::Type::Unknown,
+                                is_tail: false,
+                            },
+                        );
                         let span = Span::new(lhs.span().start(), lhs.span().end());
                         Ok(ast::Expr::Range(
                             Box::new(lhs),
@@ -187,11 +197,15 @@ impl<'a> super::super::Parser<'a> {
                 let end_span = self.previous().map(|(_, s)| *s).unwrap();
                 let span = Span::new(lhs.span().start(), end_span.end());
 
-                Ok(ast::Expr::Cast(Box::new(lhs), cast_type, ast::ExprInfo {
-                    span,
-                    ty: ast::Type::Unknown,
-                    is_tail: false,
-                }))
+                Ok(ast::Expr::Cast(
+                    Box::new(lhs),
+                    cast_type,
+                    ast::ExprInfo {
+                        span,
+                        ty: ast::Type::Unknown,
+                        is_tail: false,
+                    },
+                ))
             }
             _ => {
                 let (token, span) = self.peek().unwrap();
@@ -204,5 +218,4 @@ impl<'a> super::super::Parser<'a> {
             }
         }
     }
-
 }

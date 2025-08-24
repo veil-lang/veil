@@ -1,7 +1,7 @@
-use codespan::{FileId, Span};
-use codespan_reporting::diagnostic::Diagnostic;
 use crate::ast;
 use crate::lexer::Token;
+use codespan::{FileId, Span};
+use codespan_reporting::diagnostic::Diagnostic;
 
 impl<'a> super::super::Parser<'a> {
     pub fn parse_call_args(&mut self) -> Result<(Vec<ast::Expr>, Span), Diagnostic<FileId>> {
@@ -38,12 +38,14 @@ impl<'a> super::super::Parser<'a> {
         }
         let rparen_span = self.expect(Token::RParen)?;
 
-        Ok(ast::Expr::Call(name, args, ast::ExprInfo {
-            span: Span::new(span.start(), rparen_span.end()),
-            ty: ast::Type::Unknown,
-            is_tail: false,
-        }))
+        Ok(ast::Expr::Call(
+            name,
+            args,
+            ast::ExprInfo {
+                span: Span::new(span.start(), rparen_span.end()),
+                ty: ast::Type::Unknown,
+                is_tail: false,
+            },
+        ))
     }
-
-
 }

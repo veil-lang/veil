@@ -81,7 +81,7 @@ impl TypeChecker {
 
     pub fn check(&mut self, program: &mut ast::Program) -> Result<(), Vec<Diagnostic<FileId>>> {
         self.enums = program.enums.clone();
-        self.impls = program.impls.clone(); 
+        self.impls = program.impls.clone();
 
         for ffi in &program.ffi_functions {
             self.functions.insert(
@@ -124,12 +124,13 @@ impl TypeChecker {
 
         for impl_block in &program.impls {
             let _target_type = self.parse_type_name(&impl_block.target_type);
-            
+
             for method in &impl_block.methods {
                 if method.name == "constructor" {
                     let params: Vec<Type> = method.params.iter().map(|(_, t)| t.clone()).collect();
                     let constructor_name = format!("{}.constructor", impl_block.target_type);
-                    self.functions.insert(constructor_name, (params, method.return_type.clone()));
+                    self.functions
+                        .insert(constructor_name, (params, method.return_type.clone()));
                 }
             }
         }
@@ -228,14 +229,14 @@ impl TypeChecker {
         match stmt {
             Stmt::Let(name, decl_ty, expr, var_span, _) => {
                 let expr_ty = if let Some(decl_ty) = decl_ty {
-                    self.check_expr_with_expected(expr, decl_ty).unwrap_or(Type::Unknown)
+                    self.check_expr_with_expected(expr, decl_ty)
+                        .unwrap_or(Type::Unknown)
                 } else {
                     self.check_expr(expr).unwrap_or(Type::Unknown)
                 };
 
                 if expr_ty == Type::Void {
-                    self.report_error("Cannot assign void expression to variable",
-                    *var_span);
+                    self.report_error("Cannot assign void expression to variable", *var_span);
                     return Ok(());
                 }
 
@@ -324,7 +325,7 @@ impl TypeChecker {
             }
             Stmt::For(name, index_var, range, step, body, _) => {
                 self.check_expr(range)?;
-                
+
                 if let Some(step_expr) = step {
                     let step_type = self.check_expr(step_expr)?;
                     if !matches!(step_type, Type::I32 | Type::I64 | Type::U32 | Type::U64) {
@@ -404,7 +405,11 @@ impl TypeChecker {
                         Type::U8 => {
                             if *value > u8::MAX as i32 {
                                 self.report_error(
-                                    &format!("Value {} exceeds maximum for u8 ({})", value, u8::MAX),
+                                    &format!(
+                                        "Value {} exceeds maximum for u8 ({})",
+                                        value,
+                                        u8::MAX
+                                    ),
                                     info.span,
                                 );
                                 info.ty = Type::Unknown;
@@ -416,7 +421,11 @@ impl TypeChecker {
                         Type::U16 => {
                             if *value > u16::MAX as i32 {
                                 self.report_error(
-                                    &format!("Value {} exceeds maximum for u16 ({})", value, u16::MAX),
+                                    &format!(
+                                        "Value {} exceeds maximum for u16 ({})",
+                                        value,
+                                        u16::MAX
+                                    ),
                                     info.span,
                                 );
                                 info.ty = Type::Unknown;
@@ -428,7 +437,11 @@ impl TypeChecker {
                         Type::U32 => {
                             if *value > u32::MAX as i32 {
                                 self.report_error(
-                                    &format!("Value {} exceeds maximum for u32 ({})", value, u32::MAX),
+                                    &format!(
+                                        "Value {} exceeds maximum for u32 ({})",
+                                        value,
+                                        u32::MAX
+                                    ),
                                     info.span,
                                 );
                                 info.ty = Type::Unknown;
@@ -451,7 +464,12 @@ impl TypeChecker {
                         Type::I8 => {
                             if *value < i8::MIN as i32 || *value > i8::MAX as i32 {
                                 self.report_error(
-                                    &format!("Value {} is out of range for i8 ({}..{})", value, i8::MIN, i8::MAX),
+                                    &format!(
+                                        "Value {} is out of range for i8 ({}..{})",
+                                        value,
+                                        i8::MIN,
+                                        i8::MAX
+                                    ),
                                     info.span,
                                 );
                                 info.ty = Type::Unknown;
@@ -463,7 +481,12 @@ impl TypeChecker {
                         Type::I16 => {
                             if *value < i16::MIN as i32 || *value > i16::MAX as i32 {
                                 self.report_error(
-                                    &format!("Value {} is out of range for i16 ({}..{})", value, i16::MIN, i16::MAX),
+                                    &format!(
+                                        "Value {} is out of range for i16 ({}..{})",
+                                        value,
+                                        i16::MIN,
+                                        i16::MAX
+                                    ),
                                     info.span,
                                 );
                                 info.ty = Type::Unknown;
@@ -482,7 +505,10 @@ impl TypeChecker {
                         }
                         Type::U8 | Type::U16 | Type::U32 | Type::U64 => {
                             self.report_error(
-                                &format!("Cannot assign negative value {} to unsigned type {}", value, expected_type),
+                                &format!(
+                                    "Cannot assign negative value {} to unsigned type {}",
+                                    value, expected_type
+                                ),
                                 info.span,
                             );
                             info.ty = Type::Unknown;
@@ -510,16 +536,11 @@ impl TypeChecker {
             ) => {
                 let ty = match name.as_str() {
                     "true" | "false" => Type::Bool,
-                    _ => {
-                        match self.context.variables.get(name).cloned() {
-                            Some(ty) => ty,
-                            None => {
-                                self.report_error(
-                                    &format!("Undefined variable '{}'", name),
-                                    *span,
-                                );
-                                Type::Unknown
-                            }
+                    _ => match self.context.variables.get(name).cloned() {
+                        Some(ty) => ty,
+                        None => {
+                            self.report_error(&format!("Undefined variable '{}'", name), *span);
+                            Type::Unknown
                         }
                     },
                 };
@@ -752,7 +773,7 @@ impl TypeChecker {
                 },
             ) => {
                 if name.starts_with("<method>.") {
-                    let method_name = &name[9..]; 
+                    let method_name = &name[9..];
                     if let Some(obj_expr) = args.first_mut() {
                         let (obj_type, is_static_call) = match obj_expr {
                             Expr::Var(var_name, var_info) => {
@@ -763,62 +784,77 @@ impl TypeChecker {
                                     (self.check_expr(obj_expr)?, false)
                                 }
                             }
-                            _ => (self.check_expr(obj_expr)?, false)
+                            _ => (self.check_expr(obj_expr)?, false),
                         };
-                        
+
                         let type_name = obj_type.to_string();
-                        
+
                         let impls = self.impls.clone();
                         let mut method_found = false;
                         let mut method_return_type = Type::Unknown;
                         let mut method_param_types = Vec::new();
-                        
+
                         for impl_block in &impls {
                             if impl_block.target_type == type_name {
                                 for method in &impl_block.methods {
                                     if method.name == method_name {
                                         method_found = true;
                                         method_return_type = method.return_type.clone();
-                                        method_param_types = method.params.iter().map(|(_, ty)| ty.clone()).collect();
+                                        method_param_types = method
+                                            .params
+                                            .iter()
+                                            .map(|(_, ty)| ty.clone())
+                                            .collect();
                                         break;
                                     }
                                 }
-                                if method_found { break; }
+                                if method_found {
+                                    break;
+                                }
                             }
                         }
-                        
+
                         if !method_found {
                             self.report_error(
-                                &format!("Method '{}' not found for type '{}'", method_name, type_name),
+                                &format!(
+                                    "Method '{}' not found for type '{}'",
+                                    method_name, type_name
+                                ),
                                 *span,
                             );
                             *expr_type = Type::Unknown;
                             return Ok(Type::Unknown);
                         }
-                        
-                        let actual_args = if is_static_call { args.len() - 1 } else { args.len() };
+
+                        let actual_args = if is_static_call {
+                            args.len() - 1
+                        } else {
+                            args.len()
+                        };
                         let expected_args = method_param_types.len();
-                        
+
                         if actual_args != expected_args {
                             self.report_error(
-                                &format!("Method '{}' expects {} arguments, got {}", 
-                                    method_name, expected_args, actual_args),
+                                &format!(
+                                    "Method '{}' expects {} arguments, got {}",
+                                    method_name, expected_args, actual_args
+                                ),
                                 *span,
                             );
                         }
-                        
+
                         let start_idx = if is_static_call { 1 } else { 1 };
                         for (i, param_type) in method_param_types.iter().enumerate() {
                             if let Some(arg) = args.get_mut(start_idx + i) {
                                 self.check_expr_with_expected(arg, param_type)?;
                             }
                         }
-                        
+
                         *expr_type = method_return_type.clone();
                         return Ok(method_return_type);
                     }
                 }
-                
+
                 let mut found = self.functions.get(name).cloned();
                 if found.is_none() {
                     found = self
@@ -880,7 +916,7 @@ impl TypeChecker {
                 if let Some(_struct_def) = self.context.struct_defs.get(struct_name) {
                     let constructor_name = format!("{}.constructor", struct_name);
                     let constructor_info = self.functions.get(&constructor_name).cloned();
-                    
+
                     if let Some((param_types, return_type)) = constructor_info {
                         let has_ellipsis = param_types.last() == Some(&Type::Ellipsis);
                         let min_args = if has_ellipsis {
@@ -901,7 +937,9 @@ impl TypeChecker {
                             );
                         }
 
-                        for (arg, param_ty) in args.iter_mut().zip(param_types.iter()).take(min_args) {
+                        for (arg, param_ty) in
+                            args.iter_mut().zip(param_types.iter()).take(min_args)
+                        {
                             let arg_ty = self.check_expr(arg).unwrap_or(Type::Unknown);
                             if !Self::is_convertible(&arg_ty, param_ty) {
                                 self.report_error(
@@ -914,7 +952,10 @@ impl TypeChecker {
                         *expr_type = return_type.clone();
                         Ok(return_type.clone())
                     } else {
-                        self.report_error(&format!("No constructor found for struct '{}'", struct_name), *span);
+                        self.report_error(
+                            &format!("No constructor found for struct '{}'", struct_name),
+                            *span,
+                        );
                         *expr_type = Type::Unknown;
                         Ok(Type::Unknown)
                     }
@@ -1013,10 +1054,11 @@ impl TypeChecker {
                 for (field_name, field_expr) in fields {
                     let field_name = field_name.clone();
 
-                    let expected_ty = match struct_fields.iter().find(|(name, _)| name == &field_name) {
-                        Some((_, expected_ty)) => expected_ty.clone(),
-                        None => Type::Unknown,
-                    };
+                    let expected_ty =
+                        match struct_fields.iter().find(|(name, _)| name == &field_name) {
+                            Some((_, expected_ty)) => expected_ty.clone(),
+                            None => Type::Unknown,
+                        };
 
                     let field_ty = self.check_expr_with_expected(field_expr, &expected_ty)?;
 
@@ -1062,7 +1104,7 @@ impl TypeChecker {
                 ast::ExprInfo {
                     span,
                     ty: expr_type,
-                    is_tail
+                    is_tail,
                 },
             ) => {
                 let obj_ty = self.check_expr(obj)?;
@@ -1103,7 +1145,7 @@ impl TypeChecker {
                 ast::ExprInfo {
                     span,
                     ty: expr_type,
-                    is_tail
+                    is_tail,
                 },
             ) => {
                 if elements.is_empty() {
@@ -1249,7 +1291,7 @@ impl TypeChecker {
                                                     | Type::F64
                                                     | Type::Bool
                                                     | Type::Generic(_)
-                                                    | Type::Optional(_)  
+                                                    | Type::Optional(_)
                                             )
                                         {
                                             self.report_error(
@@ -1275,7 +1317,7 @@ impl TypeChecker {
                                                     | Type::F64
                                                     | Type::Bool
                                                     | Type::Generic(_)
-                                                    | Type::Optional(_) 
+                                                    | Type::Optional(_)
                                             )
                                         {
                                             self.report_error(
@@ -1325,7 +1367,7 @@ impl TypeChecker {
                                         | Type::Array(_)
                                         | Type::SizedArray(_, _)
                                         | Type::Generic(_)
-                                        | Type::Optional(_)  
+                                        | Type::Optional(_)
                                 ) {
                                     let msg = format!("Cannot convert type {:?} to string", ty);
                                     let span = expr.span();
@@ -1354,7 +1396,7 @@ impl TypeChecker {
                                         | Type::Array(_)
                                         | Type::SizedArray(_, _)
                                         | Type::Generic(_)
-                                        | Type::Optional(_) 
+                                        | Type::Optional(_)
                                 ) {
                                     let msg = format!("Cannot convert type {:?} to string", ty);
                                     let span = expr.span();
@@ -1372,7 +1414,7 @@ impl TypeChecker {
                 info.ty = Type::String;
                 Ok(Type::String)
             }
-            Expr::FfiCall(_name, _args, _info) => Ok(Type::Unknown), 
+            Expr::FfiCall(_name, _args, _info) => Ok(Type::Unknown),
             Expr::EnumConstruct(enum_name, _, args, info) => {
                 for arg in args.iter_mut() {
                     self.check_expr(arg)?;
@@ -1380,7 +1422,8 @@ impl TypeChecker {
                 let ty = if let Some(enum_def) = self.context.enum_def_map.get(enum_name) {
                     if !enum_def.generic_params.is_empty() {
                         let mut context_ty = None;
-                        if let Type::GenericInstance(n, params) = &self.context.current_return_type {
+                        if let Type::GenericInstance(n, params) = &self.context.current_return_type
+                        {
                             if n == enum_name && params.len() == enum_def.generic_params.len() {
                                 context_ty = Some(Type::GenericInstance(n.clone(), params.clone()));
                             }
@@ -1388,8 +1431,11 @@ impl TypeChecker {
                         if context_ty.is_none() {
                             if let Some(last_var_ty) = self.context.variables.values().last() {
                                 if let Type::GenericInstance(n, params) = last_var_ty {
-                                    if n == enum_name && params.len() == enum_def.generic_params.len() {
-                                        context_ty = Some(Type::GenericInstance(n.clone(), params.clone()));
+                                    if n == enum_name
+                                        && params.len() == enum_def.generic_params.len()
+                                    {
+                                        context_ty =
+                                            Some(Type::GenericInstance(n.clone(), params.clone()));
                                     }
                                 }
                             }
@@ -1440,14 +1486,17 @@ impl TypeChecker {
                             self.check_pattern(&arm.pattern, &matched_ty)?;
                         }
                     }
-                    
+
                     if let Some(guard) = &mut arm.guard {
                         let guard_ty = self.check_expr(guard)?;
                         if !matches!(guard_ty, Type::Bool) {
-                            self.report_error("Guard condition must be a boolean expression", guard.span());
+                            self.report_error(
+                                "Guard condition must be a boolean expression",
+                                guard.span(),
+                            );
                         }
                     }
-                    
+
                     let arm_ty = match &mut arm.body {
                         ast::MatchArmBody::Expr(expr) => self.check_expr(expr)?,
                         ast::MatchArmBody::Block(stmts) => {
@@ -1462,7 +1511,10 @@ impl TypeChecker {
                     self.context.variables = original_variables;
                 }
                 let result_ty = arm_types.get(0).cloned().unwrap_or(Type::Unknown);
-                if !arm_types.iter().all(|t| Self::is_convertible(t, &result_ty)) {
+                if !arm_types
+                    .iter()
+                    .all(|t| Self::is_convertible(t, &result_ty))
+                {
                     self.report_error("All match arms must return the same type", info.span);
                 }
                 info.ty = result_ty.clone();
@@ -1475,7 +1527,7 @@ impl TypeChecker {
                 }
 
                 let original_variables = self.context.variables.clone();
-                
+
                 for stmt in then_branch.iter_mut() {
                     self.check_stmt(stmt)?;
                 }
@@ -1522,29 +1574,33 @@ impl TypeChecker {
             }
             Expr::Loop(body, info) => {
                 self.context.in_loop = true;
-                
+
                 let previous_break_types = std::mem::take(&mut self.context.break_types);
-                
+
                 for stmt in body.iter_mut() {
                     self.check_stmt(stmt)?;
                 }
-                
+
                 let break_types = std::mem::take(&mut self.context.break_types);
                 self.context.break_types = previous_break_types;
                 self.context.in_loop = false;
-                
+
                 let loop_type = if break_types.is_empty() {
                     Type::Void
                 } else {
                     let mut common_type = break_types[0].clone();
                     for break_type in &break_types[1..] {
-                        if !Self::is_convertible(&common_type, break_type) && 
-                           !Self::is_convertible(break_type, &common_type) {
+                        if !Self::is_convertible(&common_type, break_type)
+                            && !Self::is_convertible(break_type, &common_type)
+                        {
                             if common_type != *break_type {
-                                self.report_error(&format!(
-                                    "Inconsistent types in break statements: {:?} vs {:?}", 
-                                    common_type, break_type
-                                ), info.span);
+                                self.report_error(
+                                    &format!(
+                                        "Inconsistent types in break statements: {:?} vs {:?}",
+                                        common_type, break_type
+                                    ),
+                                    info.span,
+                                );
                                 common_type = Type::Unknown;
                                 break;
                             }
@@ -1552,7 +1608,7 @@ impl TypeChecker {
                     }
                     common_type
                 };
-                
+
                 info.ty = loop_type.clone();
                 Ok(loop_type)
             }
@@ -1568,7 +1624,11 @@ impl TypeChecker {
         }
     }
 
-    fn check_expr_with_expected(&mut self, expr: &mut Expr, expected_ty: &Type) -> Result<Type, Vec<Diagnostic<FileId>>> {
+    fn check_expr_with_expected(
+        &mut self,
+        expr: &mut Expr,
+        expected_ty: &Type,
+    ) -> Result<Type, Vec<Diagnostic<FileId>>> {
         if let Expr::ArrayInit(elements, ast::ExprInfo { ty: expr_type, .. }) = expr {
             if elements.is_empty() {
                 if let Type::Array(_element_ty) = expected_ty {
@@ -1577,43 +1637,53 @@ impl TypeChecker {
                 }
             }
         }
-        
+
         self.check_expr(expr)
     }
 
     fn is_cast_allowed(&self, from: &Type, to: &Type) -> bool {
-    match (from, to) {
-        (Type::Bool, Type::String) => true,
-        (Type::I32, Type::String) => true,
-        (Type::I64, Type::String) => true,
-        (Type::F32, Type::String) => true,
-        (Type::F64, Type::String) => true,
-        (Type::Generic(_), Type::String) => true,
-        (Type::RawPtr, Type::Pointer(_)) => true,
-        (Type::Pointer(_), Type::RawPtr) => true,
-        (Type::Array(_), Type::RawPtr) => true,
-        (Type::RawPtr, Type::Array(_)) => true,
-        (Type::Pointer(_), Type::I32) => true,
-        (Type::I32, Type::Pointer(_)) => true,
-        (Type::I32, Type::Bool) => true,
-        (Type::F32, Type::I32) => true,
-        (Type::I32, Type::F32) => true,
-        (Type::I32, Type::U32) => true,
-        (Type::U32, Type::I32) => true,
-        (Type::U8, Type::I32) => true,
-        (Type::String, Type::I32) => true,
-        (Type::String, Type::RawPtr) => true,
-        (Type::RawPtr, Type::String) => true,
-        (Type::Enum(enum_name), Type::U8 | Type::U16 | Type::U32 | Type::U64 | Type::I8 | Type::I16 | Type::I32 | Type::I64) => {
-            if let Some(enum_def) = self.context.enum_def_map.get(enum_name) {
-                enum_def.variants.iter().any(|v| v.value.is_some())
-            } else {
-                false
+        match (from, to) {
+            (Type::Bool, Type::String) => true,
+            (Type::I32, Type::String) => true,
+            (Type::I64, Type::String) => true,
+            (Type::F32, Type::String) => true,
+            (Type::F64, Type::String) => true,
+            (Type::Generic(_), Type::String) => true,
+            (Type::RawPtr, Type::Pointer(_)) => true,
+            (Type::Pointer(_), Type::RawPtr) => true,
+            (Type::Array(_), Type::RawPtr) => true,
+            (Type::RawPtr, Type::Array(_)) => true,
+            (Type::Pointer(_), Type::I32) => true,
+            (Type::I32, Type::Pointer(_)) => true,
+            (Type::I32, Type::Bool) => true,
+            (Type::F32, Type::I32) => true,
+            (Type::I32, Type::F32) => true,
+            (Type::I32, Type::U32) => true,
+            (Type::U32, Type::I32) => true,
+            (Type::U8, Type::I32) => true,
+            (Type::String, Type::I32) => true,
+            (Type::String, Type::RawPtr) => true,
+            (Type::RawPtr, Type::String) => true,
+            (
+                Type::Enum(enum_name),
+                Type::U8
+                | Type::U16
+                | Type::U32
+                | Type::U64
+                | Type::I8
+                | Type::I16
+                | Type::I32
+                | Type::I64,
+            ) => {
+                if let Some(enum_def) = self.context.enum_def_map.get(enum_name) {
+                    enum_def.variants.iter().any(|v| v.value.is_some())
+                } else {
+                    false
+                }
             }
-        },
-        _ => Self::is_convertible(from, to),
+            _ => Self::is_convertible(from, to),
+        }
     }
-}
 
     fn check_pattern(
         &mut self,
@@ -1628,51 +1698,56 @@ impl TypeChecker {
                     .insert(name.clone(), expected_ty.clone());
                 Ok(())
             }
-            ast::Pattern::EnumVariant(enum_name, variant_name, patterns, _) => {
-                match expected_ty {
-                    Type::GenericInstance(expected_enum, generic_args) if expected_enum == enum_name => {
-                        if let Some(enum_def) = self.enums.iter().find(|e| &e.name == enum_name) {
-                            if let Some(variant) = enum_def.variants.iter().find(|v| &v.name == variant_name) {
-                                let mut subst = std::collections::HashMap::new();
-                                for (gp, arg) in enum_def.generic_params.iter().zip(generic_args.iter()) {
-                                    subst.insert(gp, arg);
-                                }
-                                let data_types = if let Some(data) = &variant.data {
-                                    data.iter().map(|t| substitute_generics(t, &subst)).collect::<Vec<_>>()
-                                } else {
-                                    vec![]
-                                };
-                                for (i, subpat) in patterns.iter().enumerate() {
-                                    let ty = data_types.get(i).cloned().unwrap_or(Type::Unknown);
-                                    self.check_pattern(subpat, &ty)?;
-                                }
-                                return Ok(());
+            ast::Pattern::EnumVariant(enum_name, variant_name, patterns, _) => match expected_ty {
+                Type::GenericInstance(expected_enum, generic_args)
+                    if expected_enum == enum_name =>
+                {
+                    if let Some(enum_def) = self.enums.iter().find(|e| &e.name == enum_name) {
+                        if let Some(variant) =
+                            enum_def.variants.iter().find(|v| &v.name == variant_name)
+                        {
+                            let mut subst = std::collections::HashMap::new();
+                            for (gp, arg) in enum_def.generic_params.iter().zip(generic_args.iter())
+                            {
+                                subst.insert(gp, arg);
                             }
+                            let data_types = if let Some(data) = &variant.data {
+                                data.iter()
+                                    .map(|t| substitute_generics(t, &subst))
+                                    .collect::<Vec<_>>()
+                            } else {
+                                vec![]
+                            };
+                            for (i, subpat) in patterns.iter().enumerate() {
+                                let ty = data_types.get(i).cloned().unwrap_or(Type::Unknown);
+                                self.check_pattern(subpat, &ty)?;
+                            }
+                            return Ok(());
                         }
-                        for (i, subpat) in patterns.iter().enumerate() {
-                            let ty = generic_args.get(i).cloned().unwrap_or(Type::Unknown);
-                            self.check_pattern(subpat, &ty)?;
-                        }
-                        Ok(())
                     }
-                    Type::Enum(expected_enum) if expected_enum == enum_name => {
-                        for pattern in patterns {
-                            self.check_pattern(pattern, &Type::Unknown)?;
-                        }
-                        Ok(())
+                    for (i, subpat) in patterns.iter().enumerate() {
+                        let ty = generic_args.get(i).cloned().unwrap_or(Type::Unknown);
+                        self.check_pattern(subpat, &ty)?;
                     }
-                    _ => {
-                        self.report_error(
-                            &format!(
-                                "Pattern expects enum {}, but got {}",
-                                enum_name, expected_ty
-                            ),
-                            pattern.span(),
-                        );
-                        Ok(())
-                    }
+                    Ok(())
                 }
-            }
+                Type::Enum(expected_enum) if expected_enum == enum_name => {
+                    for pattern in patterns {
+                        self.check_pattern(pattern, &Type::Unknown)?;
+                    }
+                    Ok(())
+                }
+                _ => {
+                    self.report_error(
+                        &format!(
+                            "Pattern expects enum {}, but got {}",
+                            enum_name, expected_ty
+                        ),
+                        pattern.span(),
+                    );
+                    Ok(())
+                }
+            },
             ast::Pattern::Literal(expr, span) => {
                 let literal_ty = expr.get_type();
                 let mut expected = expected_ty;
@@ -1709,15 +1784,37 @@ impl TypeChecker {
         Ok(())
     }
     fn is_convertible(from: &Type, to: &Type) -> bool {
-        if from == to { return true; }
+        if from == to {
+            return true;
+        }
         match (from, to) {
-            (Type::GenericInstance(n1, a1), Type::GenericInstance(n2, a2)) =>
-                n1 == n2 && a1.len() == a2.len() && a1.iter().zip(a2).all(|(a, b)| Self::is_convertible(a, b)),
+            (Type::GenericInstance(n1, a1), Type::GenericInstance(n2, a2)) => {
+                n1 == n2
+                    && a1.len() == a2.len()
+                    && a1.iter().zip(a2).all(|(a, b)| Self::is_convertible(a, b))
+            }
             (Type::Generic(_), _) | (_, Type::Generic(_)) => true,
             (Type::I8, Type::I16 | Type::I32 | Type::I64)
             | (Type::I16, Type::I32 | Type::I64)
-            | (Type::I32, Type::I64 | Type::F32 | Type::F64 | Type::U32 | Type::Bool | Type::Pointer(_) | Type::RawPtr | Type::CSize | Type::U8 | Type::U16 | Type::I8 | Type::I16)
-            | (Type::I64, Type::U32 | Type::U64 | Type::U8 | Type::U16 | Type::I8 | Type::I16 | Type::I32)
+            | (
+                Type::I32,
+                Type::I64
+                | Type::F32
+                | Type::F64
+                | Type::U32
+                | Type::Bool
+                | Type::Pointer(_)
+                | Type::RawPtr
+                | Type::CSize
+                | Type::U8
+                | Type::U16
+                | Type::I8
+                | Type::I16,
+            )
+            | (
+                Type::I64,
+                Type::U32 | Type::U64 | Type::U8 | Type::U16 | Type::I8 | Type::I16 | Type::I32,
+            )
             | (Type::U8, Type::U16 | Type::U32 | Type::U64 | Type::I32)
             | (Type::U16, Type::U32 | Type::U64)
             | (Type::U32, Type::U64 | Type::I32)
@@ -1727,22 +1824,28 @@ impl TypeChecker {
             | (Type::Pointer(_), Type::RawPtr | Type::I32)
             | (Type::RawPtr, Type::Pointer(_) | Type::I32)
             | (Type::CSize, Type::I32)
-            | (Type::Void, Type::Void)
-            => true,
+            | (Type::Void, Type::Void) => true,
             (Type::Struct(n1), Type::Struct(n2)) => n1 == "size_t" && n2 == "size_t",
             (Type::Struct(n1), Type::I32) => n1 == "size_t",
             (Type::I32, Type::Struct(n2)) => n2 == "size_t",
             (Type::Pointer(inner), Type::String) => matches!(&**inner, Type::U8),
             (Type::Array(_), Type::String) => true,
             (Type::SizedArray(_, _), Type::String) => true,
-            (Type::Array(a), Type::Array(b)) | (Type::Pointer(a), Type::Pointer(b)) =>
-                Self::is_convertible(a, b),
-            (Type::SizedArray(a, n1), Type::SizedArray(b, n2)) =>
-                n1 == n2 && Self::is_convertible(a, b),
-            (Type::Function(a1, r1), Type::Function(a2, r2)) =>
-                a1.len() == a2.len() && a1.iter().zip(a2).all(|(a, b)| Self::is_convertible(a, b)) && Self::is_convertible(r1, r2),
+            (Type::Array(a), Type::Array(b)) | (Type::Pointer(a), Type::Pointer(b)) => {
+                Self::is_convertible(a, b)
+            }
+            (Type::SizedArray(a, n1), Type::SizedArray(b, n2)) => {
+                n1 == n2 && Self::is_convertible(a, b)
+            }
+            (Type::Function(a1, r1), Type::Function(a2, r2)) => {
+                a1.len() == a2.len()
+                    && a1.iter().zip(a2).all(|(a, b)| Self::is_convertible(a, b))
+                    && Self::is_convertible(r1, r2)
+            }
             (Type::Enum(n1), Type::Enum(n2)) => n1 == n2,
-            (Type::Optional(inner1), Type::Optional(inner2)) => Self::is_convertible(inner1, inner2),
+            (Type::Optional(inner1), Type::Optional(inner2)) => {
+                Self::is_convertible(inner1, inner2)
+            }
             (Type::Optional(inner), to) => Self::is_convertible(inner, to),
             (from, Type::Optional(inner)) => {
                 if from == &Type::NoneType {
@@ -1762,7 +1865,7 @@ impl TypeChecker {
                 .with_labels(vec![Label::primary(self.file_id, span)]),
         );
     }
-    
+
     fn check_block(&mut self, stmts: &mut [Stmt]) -> Result<(), Vec<Diagnostic<FileId>>> {
         for stmt in stmts {
             self.check_stmt(stmt)?;
@@ -1770,36 +1873,40 @@ impl TypeChecker {
         Ok(())
     }
 
-    fn check_impl_block(&mut self, impl_block: &mut ast::ImplBlock) -> Result<(), Vec<Diagnostic<FileId>>> {
+    fn check_impl_block(
+        &mut self,
+        impl_block: &mut ast::ImplBlock,
+    ) -> Result<(), Vec<Diagnostic<FileId>>> {
         let target_type = self.parse_type_name(&impl_block.target_type);
-        
+
         for method in &mut impl_block.methods {
             for (param_name, param_type) in &mut method.params {
                 if param_name == "self" {
                     *param_type = target_type.clone();
                 }
             }
-            
+
             if method.name == "constructor" {
                 let params: Vec<Type> = method.params.iter().map(|(_, t)| t.clone()).collect();
                 let constructor_name = format!("{}.constructor", impl_block.target_type);
-                self.functions.insert(constructor_name, (params, method.return_type.clone()));
+                self.functions
+                    .insert(constructor_name, (params, method.return_type.clone()));
             }
-            
+
             self.context.current_return_type = method.return_type.clone();
             self.check_function(method)?;
         }
-        
+
         Ok(())
     }
-    
+
     fn parse_type_name(&self, type_name: &str) -> Type {
         if type_name.starts_with("[]") {
             let inner_type_name = &type_name[2..];
             let inner_type = self.parse_type_name(inner_type_name);
             return Type::Array(Box::new(inner_type));
         }
-        
+
         match type_name {
             "string" => Type::String,
             "i32" => Type::I32,
@@ -1827,15 +1934,22 @@ impl TypeChecker {
     }
 }
 
-
 fn substitute_generics(ty: &Type, subst: &std::collections::HashMap<&String, &Type>) -> Type {
     match ty {
         Type::Generic(name) => subst.get(name).cloned().cloned().unwrap_or(Type::Unknown),
         Type::Pointer(inner) => Type::Pointer(Box::new(substitute_generics(inner, subst))),
         Type::Array(inner) => Type::Array(Box::new(substitute_generics(inner, subst))),
-        Type::SizedArray(inner, n) => Type::SizedArray(Box::new(substitute_generics(inner, subst)), *n),
-        Type::Function(args, ret) => Type::Function(args.iter().map(|a| substitute_generics(a, subst)).collect(), Box::new(substitute_generics(ret, subst))),
-        Type::GenericInstance(name, args) => Type::GenericInstance(name.clone(), args.iter().map(|a| substitute_generics(a, subst)).collect()),
+        Type::SizedArray(inner, n) => {
+            Type::SizedArray(Box::new(substitute_generics(inner, subst)), *n)
+        }
+        Type::Function(args, ret) => Type::Function(
+            args.iter().map(|a| substitute_generics(a, subst)).collect(),
+            Box::new(substitute_generics(ret, subst)),
+        ),
+        Type::GenericInstance(name, args) => Type::GenericInstance(
+            name.clone(),
+            args.iter().map(|a| substitute_generics(a, subst)).collect(),
+        ),
         _ => ty.clone(),
     }
 }

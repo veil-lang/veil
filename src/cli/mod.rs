@@ -1,23 +1,23 @@
 pub mod benchmark;
 pub mod init;
 pub(crate) mod run;
-pub mod upgrade;
 pub mod test;
+pub mod upgrade;
 
-use crate::helpers::validate_ve_file;
-use crate::helpers::get_bundled_clang_path;
+use crate::cli::upgrade::Channel;
 use crate::compiler::incremental::IncrementalCompiler;
+use crate::helpers::get_bundled_clang_path;
 #[cfg(target_os = "windows")]
-use crate::helpers::{prepare_windows_clang_args};
+use crate::helpers::prepare_windows_clang_args;
+use crate::helpers::validate_ve_file;
 use crate::{codegen, typeck};
 use anyhow::anyhow;
 use clap::{Parser, Subcommand};
 use codespan::Files;
 use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
-use std::path::PathBuf;
 use colored::*;
-use crate::cli::upgrade::Channel;
+use std::path::PathBuf;
 
 #[derive(Debug)]
 pub struct CliError(pub String);
@@ -63,7 +63,7 @@ pub enum CliCommand {
         test_name: Option<String>,
         verbose: bool,
         list: bool,
-    }
+    },
 }
 
 #[derive(Parser)]
@@ -153,14 +153,17 @@ enum Command {
         verbose: bool,
         #[arg(long, help = "List available tests")]
         list: bool,
-    }
+    },
 }
 
 fn parse_channel(s: &str) -> Result<Channel, String> {
     match s.to_lowercase().as_str() {
         "stable" => Ok(Channel::Stable),
         "canary" => Ok(Channel::Canary),
-        _ => Err(format!("Invalid channel '{}'. Valid options: stable, canary", s)),
+        _ => Err(format!(
+            "Invalid channel '{}'. Valid options: stable, canary",
+            s
+        )),
     }
 }
 
@@ -169,12 +172,12 @@ pub fn parse() -> anyhow::Result<CliCommand> {
 
     match args.command {
         Some(Command::Build {
-                 input,
-                 output,
-                 optimize,
-                 target_triple,
-                 verbose,
-             }) => Ok(CliCommand::Build {
+            input,
+            output,
+            optimize,
+            target_triple,
+            verbose,
+        }) => Ok(CliCommand::Build {
             input,
             output,
             optimize,
@@ -182,39 +185,39 @@ pub fn parse() -> anyhow::Result<CliCommand> {
             verbose,
         }),
         Some(Command::Init {
-                 directory,
-                 project_name,
-             }) => Ok(CliCommand::Init {
+            directory,
+            project_name,
+        }) => Ok(CliCommand::Init {
             directory,
             project_name,
         }),
         Some(Command::Run { input, verbose }) => Ok(CliCommand::Run { input, verbose }),
         Some(Command::Benchmark {
-                 input,
-                 iterations,
-                 verbose,
-             }) => Ok(CliCommand::Benchmark {
+            input,
+            iterations,
+            verbose,
+        }) => Ok(CliCommand::Benchmark {
             input,
             iterations,
             verbose,
         }),
         Some(Command::Upgrade {
-                 no_remind,
-                 force,
-                 verbose,
-                 channel,
-             }) => Ok(CliCommand::Upgrade {
+            no_remind,
+            force,
+            verbose,
+            channel,
+        }) => Ok(CliCommand::Upgrade {
             no_remind,
             force,
             verbose,
             channel: channel.unwrap_or_default(),
         }),
         Some(Command::Test {
-                 input,
-                 test_name,
-                 verbose,
-                 list,
-             }) => Ok(CliCommand::Test {
+            input,
+            test_name,
+            verbose,
+            list,
+        }) => Ok(CliCommand::Test {
             input,
             test_name,
             verbose,
@@ -257,9 +260,11 @@ pub fn process_build(
 
     if build_dir.exists() {
         if verbose {
-            println!("{}", format!("Cleaning build directory: {}", build_dir.display()).yellow());
+            println!(
+                "{}",
+                format!("Cleaning build directory: {}", build_dir.display()).yellow()
+            );
         }
-
 
         for entry in std::fs::read_dir(&build_dir)? {
             let entry = entry?;
@@ -287,7 +292,10 @@ pub fn process_build(
     let mut module_compiler = IncrementalCompiler::new(&build_dir);
 
     if verbose {
-        println!("{}", "Discovering modules and building dependency graph...".yellow());
+        println!(
+            "{}",
+            "Discovering modules and building dependency graph...".yellow()
+        );
     }
 
     module_compiler.build_dependency_graph(&input)?;
@@ -311,17 +319,24 @@ pub fn process_build(
     if verbose {
         println!("{}", format!("Input file: {}", input.display()).cyan());
         println!("{}", format!("Output file: {}", output.display()).cyan());
-        println!("{}", format!("Build directory: {}", build_dir.display()).cyan());
+        println!(
+            "{}",
+            format!("Build directory: {}", build_dir.display()).cyan()
+        );
     }
 
     if verbose {
         let ast_file = build_dir.join("parsed_ast.txt");
         let ast_content = format!("Parsed AST:\n{:#?}", program);
         std::fs::write(&ast_file, ast_content)?;
-        println!("{}", format!("Parsed AST saved to: {}", ast_file.display()).green());
+        println!(
+            "{}",
+            format!("Parsed AST saved to: {}", ast_file.display()).green()
+        );
     }
 
-    let (imported_functions, imported_structs, imported_ffi_vars) = module_compiler.get_imported_info()?;
+    let (imported_functions, imported_structs, imported_ffi_vars) =
+        module_compiler.get_imported_info()?;
     let file_id = module_compiler.get_entry_file_id(&mut files, &input)?;
 
     let mut type_checker = typeck::TypeChecker::new(
@@ -380,12 +395,10 @@ pub fn process_build(
                 });
 
                 let location = match file_path {
-                    Some(ref path) => {
-                        match module_info {
-                            Some(ref module) => format!("in file '{}' ({})", path, module),
-                            None => format!("in file '{}'", path),
-                        }
-                    }
+                    Some(ref path) => match module_info {
+                        Some(ref module) => format!("in file '{}' ({})", path, module),
+                        None => format!("in file '{}'", path),
+                    },
                     None => "in unknown location".to_string(),
                 };
 
@@ -407,7 +420,9 @@ pub fn process_build(
         }
     }
 
-    let config = codegen::CodegenConfig { target_triple: target_triple.clone() };
+    let config = codegen::CodegenConfig {
+        target_triple: target_triple.clone(),
+    };
     let mut target = codegen::Target::create(
         config,
         file_id,
@@ -420,7 +435,10 @@ pub fn process_build(
     target.compile(&program, &c_file)?;
 
     if verbose {
-        println!("{}", format!("Compiling generated C code: {}", c_file.display()).yellow());
+        println!(
+            "{}",
+            format!("Compiling generated C code: {}", c_file.display()).yellow()
+        );
     }
 
     let mut clang_args: Vec<String>;
@@ -463,15 +481,22 @@ pub fn process_build(
                 }
             }
         }
-        return Err(anyhow!("C compiler failed with status: {}", output_result.status));
+        return Err(anyhow!(
+            "C compiler failed with status: {}",
+            output_result.status
+        ));
     }
 
     if verbose {
-        println!("{}", format!("Successfully compiled to: {}", output.display()).green());
+        println!(
+            "{}",
+            format!("Successfully compiled to: {}", output.display()).green()
+        );
     }
 
     let artifacts = vec![output.clone(), c_file.clone()];
-    let entry_dependencies = module_compiler.collect_module_dependencies(&program.imports, &input)?;
+    let entry_dependencies =
+        module_compiler.collect_module_dependencies(&program.imports, &input)?;
     module_compiler.cache_compilation_artifacts(&input, entry_dependencies, artifacts)?;
 
     if verbose {
@@ -491,7 +516,10 @@ pub fn process_build(
         .map_err(|e| anyhow!("Failed to run program: {}", e))?;
 
     if verbose {
-        println!("{}", format!("Program exited with status: {}", status).magenta());
+        println!(
+            "{}",
+            format!("Program exited with status: {}", status).magenta()
+        );
     }
 
     Ok(output)

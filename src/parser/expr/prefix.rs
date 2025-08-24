@@ -1,7 +1,7 @@
-use codespan::{FileId, Span};
-use codespan_reporting::diagnostic::Diagnostic;
 use crate::ast;
 use crate::lexer::Token;
+use codespan::{FileId, Span};
+use codespan_reporting::diagnostic::Diagnostic;
 
 impl<'a> super::super::Parser<'a> {
     pub fn parse_prefix(&mut self) -> Result<ast::Expr, Diagnostic<FileId>> {
@@ -12,11 +12,14 @@ impl<'a> super::super::Parser<'a> {
                 self.advance();
                 let prefix_bp = self.get_prefix_bp(&token);
                 let expr = self.parse_expr_bp(prefix_bp)?;
-                Ok(ast::Expr::Deref(Box::new(expr), ast::ExprInfo {
-                    span: op_span,
-                    ty: ast::Type::Unknown,
-                    is_tail: false,
-                }))
+                Ok(ast::Expr::Deref(
+                    Box::new(expr),
+                    ast::ExprInfo {
+                        span: op_span,
+                        ty: ast::Type::Unknown,
+                        is_tail: false,
+                    },
+                ))
             }
             Token::Minus | Token::Plus => {
                 let (op_token, op_span) = self.advance().unwrap();
@@ -31,12 +34,20 @@ impl<'a> super::super::Parser<'a> {
                         if (i32::MIN as i64..=i32::MAX as i64).contains(&negated) {
                             Ok(ast::Expr::Int(
                                 negated as i32,
-                                ast::ExprInfo { span: op_span, ty: ast::Type::I32, is_tail: false },
+                                ast::ExprInfo {
+                                    span: op_span,
+                                    ty: ast::Type::I32,
+                                    is_tail: false,
+                                },
                             ))
                         } else {
                             Ok(ast::Expr::Int64(
                                 negated,
-                                ast::ExprInfo { span: op_span, ty: ast::Type::I64, is_tail: false },
+                                ast::ExprInfo {
+                                    span: op_span,
+                                    ty: ast::Type::I64,
+                                    is_tail: false,
+                                },
                             ))
                         }
                     }
@@ -44,10 +55,17 @@ impl<'a> super::super::Parser<'a> {
                         if let Some(neg) = val.checked_neg() {
                             Ok(ast::Expr::Int64(
                                 neg,
-                                ast::ExprInfo { span: op_span, ty: ast::Type::I64, is_tail: false },
+                                ast::ExprInfo {
+                                    span: op_span,
+                                    ty: ast::Type::I64,
+                                    is_tail: false,
+                                },
                             ))
                         } else {
-                            self.error(&format!("Cannot negate {val} as it would overflow i64"), op_span)
+                            self.error(
+                                &format!("Cannot negate {val} as it would overflow i64"),
+                                op_span,
+                            )
                         }
                     }
                     _ => {
@@ -59,7 +77,11 @@ impl<'a> super::super::Parser<'a> {
                                 _ => unreachable!(),
                             },
                             Box::new(expr),
-                            ast::ExprInfo { span, ty: ast::Type::Unknown, is_tail: false },
+                            ast::ExprInfo {
+                                span,
+                                ty: ast::Type::Unknown,
+                                is_tail: false,
+                            },
                         ))
                     }
                 }
@@ -86,11 +108,14 @@ impl<'a> super::super::Parser<'a> {
                 self.advance();
                 let expr = self.parse_expr_bp(8)?;
                 let expr_span = expr.span();
-                Ok(ast::Expr::Spread(Box::new(expr), ast::ExprInfo {
-                    span: Span::new(op_span.start(), expr_span.end()),
-                    ty: ast::Type::Unknown,
-                    is_tail: false,
-                }))
+                Ok(ast::Expr::Spread(
+                    Box::new(expr),
+                    ast::ExprInfo {
+                        span: Span::new(op_span.start(), expr_span.end()),
+                        ty: ast::Type::Unknown,
+                        is_tail: false,
+                    },
+                ))
             }
             Token::KwNew => {
                 let new_span = self.peek_span();

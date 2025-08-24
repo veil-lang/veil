@@ -1,7 +1,7 @@
-use codespan::{FileId, Span};
-use codespan_reporting::diagnostic::Diagnostic;
 use crate::ast;
 use crate::lexer::Token;
+use codespan::{FileId, Span};
+use codespan_reporting::diagnostic::Diagnostic;
 
 impl<'a> super::super::Parser<'a> {
     pub fn parse_function(&mut self) -> Result<ast::Function, Diagnostic<FileId>> {
@@ -76,7 +76,6 @@ impl<'a> super::super::Parser<'a> {
                 }
             } else {
                 let (name, _) = self.consume_ident()?;
-
 
                 if name == "self" {
                     params.push((name, ast::Type::Unknown));

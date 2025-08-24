@@ -1,16 +1,16 @@
-use codespan::FileId;
-use codespan_reporting::diagnostic::Diagnostic;
 use crate::ast;
 use crate::parser::Precedence;
+use codespan::FileId;
+use codespan_reporting::diagnostic::Diagnostic;
 
-mod pattern;
-mod match_;
-mod if_;
-mod loop_;
 mod atom;
-mod prefix;
-mod infix;
 mod call;
+mod if_;
+mod infix;
+mod loop_;
+mod match_;
+mod pattern;
+mod prefix;
 mod template;
 
 impl<'a> super::Parser<'a> {

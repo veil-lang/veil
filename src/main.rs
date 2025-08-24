@@ -5,10 +5,10 @@ mod ast;
 mod cli;
 mod codegen;
 mod compiler;
+mod helpers;
 mod lexer;
 mod parser;
 mod typeck;
-mod helpers;
 
 use anyhow::Result;
 
@@ -29,10 +29,13 @@ fn main() -> Result<()> {
         }) => {
             cli::process_build(input, output, optimize, target_triple, verbose, false)?;
             Ok(())
-        },
-        Ok(cli::CliCommand::Test { input, test_name, verbose, list }) => {
-            cli::test::run_test(input, test_name, verbose, list)
         }
+        Ok(cli::CliCommand::Test {
+            input,
+            test_name,
+            verbose,
+            list,
+        }) => cli::test::run_test(input, test_name, verbose, list),
         Ok(cli::CliCommand::Init {
             directory,
             project_name,

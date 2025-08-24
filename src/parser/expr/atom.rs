@@ -1,7 +1,7 @@
-use codespan::{FileId, Span};
-use codespan_reporting::diagnostic::Diagnostic;
 use crate::ast;
 use crate::lexer::Token;
+use codespan::{FileId, Span};
+use codespan_reporting::diagnostic::Diagnostic;
 
 impl<'a> super::super::Parser<'a> {
     pub fn parse_atom(&mut self) -> Result<ast::Expr, Diagnostic<FileId>> {
@@ -15,50 +15,70 @@ impl<'a> super::super::Parser<'a> {
                 } else {
                     Vec::new()
                 };
-                Ok(ast::Expr::New(struct_name.clone(), args, ast::ExprInfo {
-                    span,
-                    ty: ast::Type::Struct(struct_name),
-                    is_tail: false,
-                }))
+                Ok(ast::Expr::New(
+                    struct_name.clone(),
+                    args,
+                    ast::ExprInfo {
+                        span,
+                        ty: ast::Type::Struct(struct_name),
+                        is_tail: false,
+                    },
+                ))
             }
-            Some((Token::Int(s), span)) => {
-                match s.parse::<i32>() {
-                    Ok(val) => Ok(ast::Expr::Int(val, ast::ExprInfo {
+            Some((Token::Int(s), span)) => match s.parse::<i32>() {
+                Ok(val) => Ok(ast::Expr::Int(
+                    val,
+                    ast::ExprInfo {
                         span,
                         ty: ast::Type::I32,
                         is_tail: false,
-                    })),
-                    Err(_) => match s.parse::<i64>() {
-                        Ok(val) => Ok(ast::Expr::Int64(val, ast::ExprInfo {
+                    },
+                )),
+                Err(_) => match s.parse::<i64>() {
+                    Ok(val) => Ok(ast::Expr::Int64(
+                        val,
+                        ast::ExprInfo {
                             span,
                             ty: ast::Type::I64,
                             is_tail: false,
-                        })),
-                        Err(_) => self.error(&format!("Integer literal '{}' is out of range", s), span)
-                    }
-                }
+                        },
+                    )),
+                    Err(_) => self.error(&format!("Integer literal '{}' is out of range", s), span),
+                },
             },
-            Some((Token::Str(s), span)) => Ok(ast::Expr::Str(s, ast::ExprInfo {
-                span,
-                ty: ast::Type::String,
-                is_tail: false,
-            })),
+            Some((Token::Str(s), span)) => Ok(ast::Expr::Str(
+                s,
+                ast::ExprInfo {
+                    span,
+                    ty: ast::Type::String,
+                    is_tail: false,
+                },
+            )),
             Some((Token::TemplateStr(s), span)) => self.parse_template_string(s, span),
-            Some((Token::KwTrue, span)) => Ok(ast::Expr::Bool(true, ast::ExprInfo {
-                span,
-                ty: ast::Type::Bool,
-                is_tail: false,
-            })),
-            Some((Token::KwFalse, span)) => Ok(ast::Expr::Bool(false, ast::ExprInfo {
-                span,
-                ty: ast::Type::Bool,
-                is_tail: false,
-            })),
-            Some((Token::F32(val), span)) => Ok(ast::Expr::F32(val, ast::ExprInfo {
-                span,
-                ty: ast::Type::F32,
-                is_tail: false,
-            })),
+            Some((Token::KwTrue, span)) => Ok(ast::Expr::Bool(
+                true,
+                ast::ExprInfo {
+                    span,
+                    ty: ast::Type::Bool,
+                    is_tail: false,
+                },
+            )),
+            Some((Token::KwFalse, span)) => Ok(ast::Expr::Bool(
+                false,
+                ast::ExprInfo {
+                    span,
+                    ty: ast::Type::Bool,
+                    is_tail: false,
+                },
+            )),
+            Some((Token::F32(val), span)) => Ok(ast::Expr::F32(
+                val,
+                ast::ExprInfo {
+                    span,
+                    ty: ast::Type::F32,
+                    is_tail: false,
+                },
+            )),
             Some((Token::KwNone, span)) => Ok(ast::Expr::None(ast::ExprInfo {
                 span,
                 ty: ast::Type::NoneType,
@@ -70,11 +90,14 @@ impl<'a> super::super::Parser<'a> {
                         let rhs = self.parse_expr()?;
                         let end_span = rhs.span();
                         Ok(ast::Expr::Range(
-                            Box::new(ast::Expr::InfiniteRange(ast::RangeType::Infinite, ast::ExprInfo {
-                                span: Span::new(span.start(), span.start()),
-                                ty: ast::Type::Unknown,
-                                is_tail: false,
-                            })),
+                            Box::new(ast::Expr::InfiniteRange(
+                                ast::RangeType::Infinite,
+                                ast::ExprInfo {
+                                    span: Span::new(span.start(), span.start()),
+                                    ty: ast::Type::Unknown,
+                                    is_tail: false,
+                                },
+                            )),
                             Box::new(rhs),
                             ast::RangeType::Exclusive,
                             ast::ExprInfo {
@@ -90,7 +113,7 @@ impl<'a> super::super::Parser<'a> {
                                 span,
                                 ty: ast::Type::Unknown,
                                 is_tail: false,
-                            }
+                            },
                         ))
                     }
                 } else {
@@ -100,17 +123,17 @@ impl<'a> super::super::Parser<'a> {
                             span,
                             ty: ast::Type::Unknown,
                             is_tail: false,
-                        }
+                        },
                     ))
                 }
-            },
+            }
             Some((Token::DotDotGt, span)) => Ok(ast::Expr::InfiniteRange(
                 ast::RangeType::InfiniteUp,
                 ast::ExprInfo {
                     span,
                     ty: ast::Type::Unknown,
                     is_tail: false,
-                }
+                },
             )),
             Some((Token::DotDotLt, span)) => Ok(ast::Expr::InfiniteRange(
                 ast::RangeType::InfiniteDown,
@@ -118,7 +141,7 @@ impl<'a> super::super::Parser<'a> {
                     span,
                     ty: ast::Type::Unknown,
                     is_tail: false,
-                }
+                },
             )),
             Some((Token::LParen, span_start)) => {
                 let expr = self.parse_expr()?;
@@ -153,11 +176,14 @@ impl<'a> super::super::Parser<'a> {
                 } else if self.check(Token::LParen) {
                     self.parse_function_call(name, span)
                 } else {
-                    Ok(ast::Expr::Var(name, ast::ExprInfo {
-                        span,
-                        ty: ast::Type::Unknown,
-                        is_tail: false,
-                    }))
+                    Ok(ast::Expr::Var(
+                        name,
+                        ast::ExprInfo {
+                            span,
+                            ty: ast::Type::Unknown,
+                            is_tail: false,
+                        },
+                    ))
                 }
             }
             Some((Token::LBracket, span)) => {
@@ -172,19 +198,23 @@ impl<'a> super::super::Parser<'a> {
                     }
                 }
                 let end_span = self.expect(Token::RBracket)?;
-                Ok(ast::Expr::ArrayInit(elements, ast::ExprInfo {
-                    span: Span::new(span.start(), end_span.end()),
-                    ty: ast::Type::Unknown,
-                    is_tail: false,
-                }))
+                Ok(ast::Expr::ArrayInit(
+                    elements,
+                    ast::ExprInfo {
+                        span: Span::new(span.start(), end_span.end()),
+                        ty: ast::Type::Unknown,
+                        is_tail: false,
+                    },
+                ))
             }
-            Some((Token::EmptyArray, span)) => {
-                Ok(ast::Expr::ArrayInit(Vec::new(), ast::ExprInfo {
+            Some((Token::EmptyArray, span)) => Ok(ast::Expr::ArrayInit(
+                Vec::new(),
+                ast::ExprInfo {
                     span,
                     ty: ast::Type::Unknown,
                     is_tail: false,
-                }))
-            }
+                },
+            )),
             Some((Token::KwMatch, span)) => self.parse_match(span),
             Some((Token::KwIf, span)) => self.parse_if_expr(span),
             Some((Token::KwLoop, span)) => self.parse_loop_expr(span),

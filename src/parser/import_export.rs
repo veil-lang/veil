@@ -1,7 +1,7 @@
-use codespan::FileId;
-use codespan_reporting::diagnostic::Diagnostic;
 use crate::ast;
 use crate::lexer::Token;
+use codespan::FileId;
+use codespan_reporting::diagnostic::Diagnostic;
 
 impl<'a> super::Parser<'a> {
     pub fn parse_import(&mut self) -> Result<ast::ImportDeclaration, Diagnostic<FileId>> {
@@ -35,9 +35,7 @@ impl<'a> super::Parser<'a> {
                     alias,
                 })
             }
-            Token::LBrace => {
-                self.parse_import_specifiers()
-            }
+            Token::LBrace => self.parse_import_specifiers(),
             _ => {
                 let span = self.peek_span();
                 self.error("Invalid import statement", span)
@@ -45,7 +43,10 @@ impl<'a> super::Parser<'a> {
         }
     }
 
-    pub fn parse_export_block(&mut self, program: &mut ast::Program) -> Result<(), Diagnostic<FileId>> {
+    pub fn parse_export_block(
+        &mut self,
+        program: &mut ast::Program,
+    ) -> Result<(), Diagnostic<FileId>> {
         self.expect(Token::LBrace)?;
         while !self.check(Token::RBrace) {
             if self.check(Token::KwFn) {
@@ -69,10 +70,6 @@ impl<'a> super::Parser<'a> {
         self.expect(Token::RBrace)?;
         Ok(())
     }
-
-
-
-
 
     pub fn parse_module_path(&mut self) -> Result<String, Diagnostic<FileId>> {
         let mut parts = vec![];
@@ -101,7 +98,6 @@ impl<'a> super::Parser<'a> {
         Ok(parts.join("/"))
     }
 
-
     pub fn parse_import_all(&mut self) -> Result<ast::ImportDeclaration, Diagnostic<FileId>> {
         let module_path = self.parse_module_path()?;
 
@@ -129,7 +125,9 @@ impl<'a> super::Parser<'a> {
         })
     }
 
-    pub fn parse_import_specifiers(&mut self) -> Result<ast::ImportDeclaration, Diagnostic<FileId>> {
+    pub fn parse_import_specifiers(
+        &mut self,
+    ) -> Result<ast::ImportDeclaration, Diagnostic<FileId>> {
         self.expect(Token::LBrace)?;
         let mut specifiers = Vec::new();
 
@@ -161,7 +159,6 @@ impl<'a> super::Parser<'a> {
         })
     }
 
-
     pub fn parse_import_specifier_item(
         &mut self,
     ) -> Result<(String, Option<String>), Diagnostic<FileId>> {
@@ -190,37 +187,43 @@ impl<'a> super::Parser<'a> {
             self.expect(Token::KwFrom)?;
             let import_all = self.parse_import_all()?;
             match import_all {
-                ast::ImportDeclaration::ImportAll { module_path, module_type, alias } => {
-                    ast::ImportDeclaration::ExportImportAll {
-                        module_path,
-                        module_type,
-                        alias,
-                    }
-                }
+                ast::ImportDeclaration::ImportAll {
+                    module_path,
+                    module_type,
+                    alias,
+                } => ast::ImportDeclaration::ExportImportAll {
+                    module_path,
+                    module_type,
+                    alias,
+                },
                 _ => unreachable!(),
             }
         } else if self.check(Token::LBrace) {
             let import_specifiers = self.parse_import_specifiers()?;
             match import_specifiers {
-                ast::ImportDeclaration::ImportSpecifiers { module_path, module_type, specifiers } => {
-                    ast::ImportDeclaration::ExportImportSpecifiers {
-                        module_path,
-                        module_type,
-                        specifiers,
-                    }
-                }
+                ast::ImportDeclaration::ImportSpecifiers {
+                    module_path,
+                    module_type,
+                    specifiers,
+                } => ast::ImportDeclaration::ExportImportSpecifiers {
+                    module_path,
+                    module_type,
+                    specifiers,
+                },
                 _ => unreachable!(),
             }
         } else {
             let import_all = self.parse_import_all()?;
             match import_all {
-                ast::ImportDeclaration::ImportAll { module_path, module_type, alias } => {
-                    ast::ImportDeclaration::ExportImportAll {
-                        module_path,
-                        module_type,
-                        alias,
-                    }
-                }
+                ast::ImportDeclaration::ImportAll {
+                    module_path,
+                    module_type,
+                    alias,
+                } => ast::ImportDeclaration::ExportImportAll {
+                    module_path,
+                    module_type,
+                    alias,
+                },
                 _ => unreachable!(),
             }
         };

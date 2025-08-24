@@ -1,11 +1,11 @@
-mod types;
-mod precedence;
-mod stmt;
-mod ffi;
-mod import_export;
 mod decl;
 mod expr;
+mod ffi;
+mod import_export;
+mod precedence;
+mod stmt;
 mod test;
+mod types;
 
 use super::{
     ast,
@@ -13,12 +13,12 @@ use super::{
 };
 use codespan::{FileId, Files, Span};
 use codespan_reporting::diagnostic::Diagnostic;
-use std::{collections::HashMap};
+use std::collections::HashMap;
 use std::iter::Peekable;
 use std::slice::Iter;
 
-pub(super) use precedence::Precedence;
 use crate::parser::ffi::ForeignItem;
+pub(super) use precedence::Precedence;
 
 pub struct Parser<'a> {
     tokens: Vec<(Token, Span)>,
@@ -74,12 +74,14 @@ impl<'a> Parser<'a> {
                     let mut func = self.parse_function()?;
                     func.visibility = ast::Visibility::Public;
                     program.functions.push(func);
-                }
-                else if self.check(Token::LBrace) {
+                } else if self.check(Token::LBrace) {
                     self.parse_export_block(&mut program)?;
                 } else {
                     let span = self.peek_span();
-                    return self.error("Expected 'fn', 'struct', 'import', or '{' after 'export'", span);
+                    return self.error(
+                        "Expected 'fn', 'struct', 'import', or '{' after 'export'",
+                        span,
+                    );
                 }
             } else if self.check(Token::KwFn) {
                 program.functions.push(self.parse_function()?);
@@ -105,9 +107,7 @@ impl<'a> Parser<'a> {
                 }
             } else if self.check(Token::KwTest) {
                 program.tests.push(self.parse_test()?);
-            }
-
-            else {
+            } else {
                 program.stmts.push(self.parse_stmt()?);
             }
         }
@@ -126,7 +126,9 @@ impl<'a> Parser<'a> {
         }
         t
     }
-    fn is_at_end(&self) -> bool { self.pos >= self.tokens.len() }
+    fn is_at_end(&self) -> bool {
+        self.pos >= self.tokens.len()
+    }
 
     fn peek_token(&self) -> Token {
         self.peek().map(|(t, _)| t.clone()).unwrap()
@@ -135,8 +137,6 @@ impl<'a> Parser<'a> {
     fn peek_span(&self) -> Span {
         self.peek().map(|(_, s)| *s).unwrap_or(Span::new(0, 0))
     }
-
-
 
     fn consume(&mut self, expected: Token, err_msg: &str) -> Result<Span, Diagnostic<FileId>> {
         if self.check(expected.clone()) {
@@ -162,17 +162,13 @@ impl<'a> Parser<'a> {
                 } else {
                     self.error("Expected identifier", Span::new(0, 0))
                 }
-            },
+            }
         }
     }
-
-
 
     fn check(&self, token: Token) -> bool {
         matches!(self.peek(), Some((t, _)) if *t == token)
     }
-
-
 
     fn previous(&self) -> Option<&(Token, Span)> {
         self.previous_token.as_ref()
@@ -202,8 +198,4 @@ impl<'a> Parser<'a> {
             codespan_reporting::diagnostic::Label::primary(self.file_id, span),
         ]))
     }
-
-
-
-
 }

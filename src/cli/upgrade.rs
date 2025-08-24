@@ -105,7 +105,8 @@ fn save_config(config: &UpdateConfig) -> Result<()> {
 
 fn check_for_updates(channel: &Channel) -> Result<Option<String>> {
     let install_dir = get_veil_install_dir().ok();
-    let is_binary_install = install_dir.as_ref()
+    let is_binary_install = install_dir
+        .as_ref()
         .map(|dir| dir.exists())
         .unwrap_or(false);
 
@@ -165,7 +166,8 @@ fn check_for_updates_binary() -> Result<Option<String>> {
         .call()
         .map_err(|e| anyhow!("Failed to fetch release info: {}", e))?;
 
-    let release: GitHubRelease = response.into_json()
+    let release: GitHubRelease = response
+        .into_json()
         .map_err(|e| anyhow!("Failed to parse release info: {}", e))?;
 
     let latest_version = release.tag_name.trim_start_matches('v');
@@ -225,7 +227,9 @@ pub fn run_upgrade(no_remind: bool, force: bool, verbose: bool, channel: Channel
         Some(new_version) => {
             println!(
                 "📦 Found new version: v{} (current: v{}) on {} channel",
-                new_version, CURRENT_VERSION, channel.name()
+                new_version,
+                CURRENT_VERSION,
+                channel.name()
             );
 
             if !force {
@@ -247,7 +251,8 @@ pub fn run_upgrade(no_remind: bool, force: bool, verbose: bool, channel: Channel
         None => {
             println!(
                 "✅ You're already using the latest version (v{}) on {} channel",
-                CURRENT_VERSION, channel.name()
+                CURRENT_VERSION,
+                channel.name()
             );
         }
     }
@@ -279,7 +284,8 @@ fn upgrade_veil_binary(verbose: bool) -> Result<()> {
         .call()
         .map_err(|e| anyhow!("Failed to fetch release info: {}", e))?;
 
-    let release: GitHubRelease = response.into_json()
+    let release: GitHubRelease = response
+        .into_json()
         .map_err(|e| anyhow!("Failed to parse release info: {}", e))?;
 
     // Znajdź odpowiedni asset dla Windows
@@ -291,7 +297,9 @@ fn upgrade_veil_binary(verbose: bool) -> Result<()> {
         "veil-x86_64-unknown-linux-gnu.tar.gz"
     };
 
-    let asset = release.assets.iter()
+    let asset = release
+        .assets
+        .iter()
         .find(|a| a.name == asset_name)
         .ok_or_else(|| anyhow!("No prebuilt binary found for this platform"))?;
 
@@ -333,7 +341,12 @@ fn upgrade_veil_binary(verbose: bool) -> Result<()> {
     {
         // Użyj systemu tar na Windows 10+
         let tar_status = Command::new("tar")
-            .args(&["-xzf", archive_path.to_str().unwrap(), "-C", extract_dir.to_str().unwrap()])
+            .args(&[
+                "-xzf",
+                archive_path.to_str().unwrap(),
+                "-C",
+                extract_dir.to_str().unwrap(),
+            ])
             .status()?;
 
         if !tar_status.success() {
@@ -344,7 +357,12 @@ fn upgrade_veil_binary(verbose: bool) -> Result<()> {
     #[cfg(not(windows))]
     {
         let tar_status = Command::new("tar")
-            .args(&["-xzf", archive_path.to_str().unwrap(), "-C", extract_dir.to_str().unwrap()])
+            .args(&[
+                "-xzf",
+                archive_path.to_str().unwrap(),
+                "-C",
+                extract_dir.to_str().unwrap(),
+            ])
             .status()?;
 
         if !tar_status.success() {
@@ -376,7 +394,11 @@ fn upgrade_veil_binary(verbose: bool) -> Result<()> {
 
     // Utwórz backup obecnego pliku
     if target_exe.exists() {
-        let backup_name = if cfg!(windows) { "ve_old.exe" } else { "ve_old" };
+        let backup_name = if cfg!(windows) {
+            "ve_old.exe"
+        } else {
+            "ve_old"
+        };
         let backup_exe = install_dir.join(backup_name);
 
         if backup_exe.exists() {
@@ -438,10 +460,21 @@ fn upgrade_veil_source(verbose: bool, channel: &Channel) -> Result<()> {
     fs::create_dir_all(&temp_dir)?;
 
     let mut git_cmd = Command::new("git");
-    git_cmd.args(&["clone", "--branch", channel.branch(), REPO_URL, temp_dir.to_str().unwrap()]);
+    git_cmd.args(&[
+        "clone",
+        "--branch",
+        channel.branch(),
+        REPO_URL,
+        temp_dir.to_str().unwrap(),
+    ]);
 
     if verbose {
-        println!("   Running: git clone --branch {} {} {}", channel.branch(), REPO_URL, temp_dir.display());
+        println!(
+            "   Running: git clone --branch {} {} {}",
+            channel.branch(),
+            REPO_URL,
+            temp_dir.display()
+        );
     } else {
         git_cmd.stdout(Stdio::null()).stderr(Stdio::null());
     }
@@ -799,10 +832,8 @@ fn stop_other_veil_processes_unix(verbose: bool) -> Result<()> {
     }
 
     let current_pid = std::process::id();
-    
-    let ps_output = Command::new("ps")
-        .args(&["-eo", "pid,comm"])
-        .output();
+
+    let ps_output = Command::new("ps").args(&["-eo", "pid,comm"]).output();
 
     if let Ok(output) = ps_output {
         let output_str = String::from_utf8_lossy(&output.stdout);

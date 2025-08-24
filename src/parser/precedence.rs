@@ -2,7 +2,6 @@ use crate::lexer::Token;
 
 pub type Precedence = u8;
 
-
 impl<'a> super::Parser<'a> {
     pub fn get_prefix_bp(&self, token: &Token) -> Precedence {
         match token {

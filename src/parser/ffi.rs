@@ -1,20 +1,18 @@
-use std::collections::HashMap;
-use codespan::{FileId, Span};
-use codespan_reporting::diagnostic::Diagnostic;
 use crate::ast;
 use crate::lexer::Token;
-
+use codespan::{FileId, Span};
+use codespan_reporting::diagnostic::Diagnostic;
+use std::collections::HashMap;
 
 pub enum ForeignItem {
     Function(ast::FfiFunction),
     Variable(ast::FfiVariable),
 }
 
-
-
 impl<'a> super::Parser<'a> {
-
-    pub fn parse_metadata(&mut self) -> Result<Option<HashMap<String, String>>, Diagnostic<FileId>> {
+    pub fn parse_metadata(
+        &mut self,
+    ) -> Result<Option<HashMap<String, String>>, Diagnostic<FileId>> {
         self.expect(Token::LBracket)?;
         let mut metadata = HashMap::new();
 
@@ -53,7 +51,6 @@ impl<'a> super::Parser<'a> {
             Ok(Some(metadata))
         }
     }
-
 
     pub fn parse_ffi(
         &mut self,
@@ -100,5 +97,4 @@ impl<'a> super::Parser<'a> {
             return self.error("Expected 'fn' or 'var' in foreign block", span);
         }
     }
-
 }

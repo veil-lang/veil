@@ -1,18 +1,16 @@
-use codespan::FileId;
-use codespan_reporting::diagnostic::Diagnostic;
 use crate::ast;
 use crate::lexer::Token;
+use codespan::FileId;
+use codespan_reporting::diagnostic::Diagnostic;
 
 mod block;
-mod if_;
-mod while_;
-mod for_;
-mod loop_;
 mod break_continue;
-mod return_;
+mod for_;
+mod if_;
 mod let_;
-
-
+mod loop_;
+mod return_;
+mod while_;
 
 impl<'a> super::Parser<'a> {
     pub fn parse_stmt(&mut self) -> Result<ast::Stmt, Diagnostic<FileId>> {

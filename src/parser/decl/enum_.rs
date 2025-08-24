@@ -1,7 +1,7 @@
-use codespan::{FileId, Span};
-use codespan_reporting::diagnostic::Diagnostic;
 use crate::ast;
 use crate::lexer::Token;
+use codespan::{FileId, Span};
+use codespan_reporting::diagnostic::Diagnostic;
 
 impl<'a> super::super::Parser<'a> {
     pub fn parse_enum(&mut self) -> Result<ast::EnumDef, Diagnostic<FileId>> {
@@ -20,10 +20,16 @@ impl<'a> super::super::Parser<'a> {
                 if let Some((Token::Int(int_str), _)) = self.advance() {
                     match int_str.parse::<i32>() {
                         Ok(val) => Some(val),
-                        Err(_) => return self.error("Invalid integer value for enum variant", variant_span),
+                        Err(_) => {
+                            return self
+                                .error("Invalid integer value for enum variant", variant_span);
+                        }
                     }
                 } else {
-                    return self.error("Expected integer value after '=' in enum variant", variant_span);
+                    return self.error(
+                        "Expected integer value after '=' in enum variant",
+                        variant_span,
+                    );
                 }
             } else {
                 None

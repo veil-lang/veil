@@ -1,22 +1,26 @@
 use crate::cli::process_build;
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use colored::*;
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::Command;
 use std::time::Instant;
 
-pub fn run_test(input: PathBuf, test_name: Option<String>, verbose: bool, list: bool) -> anyhow::Result<()> {
-
+pub fn run_test(
+    input: PathBuf,
+    test_name: Option<String>,
+    verbose: bool,
+    list: bool,
+) -> anyhow::Result<()> {
     if list {
         return list_tests(input);
     }
 
     let content = std::fs::read_to_string(&input)
         .with_context(|| format!("Failed to read test file: {}", input.display()))?;
-    
+
     let available_tests = parse_test_names(&content);
-    
+
     if available_tests.is_empty() {
         println!("{}", "No tests found in the file.".yellow());
         return Ok(());
@@ -34,7 +38,8 @@ pub fn run_test(input: PathBuf, test_name: Option<String>, verbose: bool, list: 
         }
     } else {
         available_tests
-    };    let executable_path = process_build(
+    };
+    let executable_path = process_build(
         input.clone(),
         "build/program.exe".into(),
         false,
@@ -48,11 +53,11 @@ pub fn run_test(input: PathBuf, test_name: Option<String>, verbose: bool, list: 
 
 fn parse_test_names(content: &str) -> Vec<String> {
     let mut tests = Vec::new();
-    
+
     for line in content.lines() {
         let trimmed = line.trim();
         if trimmed.starts_with("test ") {
-            let after_test = &trimmed[5..]; 
+            let after_test = &trimmed[5..];
             if let Some(name_end) = after_test.find(' ').or_else(|| after_test.find('{')) {
                 let test_name = after_test[..name_end].trim().to_string();
                 if !test_name.is_empty() {
@@ -61,7 +66,7 @@ fn parse_test_names(content: &str) -> Vec<String> {
             }
         }
     }
-    
+
     tests
 }
 
@@ -73,41 +78,47 @@ fn run_tests_with_formatting(
     let total_tests = tests.len();
     let mut passed = 0;
     let mut failed = 0;
-    
+
     println!("{}", "🧪 Running Tests".bold().blue());
     println!();
-    
+
     let overall_start = Instant::now();
-    
+
     for (index, test_name) in tests.iter().enumerate() {
         let test_number = index + 1;
-        
+
         print!("{} ", format!("[{}/{}]", test_number, total_tests).dimmed());
         print!("{} ", "RUNNING".cyan());
         print!("{}", test_name.bold());
         io::stdout().flush().unwrap();
-        
+
         let test_start = Instant::now();
         let result = Command::new(&executable_path)
             .arg(&test_name)
             .output()
             .with_context(|| format!("Failed to run test: {}", test_name))?;
-        
+
         let test_duration = test_start.elapsed();
-        
+
         if result.status.success() {
-            print!("\r{} ", format!("[{}/{}]", test_number, total_tests).dimmed());
+            print!(
+                "\r{} ",
+                format!("[{}/{}]", test_number, total_tests).dimmed()
+            );
             print!("{} ", "✓ PASS".green().bold());
             print!("{}", test_name.bold());
             println!(" {}", format!("({:.2?})", test_duration).dimmed());
             passed += 1;
         } else {
-            print!("\r{} ", format!("[{}/{}]", test_number, total_tests).dimmed());
+            print!(
+                "\r{} ",
+                format!("[{}/{}]", test_number, total_tests).dimmed()
+            );
             print!("{} ", "✗ FAIL".red().bold());
             print!("{}", test_name.bold());
             println!(" {}", format!("({:.2?})", test_duration).dimmed());
             failed += 1;
-            
+
             if verbose || !result.stderr.is_empty() {
                 let stderr = String::from_utf8_lossy(&result.stderr);
                 if !stderr.trim().is_empty() {
@@ -117,7 +128,7 @@ fn run_tests_with_formatting(
                     }
                 }
             }
-            
+
             let stdout = String::from_utf8_lossy(&result.stdout);
             if !stdout.trim().is_empty() && verbose {
                 println!("      {}", "Standard output:".blue());
@@ -127,9 +138,9 @@ fn run_tests_with_formatting(
             }
         }
     }
-    
+
     let overall_duration = overall_start.elapsed();
-    
+
     println!();
     if failed == 0 {
         println!(
@@ -149,17 +160,15 @@ fn run_tests_with_formatting(
         );
     }
 
-    
     Ok(())
 }
-
 
 pub fn list_tests(input: PathBuf) -> anyhow::Result<()> {
     let content = std::fs::read_to_string(&input)
         .with_context(|| format!("Failed to read test file: {}", input.display()))?;
-    
+
     let available_tests = parse_test_names(&content);
-    
+
     if available_tests.is_empty() {
         println!("{}", "No tests found in the file.".yellow());
         return Ok(());
@@ -169,7 +178,11 @@ pub fn list_tests(input: PathBuf) -> anyhow::Result<()> {
     for (i, test_name) in available_tests.iter().enumerate() {
         println!("  {}. {}", i + 1, test_name.green());
     }
-    println!("\nTotal: {} test{}", available_tests.len(), if available_tests.len() == 1 { "" } else { "s" });
-    
+    println!(
+        "\nTotal: {} test{}",
+        available_tests.len(),
+        if available_tests.len() == 1 { "" } else { "s" }
+    );
+
     Ok(())
 }

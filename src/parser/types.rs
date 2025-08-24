@@ -1,8 +1,7 @@
-use codespan::{FileId, Span};
-use codespan_reporting::diagnostic::Diagnostic;
 use crate::ast;
 use crate::lexer::Token;
-
+use codespan::{FileId, Span};
+use codespan_reporting::diagnostic::Diagnostic;
 
 impl<'a> super::Parser<'a> {
     pub fn parse_type(&mut self) -> Result<ast::Type, Diagnostic<FileId>> {
@@ -27,7 +26,8 @@ impl<'a> super::Parser<'a> {
                             self.expect(Token::RBracket)?;
                             match size.parse::<usize>() {
                                 Ok(size_val) => {
-                                    current_type = ast::Type::SizedArray(Box::new(current_type), size_val);
+                                    current_type =
+                                        ast::Type::SizedArray(Box::new(current_type), size_val);
                                 }
                                 Err(_) => return self.error("Invalid array size", span),
                             }
@@ -45,7 +45,6 @@ impl<'a> super::Parser<'a> {
 
         Ok(current_type)
     }
-
 
     pub fn parse_base_type(&mut self) -> Result<ast::Type, Diagnostic<FileId>> {
         let next = self.advance().map(|(t, s)| (t.clone(), *s));
@@ -85,8 +84,10 @@ impl<'a> super::Parser<'a> {
                         Some((Token::Int(size), span)) => {
                             self.expect(Token::RBracket)?;
                             match size.parse::<usize>() {
-                                Ok(size_val) => Ok(ast::Type::SizedArray(Box::new(element_type), size_val)),
-                                Err(_) => self.error("Invalid array size", span)
+                                Ok(size_val) => {
+                                    Ok(ast::Type::SizedArray(Box::new(element_type), size_val))
+                                }
+                                Err(_) => self.error("Invalid array size", span),
                             }
                         }
                         _ => {
@@ -129,5 +130,4 @@ impl<'a> super::Parser<'a> {
             None => self.error("Expected type annotation", Span::new(0, 0)),
         }
     }
-
 }

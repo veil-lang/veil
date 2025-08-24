@@ -1,11 +1,10 @@
-use codespan::FileId;
-use codespan_reporting::diagnostic::Diagnostic;
 use crate::ast;
 use crate::lexer::Token;
 use crate::parser::Parser;
+use codespan::FileId;
+use codespan_reporting::diagnostic::Diagnostic;
 
 impl<'a> Parser<'a> {
-
     pub fn parse_break(&mut self) -> Result<ast::Stmt, Diagnostic<FileId>> {
         let break_span = self.peek_span();
         self.expect(Token::KwBreak)?;

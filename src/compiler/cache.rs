@@ -1,9 +1,9 @@
 use anyhow::{Context, Result};
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
-use std::fs;
-use sha2::{Sha256, Digest};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SymbolInfo {
@@ -31,10 +31,10 @@ impl SymbolInfo {
             params: params.clone(),
             return_type: func.return_type.clone(),
         };
-        
+
         let signature = format!("{}({:?})->{:?}", func.name, params, func.return_type);
         let signature_hash = Self::calculate_signature_hash(&signature);
-        
+
         Self {
             name: func.name.clone(),
             symbol_type,
@@ -42,24 +42,28 @@ impl SymbolInfo {
             visibility: func.visibility.clone(),
         }
     }
-    
+
     pub fn from_struct(struct_def: &crate::ast::StructDef) -> Self {
-        let fields: Vec<(String, crate::ast::Type)> = struct_def.fields.iter()
+        let fields: Vec<(String, crate::ast::Type)> = struct_def
+            .fields
+            .iter()
             .map(|f| (f.name.clone(), f.ty.clone()))
             .collect();
-        let symbol_type = SymbolType::Struct { fields: fields.clone() };
-        
+        let symbol_type = SymbolType::Struct {
+            fields: fields.clone(),
+        };
+
         let signature = format!("struct {}{{ {:?} }}", struct_def.name, fields);
         let signature_hash = Self::calculate_signature_hash(&signature);
-        
+
         Self {
             name: struct_def.name.clone(),
             symbol_type,
             signature_hash,
             visibility: struct_def.visibility.clone(),
         }
-    }  
-    
+    }
+
     fn calculate_signature_hash(signature: &str) -> String {
         let mut hasher = Sha256::new();
         hasher.update(signature.as_bytes());
@@ -80,23 +84,23 @@ impl SymbolDependencyGraph {
             symbol_dependents: HashMap::new(),
         }
     }
-    
+
     pub fn add_dependency(&mut self, from_symbol: &str, to_symbol: &str) {
         self.symbol_dependencies
             .entry(from_symbol.to_string())
             .or_insert_with(HashSet::new)
             .insert(to_symbol.to_string());
-            
+
         self.symbol_dependents
             .entry(to_symbol.to_string())
             .or_insert_with(HashSet::new)
             .insert(from_symbol.to_string());
     }
-    
+
     pub fn get_affected_symbols(&self, changed_symbol: &str) -> HashSet<String> {
         let mut affected = HashSet::new();
         let mut to_check = vec![changed_symbol.to_string()];
-        
+
         while let Some(symbol) = to_check.pop() {
             if affected.insert(symbol.clone()) {
                 if let Some(dependents) = self.symbol_dependents.get(&symbol) {
@@ -108,7 +112,7 @@ impl SymbolDependencyGraph {
                 }
             }
         }
-        
+
         affected
     }
 }
@@ -126,13 +130,13 @@ pub struct ModuleInfo {
     pub symbol_changes: HashSet<String>,
 }
 
-impl ModuleInfo {    
+impl ModuleInfo {
     pub fn new(file_path: PathBuf) -> Result<Self> {
         let metadata = fs::metadata(&file_path)?;
         let last_modified = metadata.modified()?;
         let content = fs::read_to_string(&file_path)?;
         let content_hash = Self::calculate_hash(&content);
-        
+
         Ok(ModuleInfo {
             file_path,
             content_hash,
@@ -145,75 +149,76 @@ impl ModuleInfo {
             symbol_changes: HashSet::new(),
         })
     }
-    
+
     pub fn calculate_hash(content: &str) -> String {
         let mut hasher = Sha256::new();
         hasher.update(content.as_bytes());
         format!("{:x}", hasher.finalize())
     }
-    
+
     pub fn update_if_changed(&mut self) -> Result<bool> {
         let metadata = fs::metadata(&self.file_path)?;
         let current_modified = metadata.modified()?;
-          if current_modified > self.last_modified {
+        if current_modified > self.last_modified {
             let content = fs::read_to_string(&self.file_path)?;
             let new_hash = Self::calculate_hash(&content);
-            
+
             if new_hash != self.content_hash {
                 let old_program = self.program.clone();
-                
+
                 self.content_hash = new_hash;
                 self.last_modified = current_modified;
                 self.is_dirty = true;
                 self.program = None;
-                
+
                 if let Some(old_program) = old_program {
                     self.detect_symbol_changes(&old_program);
                 }
-                
+
                 return Ok(true);
             }
         }
-        
+
         Ok(false)
     }
-      pub fn extract_symbols(&mut self, program: &crate::ast::Program) {
+    pub fn extract_symbols(&mut self, program: &crate::ast::Program) {
         self.exported_symbols.clear();
-        
+
         for function in &program.functions {
             if matches!(function.visibility, crate::ast::Visibility::Public) {
                 let symbol_info = SymbolInfo::from_function(function);
-                self.exported_symbols.insert(function.name.clone(), symbol_info);
+                self.exported_symbols
+                    .insert(function.name.clone(), symbol_info);
             }
         }
-        
+
         for struct_def in &program.structs {
             if matches!(struct_def.visibility, crate::ast::Visibility::Public) {
                 let symbol_info = SymbolInfo::from_struct(struct_def);
-                self.exported_symbols.insert(struct_def.name.clone(), symbol_info);
+                self.exported_symbols
+                    .insert(struct_def.name.clone(), symbol_info);
             }
         }
-        
     }
-    
+
     fn detect_symbol_changes(&mut self, old_program: &crate::ast::Program) {
         self.symbol_changes.clear();
-        
+
         let mut old_symbols = HashMap::new();
-        
+
         for function in &old_program.functions {
             if matches!(function.visibility, crate::ast::Visibility::Public) {
                 let symbol_info = SymbolInfo::from_function(function);
                 old_symbols.insert(function.name.clone(), symbol_info);
             }
-        }        for struct_def in &old_program.structs {
+        }
+        for struct_def in &old_program.structs {
             if matches!(struct_def.visibility, crate::ast::Visibility::Public) {
                 let symbol_info = SymbolInfo::from_struct(struct_def);
                 old_symbols.insert(struct_def.name.clone(), symbol_info);
             }
         }
-        
-    
+
         for (name, new_symbol) in &self.exported_symbols {
             if let Some(old_symbol) = old_symbols.get(name) {
                 if old_symbol.signature_hash != new_symbol.signature_hash {
@@ -223,7 +228,7 @@ impl ModuleInfo {
                 self.symbol_changes.insert(name.clone());
             }
         }
-        
+
         for name in old_symbols.keys() {
             if !self.exported_symbols.contains_key(name) {
                 self.symbol_changes.insert(name.clone());
@@ -282,7 +287,8 @@ pub struct BuildCacheManager {
     symbol_cache_file: PathBuf,
 }
 
-impl BuildCacheManager {    pub fn new(build_dir: &Path) -> Self {
+impl BuildCacheManager {
+    pub fn new(build_dir: &Path) -> Self {
         let cache_dir = build_dir.join(".cache");
         let cache_file = cache_dir.join("build_cache.json");
         let symbol_cache_file = cache_dir.join("symbol_cache.json");
@@ -292,49 +298,49 @@ impl BuildCacheManager {    pub fn new(build_dir: &Path) -> Self {
             cache_file,
             symbol_cache_file,
         };
-        
+
         let _ = manager.load_cache();
         let _ = manager.load_symbol_cache();
         manager
     }
-    
+
     fn load_cache(&mut self) -> Result<()> {
         if !self.cache_file.exists() {
             return Ok(());
         }
-        
+
         let content = fs::read_to_string(&self.cache_file)?;
-        self.cache_entries = serde_json::from_str(&content)
-            .with_context(|| "Failed to parse cache file")?;
+        self.cache_entries =
+            serde_json::from_str(&content).with_context(|| "Failed to parse cache file")?;
         Ok(())
     }
-    
+
     fn save_cache(&self) -> Result<()> {
         if let Some(parent) = self.cache_file.parent() {
             fs::create_dir_all(parent)?;
         }
-        
+
         let content = serde_json::to_string_pretty(&self.cache_entries)?;
         fs::write(&self.cache_file, content)?;
         Ok(())
     }
-    
+
     fn load_symbol_cache(&mut self) -> Result<()> {
         if !self.symbol_cache_file.exists() {
             return Ok(());
         }
-        
+
         let content = fs::read_to_string(&self.symbol_cache_file)?;
-        self.symbol_cache = serde_json::from_str(&content)
-            .with_context(|| "Failed to parse symbol cache file")?;
+        self.symbol_cache =
+            serde_json::from_str(&content).with_context(|| "Failed to parse symbol cache file")?;
         Ok(())
     }
-    
+
     fn save_symbol_cache(&self) -> Result<()> {
         if let Some(parent) = self.symbol_cache_file.parent() {
             fs::create_dir_all(parent)?;
         }
-        
+
         let content = serde_json::to_string_pretty(&self.symbol_cache)?;
         fs::write(&self.symbol_cache_file, content)?;
         Ok(())
@@ -361,7 +367,7 @@ impl BuildCacheManager {    pub fn new(build_dir: &Path) -> Self {
         if !source_path.exists() {
             return Ok(false);
         }
-        
+
         let current_hash = ModuleInfo::calculate_hash(&fs::read_to_string(source_path)?);
         if current_hash != entry.source_hash {
             return Ok(false);
@@ -373,7 +379,7 @@ impl BuildCacheManager {    pub fn new(build_dir: &Path) -> Self {
 
             let dep_metadata = fs::metadata(dep_path)?;
             let dep_modified = dep_metadata.modified()?;
-            
+
             if dep_modified > entry.timestamp {
                 return Ok(false);
             }

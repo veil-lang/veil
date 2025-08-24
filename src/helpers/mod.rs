@@ -1,9 +1,8 @@
 use anyhow::Result;
 use codespan::{FileId, Files};
 use codespan_reporting;
-use std::path::{Path, PathBuf};
 use std::fs;
-
+use std::path::{Path, PathBuf};
 
 pub fn extract_line_col_from_error(
     files: &Files<String>,
@@ -14,7 +13,7 @@ pub fn extract_line_col_from_error(
         let source = files.source(file_id);
         let mut line_num = 1u32;
         let mut col_num = 1u32;
-        
+
         for (idx, ch) in source.char_indices() {
             if idx >= label.range.start {
                 break;
@@ -32,7 +31,6 @@ pub fn extract_line_col_from_error(
     }
 }
 
-
 pub fn format_parse_error(
     files: &Files<String>,
     file_id: FileId,
@@ -40,26 +38,23 @@ pub fn format_parse_error(
     file_path: &Path,
 ) -> String {
     let mut output = String::new();
-    
 
-    let file_name = file_path.file_name()
+    let file_name = file_path
+        .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("unknown");
-    
 
     output.push_str(&format!("\x1b[1;31merror\x1b[0m: {}\n", error.message));
-    
+
     if let Some(label) = error.labels.first() {
         let range = label.range.clone();
-        
 
         let source = files.source(file_id);
         let lines: Vec<&str> = source.lines().collect();
-        
 
         let mut line_num = 1u32;
         let mut col_num = 1u32;
-        
+
         for (idx, ch) in source.char_indices() {
             if idx >= range.start {
                 break;
@@ -71,45 +66,42 @@ pub fn format_parse_error(
                 col_num += 1;
             }
         }
-        
+
         output.push_str(&format!(
             " \x1b[1;34m-->\x1b[0m {}:{}:{}\n",
-            file_name,
-            line_num,
-            col_num
+            file_name, line_num, col_num
         ));
-        
 
         let line_idx = (line_num.saturating_sub(1)) as usize;
-        
+
         if line_idx < lines.len() {
             let line_content = lines[line_idx];
             let col_start = (col_num.saturating_sub(1)) as usize;
-            
+
             let mut end_col = col_start + 1;
             if range.end > range.start {
                 let error_length = (range.end - range.start).min(line_content.len() - col_start);
                 end_col = col_start + error_length;
             }
-            
+
             output.push_str(&format!(" \x1b[1;34m{:4} |\x1b[0m\n", ""));
-            output.push_str(&format!(" \x1b[1;34m{:4} |\x1b[0m {}\n", line_num, line_content));
-            
+            output.push_str(&format!(
+                " \x1b[1;34m{:4} |\x1b[0m {}\n",
+                line_num, line_content
+            ));
 
             output.push_str(&format!(" \x1b[1;34m{:4} |\x1b[0m ", ""));
-            
 
             for _ in 0..col_start {
                 output.push(' ');
             }
-            
 
             let indicator_len = if end_col > col_start {
                 end_col - col_start
             } else {
                 1
             };
-            
+
             output.push_str("\x1b[1;31m");
             for i in 0..indicator_len {
                 if i == 0 {
@@ -119,24 +111,21 @@ pub fn format_parse_error(
                 }
             }
             output.push_str("\x1b[0m");
-            
 
             if !label.message.is_empty() {
                 output.push_str(&format!(" \x1b[1;31m{}\x1b[0m", label.message));
             }
-            
+
             output.push('\n');
         }
     }
-    
 
     for note in &error.notes {
         output.push_str(&format!(" \x1b[1;36m= note:\x1b[0m {}\n", note));
     }
-    
+
     output
 }
-
 
 pub fn print_parse_error(
     files: &Files<String>,
@@ -147,7 +136,6 @@ pub fn print_parse_error(
     let formatted = format_parse_error(files, file_id, error, file_path);
     eprint!("{}", formatted);
 }
-
 
 pub fn validate_ve_file(path: &str) -> std::result::Result<PathBuf, String> {
     let path = Path::new(path);
@@ -185,7 +173,8 @@ fn suggest_similar_files(missing_path: &Path) -> Option<String> {
             (name.contains(target_name) && path.extension() == Some("ve".as_ref()))
                 .then_some(format!("  • {}", path.display()))
         })
-        .collect();    (!matches.is_empty()).then(|| matches.join("\n"))
+        .collect();
+    (!matches.is_empty()).then(|| matches.join("\n"))
 }
 
 #[cfg(target_os = "windows")]
@@ -202,10 +191,7 @@ pub fn prepare_windows_clang_args(
 
     // Bundled sysroot detection
     let exe_dir = std::env::current_exe()?.parent().unwrap().to_path_buf();
-    let sysroot = exe_dir
-        .join("tools")
-        .join("windows-x64")
-        .join("llvm-mingw");
+    let sysroot = exe_dir.join("tools").join("windows-x64").join("llvm-mingw");
 
     let force_llvm_mingw = std::env::var("VEIL_FORCE_LLVM_MINGW").ok().as_deref() == Some("1");
 
@@ -243,8 +229,10 @@ pub fn prepare_windows_clang_args(
     ];
 
     // Choose toolchain
-    let use_msvc = (prefer == "msvc" && have_link) || (prefer.is_empty() && have_link && !have_mingw);
-    let use_gnu = (prefer == "gnu" && have_mingw) || (prefer.is_empty() && (have_mingw || !have_link));
+    let use_msvc =
+        (prefer == "msvc" && have_link) || (prefer.is_empty() && have_link && !have_mingw);
+    let use_gnu =
+        (prefer == "gnu" && have_mingw) || (prefer.is_empty() && (have_mingw || !have_link));
 
     if use_msvc {
         args.insert(1, "-fuse-ld=link".to_string());
@@ -266,7 +254,10 @@ pub fn prepare_windows_clang_args(
         args.insert(1, "-v".to_string());
     }
     if let Ok(extra) = std::env::var("VEIL_EXTRA_CLANG_ARGS") {
-        let mut split: Vec<String> = shell_words::split(&extra).unwrap_or_default().into_iter().collect();  
+        let mut split: Vec<String> = shell_words::split(&extra)
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
         args.splice(1..1, split.drain(..));
     }
 
@@ -322,29 +313,37 @@ pub fn get_bundled_clang_path() -> Result<PathBuf> {
     which::which("clang").map_err(|_| anyhow::anyhow!("No C compiler found"))
 }
 
-
 #[cfg(target_os = "windows")]
 fn discover_msvc_lib_paths() -> Vec<PathBuf> {
     let mut paths = Vec::new();
-    let vs_base = PathBuf::from(r"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC");
+    let vs_base =
+        PathBuf::from(r"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC");
     if let Ok(read_dir) = fs::read_dir(&vs_base) {
-        let mut versions: Vec<PathBuf> = read_dir.filter_map(|e| e.ok().map(|e| e.path())).collect();
+        let mut versions: Vec<PathBuf> =
+            read_dir.filter_map(|e| e.ok().map(|e| e.path())).collect();
         versions.sort();
         if let Some(latest) = versions.into_iter().last() {
             let lib_host = latest.join("lib").join("x64");
-            if lib_host.exists() { paths.push(lib_host); }
+            if lib_host.exists() {
+                paths.push(lib_host);
+            }
             let atlmfc = latest.join("atlmfc").join("lib").join("x64");
-            if atlmfc.exists() { paths.push(atlmfc); }
+            if atlmfc.exists() {
+                paths.push(atlmfc);
+            }
         }
     }
     let sdk_base = PathBuf::from(r"C:\Program Files (x86)\Windows Kits\10\Lib");
     if let Ok(read_dir) = fs::read_dir(&sdk_base) {
-        let mut versions: Vec<PathBuf> = read_dir.filter_map(|e| e.ok().map(|e| e.path())).collect();
+        let mut versions: Vec<PathBuf> =
+            read_dir.filter_map(|e| e.ok().map(|e| e.path())).collect();
         versions.sort();
         if let Some(latest) = versions.into_iter().last() {
             for sub in ["ucrt", "um"] {
                 let p = latest.join(sub).join("x64");
-                if p.exists() { paths.push(p); }
+                if p.exists() {
+                    paths.push(p);
+                }
             }
         }
     }

@@ -231,7 +231,9 @@ impl<'a> Lexer<'a> {
         Token::lexer(source)
             .spanned()
             .filter_map(|(token, span)| {
-                token.ok().map(|t| (t, Span::new(span.start as u32, span.end as u32)))
+                token
+                    .ok()
+                    .map(|t| (t, Span::new(span.start as u32, span.end as u32)))
             })
             .collect()
     }

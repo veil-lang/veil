@@ -1,7 +1,7 @@
-use codespan::{FileId, Span};
-use codespan_reporting::diagnostic::Diagnostic;
 use crate::ast;
 use crate::lexer::Token;
+use codespan::{FileId, Span};
+use codespan_reporting::diagnostic::Diagnostic;
 
 impl<'a> super::super::Parser<'a> {
     pub fn parse_if(&mut self) -> Result<ast::Stmt, Diagnostic<FileId>> {
@@ -33,5 +33,4 @@ impl<'a> super::super::Parser<'a> {
             Span::new(if_span.start(), end_span),
         ))
     }
-
 }

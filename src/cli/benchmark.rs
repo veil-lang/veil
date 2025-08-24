@@ -1,6 +1,7 @@
+use crate::compiler::incremental::IncrementalCompiler;
+use crate::helpers::get_bundled_clang_path;
 #[cfg(target_os = "windows")]
 use crate::helpers::prepare_windows_clang_args;
-use crate::helpers::get_bundled_clang_path;
 use crate::{codegen, typeck};
 use anyhow::{Context, anyhow};
 use codespan::Files;
@@ -10,7 +11,6 @@ use codespan_reporting::term::termcolor::{Color, ColorChoice, ColorSpec, Standar
 use std::io::Write;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
-use crate::compiler::incremental::IncrementalCompiler;
 
 pub fn run_benchmark(input: PathBuf, iterations: usize, verbose: bool) -> anyhow::Result<()> {
     let build_dir = input
@@ -86,7 +86,8 @@ pub fn run_benchmark(input: PathBuf, iterations: usize, verbose: bool) -> anyhow
     }
 
     let mut program = module_compiler.create_merged_program(&input)?;
-    let (imported_functions, imported_structs, imported_ffi_vars) = module_compiler.get_imported_info()?;
+    let (imported_functions, imported_structs, imported_ffi_vars) =
+        module_compiler.get_imported_info()?;
     let file_id = module_compiler.get_entry_file_id(&mut files, &input)?;
 
     if verbose {

@@ -1,7 +1,7 @@
-use codespan::{FileId, Span};
-use codespan_reporting::diagnostic::Diagnostic;
 use crate::ast;
 use crate::lexer::Token;
+use codespan::{FileId, Span};
+use codespan_reporting::diagnostic::Diagnostic;
 
 impl<'a> super::super::Parser<'a> {
     pub fn parse_pattern(&mut self) -> Result<ast::Pattern, Diagnostic<FileId>> {
@@ -54,54 +54,69 @@ impl<'a> super::super::Parser<'a> {
                 self.advance();
                 match n.parse::<i32>() {
                     Ok(val) => Ok(ast::Pattern::Literal(
-                        ast::Expr::Int(val, ast::ExprInfo {
-                            span,
-                            ty: ast::Type::I32,
-                            is_tail: false,
-                        }),
+                        ast::Expr::Int(
+                            val,
+                            ast::ExprInfo {
+                                span,
+                                ty: ast::Type::I32,
+                                is_tail: false,
+                            },
+                        ),
                         span,
                     )),
-                    Err(_) => self.error("Integer literal out of range for pattern", span)
+                    Err(_) => self.error("Integer literal out of range for pattern", span),
                 }
             }
             Some((Token::Str(s), span)) => {
                 self.advance();
                 Ok(ast::Pattern::Literal(
-                    ast::Expr::Str(s, ast::ExprInfo {
-                        span,
-                        ty: ast::Type::String,
-                        is_tail: false,
-                    }),
+                    ast::Expr::Str(
+                        s,
+                        ast::ExprInfo {
+                            span,
+                            ty: ast::Type::String,
+                            is_tail: false,
+                        },
+                    ),
                     span,
                 ))
             }
             Some((Token::KwTrue, span)) => {
                 self.advance();
                 Ok(ast::Pattern::Literal(
-                    ast::Expr::Bool(true, ast::ExprInfo {
-                        span,
-                        ty: ast::Type::Bool,
-                        is_tail: false,
-                    }),
+                    ast::Expr::Bool(
+                        true,
+                        ast::ExprInfo {
+                            span,
+                            ty: ast::Type::Bool,
+                            is_tail: false,
+                        },
+                    ),
                     span,
                 ))
             }
             Some((Token::KwFalse, span)) => {
                 self.advance();
                 Ok(ast::Pattern::Literal(
-                    ast::Expr::Bool(false, ast::ExprInfo {
-                        span,
-                        ty: ast::Type::Bool,
-                        is_tail: false,
-                    }),
+                    ast::Expr::Bool(
+                        false,
+                        ast::ExprInfo {
+                            span,
+                            ty: ast::Type::Bool,
+                            is_tail: false,
+                        },
+                    ),
                     span,
                 ))
             }
-            Some((Token::KwNone, span)) => Ok(ast::Pattern::Literal(ast::Expr::None(ast::ExprInfo {
+            Some((Token::KwNone, span)) => Ok(ast::Pattern::Literal(
+                ast::Expr::None(ast::ExprInfo {
+                    span,
+                    ty: ast::Type::NoneType,
+                    is_tail: false,
+                }),
                 span,
-                ty: ast::Type::NoneType,
-                is_tail: false,
-            }), span)),
+            )),
             _ => {
                 let (_, span) = self.advance().unwrap();
                 let span = *span;

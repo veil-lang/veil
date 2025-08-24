@@ -1,8 +1,8 @@
+use crate::ast;
+use crate::lexer::Token;
 use crate::parser::Parser;
 use codespan::FileId;
 use codespan_reporting::diagnostic::Diagnostic;
-use crate::ast;
-use crate::lexer::Token;
 
 impl<'a> Parser<'a> {
     pub fn parse_block(&mut self) -> Result<Vec<ast::Stmt>, Diagnostic<FileId>> {
@@ -32,7 +32,10 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    pub fn parse_block_with_tail(&mut self, allow_tail: bool) -> Result<Vec<ast::Stmt>, Diagnostic<FileId>> {
+    pub fn parse_block_with_tail(
+        &mut self,
+        allow_tail: bool,
+    ) -> Result<Vec<ast::Stmt>, Diagnostic<FileId>> {
         self.expect(Token::LBrace)?;
         let mut stmts = Vec::new();
         while !self.check(Token::RBrace) {
@@ -52,7 +55,6 @@ impl<'a> Parser<'a> {
         Ok(stmts)
     }
 
-
     pub fn is_last_expr_in_block(&mut self) -> bool {
         let mut i = self.pos;
         let mut depth = 0usize;
@@ -60,8 +62,12 @@ impl<'a> Parser<'a> {
 
         while let Some((token, _)) = self.tokens.get(i) {
             match token {
-                Token::KwLet | Token::KwReturn | Token::KwWhile | Token::KwFor
-                | Token::KwBreak | Token::KwContinue => {
+                Token::KwLet
+                | Token::KwReturn
+                | Token::KwWhile
+                | Token::KwFor
+                | Token::KwBreak
+                | Token::KwContinue => {
                     return false;
                 }
                 Token::LBrace => {

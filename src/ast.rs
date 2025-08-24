@@ -93,7 +93,7 @@ pub struct StructDef {
 pub struct EnumVariant {
     pub name: String,
     pub data: Option<Vec<Type>>,
-    pub value: Option<i32>, 
+    pub value: Option<i32>,
     #[allow(dead_code)]
     pub span: Span,
 }
@@ -168,7 +168,7 @@ pub enum Stmt {
     Defer(Expr, Span),
     While(Expr, Vec<Stmt>, Span),
     Loop(Vec<Stmt>, Span),
-    For(String, Option<String>, Expr, Option<Expr>, Vec<Stmt>, Span), 
+    For(String, Option<String>, Expr, Option<Expr>, Vec<Stmt>, Span),
     Break(Option<Expr>, Span),
     Continue(Span),
     Block(Vec<Stmt>, Span),
@@ -232,11 +232,11 @@ pub enum Expr {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RangeType {
-    Exclusive,      // a..b
-    Inclusive,      // a..=b
-    InfiniteUp,     // ..> 
-    InfiniteDown,   // ..< 
-    Infinite,       // .. 
+    Exclusive,    // a..b
+    Inclusive,    // a..=b
+    InfiniteUp,   // ..>
+    InfiniteDown, // ..<
+    Infinite,     // ..
 }
 
 #[derive(Debug, Clone)]
@@ -431,23 +431,27 @@ pub enum BinOp {
 
 impl fmt::Display for BinOp {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", match self {
-            BinOp::Add => "+",
-            BinOp::Sub => "-",
-            BinOp::Mul => "*",
-            BinOp::Div => "/",
-            BinOp::Pow => "**",
-            BinOp::Pow2 => "^",
-            BinOp::Mod => "%",
-            BinOp::Gt => ">",
-            BinOp::Eq => "==",
-            BinOp::Lt => "<",
-            BinOp::NotEq => "!=",
-            BinOp::GtEq => ">=",
-            BinOp::LtEq => "<=",
-            BinOp::And => "&&",
-            BinOp::Or => "||",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                BinOp::Add => "+",
+                BinOp::Sub => "-",
+                BinOp::Mul => "*",
+                BinOp::Div => "/",
+                BinOp::Pow => "**",
+                BinOp::Pow2 => "^",
+                BinOp::Mod => "%",
+                BinOp::Gt => ">",
+                BinOp::Eq => "==",
+                BinOp::Lt => "<",
+                BinOp::NotEq => "!=",
+                BinOp::GtEq => ">=",
+                BinOp::LtEq => "<=",
+                BinOp::And => "&&",
+                BinOp::Or => "||",
+            }
+        )
     }
 }
 
@@ -462,7 +466,9 @@ impl fmt::Display for Type {
             Type::GenericInstance(name, args) => {
                 write!(f, "{}<", name)?;
                 for (i, arg) in args.iter().enumerate() {
-                    if i > 0 { write!(f, ", ")?; }
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "{}", arg)?;
                 }
                 write!(f, ">")
@@ -533,7 +539,6 @@ impl Stmt {
         }
     }
 }
-
 
 pub trait AstVisitor {
     fn visit_program(&mut self, program: &Program) {
@@ -629,8 +634,7 @@ pub trait AstVisitor {
         }
     }
 
-    fn visit_import_specifier(&mut self, _specifier: &ImportSpecifier) {
-    }
+    fn visit_import_specifier(&mut self, _specifier: &ImportSpecifier) {}
 
     fn visit_ffi_function(&mut self, ffi_func: &FfiFunction) {
         for ty in &ffi_func.params {
@@ -655,7 +659,10 @@ pub trait AstVisitor {
                 }
                 self.visit_type(ret);
             }
-            Type::Pointer(inner) | Type::Array(inner) | Type::SizedArray(inner, _) | Type::Optional(inner) => {
+            Type::Pointer(inner)
+            | Type::Array(inner)
+            | Type::SizedArray(inner, _)
+            | Type::Optional(inner) => {
                 self.visit_type(inner);
             }
             Type::GenericInstance(_, args) => {
@@ -741,7 +748,7 @@ pub trait AstVisitor {
             | Expr::F32(_, _)
             | Expr::Void(_)
             | Expr::None(_)
-            | Expr::InfiniteRange(_, _) 
+            | Expr::InfiniteRange(_, _)
             | Expr::Spread(_, _) => {}
 
             Expr::BinOp(left, _, right, _) => {
@@ -889,12 +896,14 @@ impl GenericCallCollector {
             generic_instances: HashSet::new(),
         }
     }
-    
+
     pub fn with_functions(functions: &[Function]) -> Self {
         let mut collector = Self::new();
         for func in functions {
             if !func.generic_params.is_empty() {
-                collector.generic_functions.insert(func.name.clone(), func.generic_params.clone());
+                collector
+                    .generic_functions
+                    .insert(func.name.clone(), func.generic_params.clone());
             }
         }
         collector
@@ -909,9 +918,10 @@ impl AstVisitor for GenericCallCollector {
                     let arg_types: Vec<Type> = args.iter().map(|arg| arg.get_type()).collect();
                     self.generic_calls.insert((func_name.clone(), arg_types));
                 }
-                
+
                 if let Type::GenericInstance(_, type_args) = &info.ty {
-                    self.generic_calls.insert((func_name.clone(), type_args.clone()));
+                    self.generic_calls
+                        .insert((func_name.clone(), type_args.clone()));
                 }
                 for arg in args {
                     self.visit_expr(arg);
@@ -922,16 +932,14 @@ impl AstVisitor for GenericCallCollector {
                     self.generic_instances.insert(info.ty.clone());
                 }
             }
-            _ => {
-                match &expr.get_type() {
-                    Type::GenericInstance(_, _) => {
-                        self.generic_instances.insert(expr.get_type());
-                    }
-                    _ => {}
+            _ => match &expr.get_type() {
+                Type::GenericInstance(_, _) => {
+                    self.generic_instances.insert(expr.get_type());
                 }
-            }
+                _ => {}
+            },
         }
-        
+
         match expr {
             Expr::Int(_, _)
             | Expr::Int64(_, _)
@@ -1043,7 +1051,6 @@ impl AstVisitor for GenericCallCollector {
     }
 }
 
-
 pub struct GenericCallTransformer {
     call_mappings: HashMap<(String, Vec<Type>), String>,
 }
@@ -1054,17 +1061,17 @@ impl GenericCallTransformer {
             call_mappings: HashMap::new(),
         }
     }
-    
-    pub fn add_mapping(&mut self, original_name: String, type_args: Vec<Type>, new_name: String) {
-        self.call_mappings.insert((original_name, type_args), new_name);
-    }
 
+    pub fn add_mapping(&mut self, original_name: String, type_args: Vec<Type>, new_name: String) {
+        self.call_mappings
+            .insert((original_name, type_args), new_name);
+    }
 }
 
 impl AstTransformer for GenericCallTransformer {
     fn transform_call_name(&mut self, name: String, args: &[Expr], _info: &ExprInfo) -> String {
         let arg_types: Vec<Type> = args.iter().map(|arg| arg.get_type()).collect();
-        
+
         if let Some(new_name) = self.call_mappings.get(&(name.clone(), arg_types)) {
             new_name.clone()
         } else {
@@ -1073,19 +1080,46 @@ impl AstTransformer for GenericCallTransformer {
     }
 }
 
-
 pub trait AstTransformer {
     fn transform_program(&mut self, program: Program) -> Program {
         Program {
-            imports: program.imports.into_iter().map(|i| self.transform_import(i)).collect(),
-            stmts: program.stmts.into_iter().map(|s| self.transform_stmt(s)).collect(),
-            functions: program.functions.into_iter().map(|f| self.transform_function(f)).collect(),
-            structs: program.structs.into_iter().map(|s| self.transform_struct_def(s)).collect(),
-            enums: program.enums.into_iter().map(|e| self.transform_enum_def(e)).collect(),
-            impls: program.impls.into_iter().map(|i| self.transform_impl_block(i)).collect(),
+            imports: program
+                .imports
+                .into_iter()
+                .map(|i| self.transform_import(i))
+                .collect(),
+            stmts: program
+                .stmts
+                .into_iter()
+                .map(|s| self.transform_stmt(s))
+                .collect(),
+            functions: program
+                .functions
+                .into_iter()
+                .map(|f| self.transform_function(f))
+                .collect(),
+            structs: program
+                .structs
+                .into_iter()
+                .map(|s| self.transform_struct_def(s))
+                .collect(),
+            enums: program
+                .enums
+                .into_iter()
+                .map(|e| self.transform_enum_def(e))
+                .collect(),
+            impls: program
+                .impls
+                .into_iter()
+                .map(|i| self.transform_impl_block(i))
+                .collect(),
             ffi_functions: program.ffi_functions,
             ffi_variables: program.ffi_variables,
-            tests: program.tests.into_iter().map(|t| self.transform_test(t)).collect(),
+            tests: program
+                .tests
+                .into_iter()
+                .map(|t| self.transform_test(t))
+                .collect(),
         }
     }
 
@@ -1095,7 +1129,11 @@ pub trait AstTransformer {
             generic_params: function.generic_params,
             params: function.params,
             return_type: function.return_type,
-            body: function.body.into_iter().map(|s| self.transform_stmt(s)).collect(),
+            body: function
+                .body
+                .into_iter()
+                .map(|s| self.transform_stmt(s))
+                .collect(),
             span: function.span,
             visibility: function.visibility,
         }
@@ -1112,7 +1150,11 @@ pub trait AstTransformer {
     fn transform_impl_block(&mut self, impl_block: ImplBlock) -> ImplBlock {
         ImplBlock {
             target_type: impl_block.target_type,
-            methods: impl_block.methods.into_iter().map(|m| self.transform_function(m)).collect(),
+            methods: impl_block
+                .methods
+                .into_iter()
+                .map(|m| self.transform_function(m))
+                .collect(),
             span: impl_block.span,
         }
     }
@@ -1120,7 +1162,11 @@ pub trait AstTransformer {
     fn transform_test(&mut self, test: Test) -> Test {
         Test {
             name: test.name,
-            stmts: test.stmts.into_iter().map(|s| self.transform_stmt(s)).collect(),
+            stmts: test
+                .stmts
+                .into_iter()
+                .map(|s| self.transform_stmt(s))
+                .collect(),
             span: test.span,
         }
     }
@@ -1136,47 +1182,40 @@ pub trait AstTransformer {
             }
             Stmt::Var(name, ty, span) => Stmt::Var(name, ty, span),
             Stmt::Expr(expr, span) => Stmt::Expr(self.transform_expr(expr), span),
-            Stmt::If(cond, then_branch, else_branch, span) => {
-                Stmt::If(
-                    self.transform_expr(cond),
-                    then_branch.into_iter().map(|s| self.transform_stmt(s)).collect(),
-                    else_branch.map(|e| e.into_iter().map(|s| self.transform_stmt(s)).collect()),
-                    span,
-                )
-            }
-            Stmt::Return(expr, span) => Stmt::Return(self.transform_expr(expr), span),
-            Stmt::Defer(expr, span) => Stmt::Defer(self.transform_expr(expr), span),
-            Stmt::While(cond, body, span) => {
-                Stmt::While(
-                    self.transform_expr(cond),
-                    body.into_iter().map(|s| self.transform_stmt(s)).collect(),
-                    span,
-                )
-            }
-            Stmt::Loop(body, span) => {
-                Stmt::Loop(
-                    body.into_iter().map(|s| self.transform_stmt(s)).collect(),
-                    span,
-                )
-            }
-            Stmt::For(var, index_var, iter, step, body, span) => {
-                Stmt::For(
-                    var,
-                    index_var,
-                    self.transform_expr(iter),
-                    step.map(|s| self.transform_expr(s)),
-                    body.into_iter().map(|s| self.transform_stmt(s)).collect(),
-                    span,
-                )
-            }
-            Stmt::Break(expr, span) => Stmt::Break(
-                expr.map(|e| self.transform_expr(e)),
+            Stmt::If(cond, then_branch, else_branch, span) => Stmt::If(
+                self.transform_expr(cond),
+                then_branch
+                    .into_iter()
+                    .map(|s| self.transform_stmt(s))
+                    .collect(),
+                else_branch.map(|e| e.into_iter().map(|s| self.transform_stmt(s)).collect()),
                 span,
             ),
+            Stmt::Return(expr, span) => Stmt::Return(self.transform_expr(expr), span),
+            Stmt::Defer(expr, span) => Stmt::Defer(self.transform_expr(expr), span),
+            Stmt::While(cond, body, span) => Stmt::While(
+                self.transform_expr(cond),
+                body.into_iter().map(|s| self.transform_stmt(s)).collect(),
+                span,
+            ),
+            Stmt::Loop(body, span) => Stmt::Loop(
+                body.into_iter().map(|s| self.transform_stmt(s)).collect(),
+                span,
+            ),
+            Stmt::For(var, index_var, iter, step, body, span) => Stmt::For(
+                var,
+                index_var,
+                self.transform_expr(iter),
+                step.map(|s| self.transform_expr(s)),
+                body.into_iter().map(|s| self.transform_stmt(s)).collect(),
+                span,
+            ),
+            Stmt::Break(expr, span) => Stmt::Break(expr.map(|e| self.transform_expr(e)), span),
             Stmt::Continue(span) => Stmt::Continue(span),
-            Stmt::Block(stmts, span) => {
-                Stmt::Block(stmts.into_iter().map(|s| self.transform_stmt(s)).collect(), span)
-            }
+            Stmt::Block(stmts, span) => Stmt::Block(
+                stmts.into_iter().map(|s| self.transform_stmt(s)).collect(),
+                span,
+            ),
         }
     }
 
@@ -1191,119 +1230,112 @@ pub trait AstTransformer {
             Expr::Void(info) => Expr::Void(info),
             Expr::None(info) => Expr::None(info),
             Expr::InfiniteRange(range_type, info) => Expr::InfiniteRange(range_type, info),
-            Expr::Spread(expr, info) => {
-                Expr::Spread(Box::new(self.transform_expr(*expr)), info)
-            }
-            Expr::BinOp(left, op, right, info) => {
-                Expr::BinOp(
-                    Box::new(self.transform_expr(*left)),
-                    op,
-                    Box::new(self.transform_expr(*right)),
-                    info,
-                )
-            }
+            Expr::Spread(expr, info) => Expr::Spread(Box::new(self.transform_expr(*expr)), info),
+            Expr::BinOp(left, op, right, info) => Expr::BinOp(
+                Box::new(self.transform_expr(*left)),
+                op,
+                Box::new(self.transform_expr(*right)),
+                info,
+            ),
             Expr::UnaryOp(op, expr, info) => {
                 Expr::UnaryOp(op, Box::new(self.transform_expr(*expr)), info)
             }
-            Expr::Call(name, args, info) => {
-                Expr::Call(
-                    self.transform_call_name(name, &args, &info),
-                    args.into_iter().map(|a| self.transform_expr(a)).collect(),
-                    info,
-                )
-            }
-            Expr::New(name, args, info) => {
-                Expr::New(
-                    name,
-                    args.into_iter().map(|a| self.transform_expr(a)).collect(),
-                    info,
-                )
-            }
+            Expr::Call(name, args, info) => Expr::Call(
+                self.transform_call_name(name, &args, &info),
+                args.into_iter().map(|a| self.transform_expr(a)).collect(),
+                info,
+            ),
+            Expr::New(name, args, info) => Expr::New(
+                name,
+                args.into_iter().map(|a| self.transform_expr(a)).collect(),
+                info,
+            ),
             Expr::Cast(expr, ty, info) => {
                 Expr::Cast(Box::new(self.transform_expr(*expr)), ty, info)
             }
-            Expr::SafeBlock(stmts, info) => {
-                Expr::SafeBlock(stmts.into_iter().map(|s| self.transform_stmt(s)).collect(), info)
-            }
-            Expr::Deref(expr, info) => {
-                Expr::Deref(Box::new(self.transform_expr(*expr)), info)
-            }
-            Expr::Assign(left, right, info) => {
-                Expr::Assign(
-                    Box::new(self.transform_expr(*left)),
-                    Box::new(self.transform_expr(*right)),
-                    info,
-                )
-            }
-            Expr::Range(start, end, range_type, info) => {
-                Expr::Range(
-                    Box::new(self.transform_expr(*start)),
-                    Box::new(self.transform_expr(*end)),
-                    range_type,
-                    info,
-                )
-            }
-            Expr::StructInit(name, fields, info) => {
-                Expr::StructInit(
-                    name,
-                    fields.into_iter().map(|(n, e)| (n, self.transform_expr(e))).collect(),
-                    info,
-                )
-            }
+            Expr::SafeBlock(stmts, info) => Expr::SafeBlock(
+                stmts.into_iter().map(|s| self.transform_stmt(s)).collect(),
+                info,
+            ),
+            Expr::Deref(expr, info) => Expr::Deref(Box::new(self.transform_expr(*expr)), info),
+            Expr::Assign(left, right, info) => Expr::Assign(
+                Box::new(self.transform_expr(*left)),
+                Box::new(self.transform_expr(*right)),
+                info,
+            ),
+            Expr::Range(start, end, range_type, info) => Expr::Range(
+                Box::new(self.transform_expr(*start)),
+                Box::new(self.transform_expr(*end)),
+                range_type,
+                info,
+            ),
+            Expr::StructInit(name, fields, info) => Expr::StructInit(
+                name,
+                fields
+                    .into_iter()
+                    .map(|(n, e)| (n, self.transform_expr(e)))
+                    .collect(),
+                info,
+            ),
             Expr::FieldAccess(expr, field, info) => {
                 Expr::FieldAccess(Box::new(self.transform_expr(*expr)), field, info)
             }
-            Expr::ArrayInit(elements, info) => {
-                Expr::ArrayInit(elements.into_iter().map(|e| self.transform_expr(e)).collect(), info)
-            }
-            Expr::ArrayAccess(array, index, info) => {
-                Expr::ArrayAccess(
-                    Box::new(self.transform_expr(*array)),
-                    Box::new(self.transform_expr(*index)),
-                    info,
-                )
-            }
-            Expr::TemplateStr(parts, info) => {
-                Expr::TemplateStr(
-                    parts.into_iter().map(|p| match p {
+            Expr::ArrayInit(elements, info) => Expr::ArrayInit(
+                elements
+                    .into_iter()
+                    .map(|e| self.transform_expr(e))
+                    .collect(),
+                info,
+            ),
+            Expr::ArrayAccess(array, index, info) => Expr::ArrayAccess(
+                Box::new(self.transform_expr(*array)),
+                Box::new(self.transform_expr(*index)),
+                info,
+            ),
+            Expr::TemplateStr(parts, info) => Expr::TemplateStr(
+                parts
+                    .into_iter()
+                    .map(|p| match p {
                         TemplateStrPart::Literal(s) => TemplateStrPart::Literal(s),
-                        TemplateStrPart::Expression(e) => TemplateStrPart::Expression(Box::new(self.transform_expr(*e))),
-                    }).collect(),
-                    info,
-                )
-            }
-            Expr::FfiCall(name, args, info) => {
-                Expr::FfiCall(name, args.into_iter().map(|a| self.transform_expr(a)).collect(), info)
-            }
-            Expr::EnumConstruct(enum_name, variant, args, info) => {
-                Expr::EnumConstruct(
-                    enum_name,
-                    variant,
-                    args.into_iter().map(|a| self.transform_expr(a)).collect(),
-                    info,
-                )
-            }
-            Expr::Match(pattern, arms, info) => {
-                Expr::Match(
-                    pattern,
-                    arms.into_iter().map(|arm| self.transform_match_arm(arm)).collect(),
-                    info,
-                )
-            }
-            Expr::If(condition, then_branch, else_branch, info) => {
-                Expr::If(
-                    Box::new(self.transform_expr(*condition)),
-                    then_branch.into_iter().map(|s| self.transform_stmt(s)).collect(),
-                    else_branch.map(|stmts| stmts.into_iter().map(|s| self.transform_stmt(s)).collect()),
-                    info,
-                )
-            }
-            Expr::Loop(body, info) => {
-                Expr::Loop(
-                    body.into_iter().map(|s| self.transform_stmt(s)).collect(),
-                    info,
-                )
-            }
+                        TemplateStrPart::Expression(e) => {
+                            TemplateStrPart::Expression(Box::new(self.transform_expr(*e)))
+                        }
+                    })
+                    .collect(),
+                info,
+            ),
+            Expr::FfiCall(name, args, info) => Expr::FfiCall(
+                name,
+                args.into_iter().map(|a| self.transform_expr(a)).collect(),
+                info,
+            ),
+            Expr::EnumConstruct(enum_name, variant, args, info) => Expr::EnumConstruct(
+                enum_name,
+                variant,
+                args.into_iter().map(|a| self.transform_expr(a)).collect(),
+                info,
+            ),
+            Expr::Match(pattern, arms, info) => Expr::Match(
+                pattern,
+                arms.into_iter()
+                    .map(|arm| self.transform_match_arm(arm))
+                    .collect(),
+                info,
+            ),
+            Expr::If(condition, then_branch, else_branch, info) => Expr::If(
+                Box::new(self.transform_expr(*condition)),
+                then_branch
+                    .into_iter()
+                    .map(|s| self.transform_stmt(s))
+                    .collect(),
+                else_branch
+                    .map(|stmts| stmts.into_iter().map(|s| self.transform_stmt(s)).collect()),
+                info,
+            ),
+            Expr::Loop(body, info) => Expr::Loop(
+                body.into_iter().map(|s| self.transform_stmt(s)).collect(),
+                info,
+            ),
         }
     }
 
@@ -1313,7 +1345,9 @@ pub trait AstTransformer {
             guard: arm.guard.map(|g| self.transform_expr(g)),
             body: match arm.body {
                 MatchArmBody::Expr(expr) => MatchArmBody::Expr(self.transform_expr(expr)),
-                MatchArmBody::Block(stmts) => MatchArmBody::Block(stmts.into_iter().map(|s| self.transform_stmt(s)).collect()),
+                MatchArmBody::Block(stmts) => {
+                    MatchArmBody::Block(stmts.into_iter().map(|s| self.transform_stmt(s)).collect())
+                }
             },
             span: arm.span,
         }
