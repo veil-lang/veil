@@ -37,7 +37,7 @@ For detailed installation instructions and troubleshooting, see [`scripts/README
 ## Usage
 ```bash
 # Compile and run a file
-ve example.ve
+ve example.veil
 
 # Initialize a new project
 ve init my_project
@@ -46,14 +46,9 @@ ve init my_project
 ve run
 
 # Run benchmarks - two approaches
-ve benchmark example.ve --iterations 5 --verbose
+ve benchmark example.veil --iterations 5 --verbose
 # or
-ve example.ve --iterations 10 --verbose
+ve example.veil --iterations 10 --verbose
 ```
-
-## Examples
-- [Basics](./examples/basics/README.md)
-- [Modularity](./examples/modularity/README.md)
-
 ## Contributing
 Contributions are welcome! Please read the [contributing guidelines](CONTRIBUTING.md) first.

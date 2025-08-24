@@ -53,9 +53,9 @@ pub fn resolve_standard_library_path(module_path: &str) -> Result<PathBuf> {
         base_path
             .join("std")
             .join("src")
-            .join(format!("{}.ve", module_name))
+            .join(format!("{}.veil", module_name))
     } else {
-        base_path.join("src").join(format!("{}.ve", module_path))
+        base_path.join("src").join(format!("{}.veil", module_path))
     };
 
     if full_path.exists() {
@@ -87,12 +87,12 @@ pub fn resolve_imports_only(
                         let current_dir = base_path
                             .parent()
                             .ok_or_else(|| anyhow!("Base path has no parent"))?;
-                        current_dir.join(format!("{}.ve", module_path))
+                        current_dir.join(format!("{}.veil", module_path))
                     }
                     ast::ModuleType::External => {
                         let external_libs_dir =
                             std::env::var("VEIL_LIBS_PATH").unwrap_or_else(|_| "libs".to_string());
-                        PathBuf::from(external_libs_dir).join(format!("{}.ve", module_path))
+                        PathBuf::from(external_libs_dir).join(format!("{}.veil", module_path))
                     }
                 };
 
@@ -115,12 +115,12 @@ pub fn resolve_imports_only(
                         let current_dir = base_path
                             .parent()
                             .ok_or_else(|| anyhow!("Base path has no parent"))?;
-                        current_dir.join(format!("{}.ve", module_path))
+                        current_dir.join(format!("{}.veil", module_path))
                     }
                     ast::ModuleType::External => {
                         let external_libs_dir =
                             std::env::var("VEIL_LIBS_PATH").unwrap_or_else(|_| "libs".to_string());
-                        PathBuf::from(external_libs_dir).join(format!("{}.ve", module_path))
+                        PathBuf::from(external_libs_dir).join(format!("{}.veil", module_path))
                     }
                 };
 
@@ -143,12 +143,12 @@ pub fn resolve_imports_only(
                         let current_dir = base_path
                             .parent()
                             .ok_or_else(|| anyhow!("Base path has no parent"))?;
-                        current_dir.join(format!("{}.ve", module_path))
+                        current_dir.join(format!("{}.veil", module_path))
                     }
                     ast::ModuleType::External => {
                         let external_libs_dir =
                             std::env::var("VEIL_LIBS_PATH").unwrap_or_else(|_| "libs".to_string());
-                        PathBuf::from(external_libs_dir).join(format!("{}.ve", module_path))
+                        PathBuf::from(external_libs_dir).join(format!("{}.veil", module_path))
                     }
                 };
 
@@ -171,12 +171,12 @@ pub fn resolve_imports_only(
                         let current_dir = base_path
                             .parent()
                             .ok_or_else(|| anyhow!("Base path has no parent"))?;
-                        current_dir.join(format!("{}.ve", module_path))
+                        current_dir.join(format!("{}.veil", module_path))
                     }
                     ast::ModuleType::External => {
                         let external_libs_dir =
                             std::env::var("VEIL_LIBS_PATH").unwrap_or_else(|_| "libs".to_string());
-                        PathBuf::from(external_libs_dir).join(format!("{}.ve", module_path))
+                        PathBuf::from(external_libs_dir).join(format!("{}.veil", module_path))
                     }
                 };
                 resolved.push(ResolvedImport {

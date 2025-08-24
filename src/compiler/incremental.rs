@@ -407,7 +407,7 @@ impl IncrementalCompiler {
                 let clean_path = normalized_current.to_string_lossy().replace("\\\\?\\", "");
                 anyhow::anyhow!("{}:{}: {}", clean_path, line_col, e.message)
             })?;
-            let is_prelude_module = normalized_current.to_string_lossy().ends_with("prelude.ve");
+            let is_prelude_module = normalized_current.to_string_lossy().ends_with("prelude.veil");
             let has_prelude_import = program.imports.iter().any(|import| match import {
                 crate::ast::ImportDeclaration::ImportAll { module_path, .. } => {
                     module_path == "std/prelude"
@@ -653,7 +653,7 @@ impl IncrementalCompiler {
             anyhow::anyhow!("{}:{}: {}", clean_path, line_col, e.message)
         })?;
 
-        let is_prelude_module = entry_point.to_string_lossy().ends_with("prelude.ve");
+        let is_prelude_module = entry_point.to_string_lossy().ends_with("prelude.veil");
         let has_prelude_import = program.imports.iter().any(|import| match import {
             crate::ast::ImportDeclaration::ImportAll { module_path, .. } => {
                 module_path == "std/prelude"

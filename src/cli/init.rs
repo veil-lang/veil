@@ -29,7 +29,7 @@ pub fn create_project(directory: &Path, project_name: &str) -> anyhow::Result<()
 }
 
 fn generate_ve_toml(directory: &Path, project_name: &str) -> anyhow::Result<()> {
-    let ve_toml_path = directory.join("ve.toml");
+    let ve_toml_path = directory.join("veil.toml");
 
     if ve_toml_path.exists() {
         return Err(anyhow!("File '{}' already exists", ve_toml_path.display()));
@@ -60,7 +60,7 @@ description = "{description}"
 }
 
 fn generate_main_ve(directory: &Path) -> anyhow::Result<()> {
-    let main_ve_path = directory.join("src/main.ve");
+    let main_ve_path = directory.join("src/main.veil");
 
     if main_ve_path.exists() {
         return Err(anyhow!("File '{}' already exists", main_ve_path.display()));
@@ -76,7 +76,7 @@ fn main() {
         File::create(&main_ve_path).map_err(|e| anyhow!("Failed to create src/main.ve: {}", e))?;
 
     file.write_all(MAIN_VE_TEMPLATE.as_bytes())
-        .map_err(|e| anyhow!("Failed to write to src/main.ve: {}", e))?;
+        .map_err(|e| anyhow!("Failed to write to src/main.veil: {}", e))?;
 
     Ok(())
 }

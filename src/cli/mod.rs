@@ -78,7 +78,7 @@ pub struct Args {
     #[command(subcommand)]
     command: Option<Command>,
 
-    #[arg(required = true, value_parser = validate_ve_file, value_name = "FILE[.ve]")]
+    #[arg(required = true, value_parser = validate_ve_file, value_name = "FILE[.veil]")]
     input: Option<PathBuf>,
 
     #[arg(short, long, default_value = "program.exe")]

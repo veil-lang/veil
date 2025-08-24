@@ -22,9 +22,6 @@ scripts/install.ps1 text eol=crlf
 *.md text
 *.txt text
 
-# Veil source files
-*.ve text
-
 # Binary files
 *.exe binary
 *.dll binary

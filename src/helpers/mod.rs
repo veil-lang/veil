@@ -140,7 +140,7 @@ pub fn print_parse_error(
 pub fn validate_ve_file(path: &str) -> std::result::Result<PathBuf, String> {
     let path = Path::new(path);
     let path = if path.extension().is_none() {
-        path.with_extension("ve")
+        path.with_extension("veil")
     } else {
         path.to_path_buf()
     };
@@ -170,7 +170,7 @@ fn suggest_similar_files(missing_path: &Path) -> Option<String> {
         .filter_map(|entry| {
             let path = entry.ok()?.path();
             let name = path.file_stem()?.to_string_lossy();
-            (name.contains(target_name) && path.extension() == Some("ve".as_ref()))
+            (name.contains(target_name) && path.extension() == Some("veil".as_ref()))
                 .then_some(format!("  • {}", path.display()))
         })
         .collect();
