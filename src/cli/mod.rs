@@ -423,7 +423,6 @@ pub fn process_build(
         println!("{}", format!("Compiling generated C code: {}", c_file.display()).yellow());
     }
 
-    // Build platform-specific clang args
     let mut clang_args: Vec<String>;
 
     #[cfg(target_os = "windows")]
@@ -440,7 +439,6 @@ pub fn process_build(
     ];
 
     if verbose {
-        // make clang verbose and enable debug memory
         clang_args.insert(0, "-v".to_string());
         clang_args.push("-DVE_DEBUG_MEMORY".to_string());
     }
