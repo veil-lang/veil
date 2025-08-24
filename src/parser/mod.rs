@@ -1,5 +1,7 @@
 mod types;
 mod precedence;
+mod stmt;
+mod ffi;
 
 use super::{
     ast,
@@ -116,93 +118,6 @@ impl<'a> Parser<'a> {
     }
 
 
-
-    fn parse_metadata(&mut self) -> Result<Option<HashMap<String, String>>, Diagnostic<FileId>> {
-        self.expect(Token::LBracket)?;
-        let mut metadata = HashMap::new();
-
-        loop {
-            let (name, _) = self.consume_ident()?;
-
-            if self.check(Token::Eq) {
-                self.advance();
-
-                let value = match self.advance().cloned() {
-                    Some((Token::Str(s), _)) => s,
-                    Some((Token::Ident(s), _)) => s,
-                    Some((Token::KwTrue, _)) => "true".to_string(),
-                    Some((Token::KwFalse, _)) => "false".to_string(),
-                    Some((_, span)) => return self.error("Expected string or bool value", span),
-                    None => return self.error("Expected value after '='", Span::new(0, 0)),
-                };
-
-                metadata.insert(name, value);
-            } else {
-                metadata.insert(name, "true".to_string());
-            }
-
-            if self.check(Token::Comma) {
-                self.advance();
-            } else {
-                break;
-            }
-        }
-
-        self.expect(Token::RBracket)?;
-
-        if metadata.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(metadata))
-        }
-    }
-
-
-    fn parse_ffi(
-        &mut self,
-        metadata: Option<HashMap<String, String>>,
-    ) -> Result<ForeignItem, Diagnostic<FileId>> {
-        if self.check(Token::Hash) {
-            self.advance();
-        }
-
-        if self.check(Token::KwFn) {
-            self.consume(Token::KwFn, "Expected 'fn'")?;
-            let (name, _) = self.consume_ident()?;
-            let params = self
-                .parse_parameters()?
-                .into_iter()
-                .map(|(_name, ty)| ty)
-                .collect();
-            let return_type = if self.check(Token::Arrow) {
-                self.advance();
-                self.parse_type()?
-            } else {
-                ast::Type::Void
-            };
-            self.expect(Token::Semi)?;
-            Ok(ForeignItem::Function(ast::FfiFunction {
-                name,
-                params,
-                return_type,
-                metadata,
-            }))
-        } else if self.check(Token::KwVar) {
-            self.consume(Token::KwVar, "Expected 'var'")?;
-            let (name, _) = self.consume_ident()?;
-            self.expect(Token::Colon)?;
-            let ty = self.parse_type()?;
-            self.expect(Token::Semi)?;
-            Ok(ForeignItem::Variable(ast::FfiVariable {
-                name,
-                ty,
-                metadata,
-            }))
-        } else {
-            let span = self.peek_span();
-            return self.error("Expected 'fn' or 'var' in foreign block", span);
-        }
-    }
 
     fn parse_export_block(&mut self, program: &mut ast::Program) -> Result<(), Diagnostic<FileId>> {
         self.expect(Token::LBrace)?;
@@ -765,85 +680,7 @@ impl<'a> Parser<'a> {
 
 
 
-    fn parse_block(&mut self) -> Result<Vec<ast::Stmt>, Diagnostic<FileId>> {
-        self.expect(Token::LBrace)?;
-        let mut stmts = Vec::new();
 
-        while !self.check(Token::RBrace) {
-            if self.is_last_expr_in_block() {
-                let expr = self.parse_expr_tail()?;
-                let span = expr.span();
-                if self.check(Token::Semi) {
-                    self.advance();
-                }
-                stmts.push(ast::Stmt::Expr(expr, span));
-            } else {
-                stmts.push(self.parse_stmt()?);
-            }
-        }
-
-        self.expect(Token::RBrace)?;
-        Ok(stmts)
-    }
-
-    fn parse_block_with_tail(&mut self, allow_tail: bool) -> Result<Vec<ast::Stmt>, Diagnostic<FileId>> {
-        self.expect(Token::LBrace)?;
-        let mut stmts = Vec::new();
-        while !self.check(Token::RBrace) {
-            if self.is_last_expr_in_block() && allow_tail {
-                let expr = self.parse_expr_tail()?;
-                let span = expr.span();
-                if self.check(Token::Semi) {
-                    let semi_span = self.peek_span();
-                    return self.error("Cannot use ';' after return expression", semi_span);
-                }
-                stmts.push(ast::Stmt::Expr(expr, span));
-            } else {
-                stmts.push(self.parse_stmt()?);
-            }
-        }
-        self.expect(Token::RBrace)?;
-        Ok(stmts)
-    }
-
-
-    fn is_last_expr_in_block(&mut self) -> bool {
-        let mut temp_tokens = self.tokens.clone();
-        let mut depth = 0;
-        let mut found_expr = false;
-
-        while let Some((token, _)) = temp_tokens.peek() {
-            match token {
-                Token::KwLet | Token::KwReturn | Token::KwWhile | Token::KwFor | Token::KwBreak | Token::KwContinue => {
-                    return false;
-                }
-                Token::LBrace => {
-                    depth += 1;
-                    temp_tokens.next();
-                }
-                Token::RBrace => {
-                    if depth == 0 {
-                        return found_expr;
-                    }
-                    depth -= 1;
-                    temp_tokens.next();
-                }
-                Token::Semi => {
-                    temp_tokens.next();
-                    if let Some((Token::RBrace, _)) = temp_tokens.peek() {
-                        return found_expr;
-                    }
-                    return false;
-                }
-                _ => {
-                    found_expr = true;
-                    temp_tokens.next();
-                }
-            }
-        }
-
-        found_expr
-    }
 
     fn consume(&mut self, expected: Token, err_msg: &str) -> Result<Span, Diagnostic<FileId>> {
         if self.check(expected.clone()) {
@@ -1819,39 +1656,7 @@ impl<'a> Parser<'a> {
     }
 
 
-    fn mark_as_tail(&self, expr: &mut ast::Expr) {
-        match expr {
-            ast::Expr::Int(_, info) => info.is_tail = true,
-            ast::Expr::Int64(_, info) => info.is_tail = true,
-            ast::Expr::Bool(_, info) => info.is_tail = true,
-            ast::Expr::Str(_, info) => info.is_tail = true,
-            ast::Expr::Var(_, info) => info.is_tail = true,
-            ast::Expr::BinOp(_, _, _, info) => info.is_tail = true,
-            ast::Expr::UnaryOp(_, _, info) => info.is_tail = true,
-            ast::Expr::Call(_, _, info) => info.is_tail = true,
-            ast::Expr::New(_, _, info) => info.is_tail = true,
-            ast::Expr::Cast(_, _, info) => info.is_tail = true,
-            ast::Expr::SafeBlock(_, info) => info.is_tail = true,
-            ast::Expr::Deref(_, info) => info.is_tail = true,
-            ast::Expr::Assign(_, _, info) => info.is_tail = true,
-            ast::Expr::Range(_, _, _, info) => info.is_tail = true,
-            ast::Expr::InfiniteRange(_, info) => info.is_tail = true,
-            ast::Expr::StructInit(_, _, info) => info.is_tail = true,
-            ast::Expr::FieldAccess(_, _, info) => info.is_tail = true,
-            ast::Expr::ArrayInit(_, info) => info.is_tail = true,
-            ast::Expr::ArrayAccess(_, _, info) => info.is_tail = true,
-            ast::Expr::TemplateStr(_, info) => info.is_tail = true,
-            ast::Expr::F32(_, info) => info.is_tail = true,
-            ast::Expr::FfiCall(_, _, info) => info.is_tail = true,
-            ast::Expr::EnumConstruct(_, _, _, info) => info.is_tail = true,
-            ast::Expr::Match(_, _, info) => info.is_tail = true,
-            ast::Expr::If(_, _, _, info) => info.is_tail = true,
-            ast::Expr::Loop(_, info) => info.is_tail = true,
-            ast::Expr::Void(info) => info.is_tail = true,
-            ast::Expr::Spread(_, info) => info.is_tail = true,
-            ast::Expr::None(info) => info.is_tail = true,
-        }
-    }
+
 
     fn parse_match_arm(&mut self) -> Result<ast::MatchArm, Diagnostic<FileId>> {
         let pattern = self.parse_pattern()?;
