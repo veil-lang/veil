@@ -1,6 +1,107 @@
+struct Span {
+    start: int,
+    end: int,
+}
+
+enum Token {
+  KwFn, KwTest, KwLet, KwVar, KwIf, KwElse, KwReturn, KwRawPtr, KwDefer,
+  KwAs, KwWhile, KwFor, KwStep, KwLoop, KwImport, KwFrom, KwExport,
+  KwStruct, KwImpl, KwNew, KwConstructor, KwEnum, KwMatch, KwTrue,
+  KwFalse, KwNone, KwIn, KwBreak, KwContinue,
+
+  TyBool, TyString, TyVoid, TyAny,
+  TyU8, TyU16, TyU32, TyU64,
+  TyI8, TyI16, TyI32, TyI64,
+  TyF32, TyF64,
+
+  Dot, Ellipsis, Arrow, Colon, EqEq, NotEq, GtEq, LtEq,
+  LParen, RParen, LBrace, RBrace, LBracket, RBracket, EmptyArray,
+  Comma, Eq, Semi, Plus, Minus, Star, Slash, DoubleStar, Caret, Percent,
+  Gt, Lt, DotDotEq, DotDotGt, DotDotLt, DotDot, AndAnd, OrOr, Pipe,
+  Arrow2, Hash, Bang, Question,
+
+  Ident(string),
+  Str(string),
+  TemplateStr(string),
+  Int(string),
+  F32(float),
+
+  Eof,
+  Error(string)
+}
+
+struct Lexer {
+    source: string,
+    pos: int,
+    len: int,
+    curr: int,
+}
+
+impl Lexer {
+    constructor(source: string) -> Lexer {
+        let n = source.length();
+        let c = if n > 0 { source.at(0) } else { -1 };
+        return Lexer {
+            source: source,
+            pos: 0,
+            len: n,
+            curr: c,
+        };
+    }
+
+    fn advance(self) {
+        self.pos = self.pos + 1
+        if self.pos >= self.len {
+            self.curr = -1;
+        } else {
+            self.curr = self.source.at(self.pos);
+        }
+    }
+
+    fn peek(self, offset: int) -> int {
+        let i = self.pos + offset;
+        if i < 0 || i >= self.len {
+            return -1;
+        }
+        return self.source.at(i);
+    }
+}
+
+fn is_digit(c: int) -> bool {
+    return c >= 48 && c <= 57;  // '0'..'9'
+}
+
+fn is_alpha(c: int) -> bool {
+    return (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || c == 95;  // 'a'..'z', 'A'..'Z', '_'
+}
+
+fn is_alnum(c: int) -> bool {
+    return is_alpha(c) || is_digit(c);
+}
+
+fn is_space(c: int) -> bool {
+    return c == 32 || c == 9 || c == 10 || c == 13;  // ' ', '\t', '\n', '\r'
+}
+
+fn keyword_or_ident(s: string) -> Token {
+
+    // fix returning enum variants. (call)
+    if s == "fn" { return Token.KwFn; }
+    if s == "let" { return Token.KwLet; }
+    if s == "var" { return Token.KwVar; }
+    if s == "if" { return Token.KwIf; }
+    if s == "else" { return Token.KwElse; }
+    if s == "return" { return Token.KwReturn; }
+    if s == "true" { return Token.KwTrue; }
+    if s == "false" { return Token.KwFalse; }
+    if s == "int" { return Token.TyI32; }
+    if s == "string" { return Token.TyString; }
+    if s == "bool" { return Token.TyBool; }
+
+    return Token.Ident(s);
+}
 
 
 
 fn main() {
-    // todo make this self hosting work!! eta 2080
 }

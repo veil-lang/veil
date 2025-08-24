@@ -27,6 +27,7 @@ pub struct Parser<'a> {
     files: &'a Files<String>,
     file_id: FileId,
     previous_token: Option<(Token, Span)>,
+    enums: Vec<ast::EnumDef>,
 }
 
 impl<'a> Parser<'a> {
@@ -37,6 +38,7 @@ impl<'a> Parser<'a> {
             files: lexer.files,
             file_id: lexer.file_id,
             previous_token: None,
+            enums: Vec::new(),
         }
     }
 
@@ -69,6 +71,7 @@ impl<'a> Parser<'a> {
                 } else if self.check(Token::KwEnum) {
                     let mut enum_def = self.parse_enum()?;
                     enum_def.visibility = ast::Visibility::Public;
+                    self.enums.push(enum_def.clone());
                     program.enums.push(enum_def);
                 } else if self.check(Token::KwFn) {
                     let mut func = self.parse_function()?;
@@ -88,7 +91,9 @@ impl<'a> Parser<'a> {
             } else if self.check(Token::KwStruct) {
                 program.structs.push(self.parse_struct()?);
             } else if self.check(Token::KwEnum) {
-                program.enums.push(self.parse_enum()?);
+                let enum_def = self.parse_enum()?;
+                self.enums.push(enum_def.clone());
+                program.enums.push(enum_def);
             } else if self.check(Token::KwImpl) {
                 program.impls.push(self.parse_impl()?);
             } else if self.check(Token::Hash) {

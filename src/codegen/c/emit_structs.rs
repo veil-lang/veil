@@ -27,6 +27,34 @@ impl CBackend {
         self.emit_enum_impl(enum_def, &[], &enum_def.name)
     }
 
+    fn sanitize_member_name(&self, name: &str) -> String {
+        match name.to_lowercase().as_str() {
+            "int" => "int_val".to_string(),
+            "char" => "char_val".to_string(),
+            "float" => "float_val".to_string(),
+            "double" => "double_val".to_string(),
+            "struct" => "struct_val".to_string(),
+            "union" => "union_val".to_string(),
+            "enum" => "enum_val".to_string(),
+            "const" => "const_val".to_string(),
+            "static" => "static_val".to_string(),
+            "void" => "void_val".to_string(),
+            "if" => "if_val".to_string(),
+            "else" => "else_val".to_string(),
+            "while" => "while_val".to_string(),
+            "for" => "for_val".to_string(),
+            "return" => "return_val".to_string(),
+            "break" => "break_val".to_string(),
+            "continue" => "continue_val".to_string(),
+            "switch" => "switch_val".to_string(),
+            "case" => "case_val".to_string(),
+            "default" => "default_val".to_string(),
+            "typedef" => "typedef_val".to_string(),
+            "sizeof" => "sizeof_val".to_string(),
+            _ => name.to_lowercase(),
+        }
+    }
+
     pub fn emit_enum_impl(
         &mut self,
         enum_def: &ast::EnumDef,
@@ -86,7 +114,7 @@ impl CBackend {
                             .push_str(&format!("            {} field{};\n", c_type, i));
                     }
                     self.header
-                        .push_str(&format!("        }} {};\n", variant.name.to_lowercase()));
+                        .push_str(&format!("        }} {};\n", self.sanitize_member_name(&variant.name)));
                 }
             }
         }
@@ -128,7 +156,7 @@ impl CBackend {
                     for (i, _) in data_types.iter().enumerate() {
                         self.header.push_str(&format!(
                             "    result.data.{}.field{} = field{};\n",
-                            variant.name.to_lowercase(),
+                            self.sanitize_member_name(&variant.name),
                             i,
                             i
                         ));

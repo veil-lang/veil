@@ -1075,6 +1075,30 @@ impl CBackend {
         self.header.push_str("    return result;\n");
         self.header.push_str("}\n\n");
 
+        self.header.push_str("static i32 ve_string_at(const char* s, i32 index) {\n");
+        self.header.push_str("    if (!s) return -1;\n");
+        self.header.push_str("    size_t len = strlen(s);\n");
+        self.header.push_str("    if (index < 0 || (size_t)index >= len) return -1;\n");
+        self.header.push_str("    return (i32)(unsigned char)s[index];\n");
+        self.header.push_str("}\n\n");
+
+        self.header.push_str("static char* ve_string_slice(const char* s, i32 start, i32 end) {\n");
+        self.header.push_str("    if (!s) return \"\";\n");
+        self.header.push_str("    size_t len = strlen(s);\n");
+        self.header.push_str("    if (start < 0) start = 0;\n");
+        self.header.push_str("    if (end > (i32)len) end = (i32)len;\n");
+        self.header.push_str("    if (start >= end) return \"\";\n");
+        self.header.push_str("    \n");
+        self.header.push_str("    size_t slice_len = end - start;\n");
+        self.header.push_str("    char* result = ve_arena_alloc(slice_len + 1);\n");
+        self.header.push_str("    if (result) {\n");
+        self.header.push_str("        memcpy(result, s + start, slice_len);\n");
+        self.header.push_str("        result[slice_len] = '\\0';\n");
+        self.header.push_str("    }\n");
+        self.header.push_str("    return result ? result : \"\";\n");
+        self.header.push_str("}\n\n");
+
+
         #[cfg(debug_assertions)]
         {
             self.header.push_str("#ifdef VE_DEBUG_MEMORY\n");
@@ -1118,6 +1142,9 @@ impl CBackend {
             self.header.push_str("static void ve_arena_stats() {}\n");
             self.header.push_str("#endif\n\n");
         }
+
+
+
     }
 
     fn ensure_optional_type(&mut self, inner_type: &Type) {

@@ -14,6 +14,10 @@ foreign fn ve_array_append_i32(arr: rawptr, item: i32) -> rawptr;
 foreign fn ve_array_append_string(arr: rawptr, item: string) -> rawptr; 
 #[no_emit_decl="true"]
 foreign fn ve_array_append_bool(arr: rawptr, item: bool) -> rawptr;
+#[no_emit_decl="true"]
+foreign fn ve_string_at(s: string, index: i32) -> i32;
+#[no_emit_decl="true"]
+foreign fn ve_string_slice(s: string, start: i32, end: i32) -> string;
 
 #[header="string.h", no_emit_decl="true"]
 foreign fn memcpy(dest: rawptr, src: rawptr, n: size_t) -> rawptr;
@@ -27,6 +31,14 @@ export fn panic(msg: string) -> void {
 impl string {
     fn length(self) -> i32 {
         return strlen(self) as i32;
+    }
+
+    fn at(self, index: i32) -> i32 {
+        return ve_string_at(self, index);
+    }
+
+    fn slice(self, start: i32, end: i32) -> string {
+        return ve_string_slice(self, start, end);
     }
 }
 
