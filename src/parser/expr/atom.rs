@@ -198,4 +198,20 @@ impl<'a> super::super::Parser<'a> {
             }
         }
     }
+
+    pub fn can_start_struct_init(&mut self) -> bool {
+        let mut temp_tokens = self.tokens.clone();
+        if let Some((Token::LBrace, _)) = temp_tokens.peek() {
+            temp_tokens.next();
+
+            if let Some((Token::Ident(_), _)) = temp_tokens.peek() {
+                temp_tokens.next();
+                if let Some((Token::Colon, _)) = temp_tokens.peek() {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
 }

@@ -26,6 +26,12 @@ impl<'a> Parser<'a> {
         Ok(stmts)
     }
 
+    pub fn parse_expr_tail(&mut self) -> Result<ast::Expr, Diagnostic<FileId>> {
+        let mut expr = self.parse_expr()?;
+        self.mark_as_tail(&mut expr);
+        Ok(expr)
+    }
+
     pub fn parse_block_with_tail(&mut self, allow_tail: bool) -> Result<Vec<ast::Stmt>, Diagnostic<FileId>> {
         self.expect(Token::LBrace)?;
         let mut stmts = Vec::new();
