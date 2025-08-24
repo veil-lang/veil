@@ -739,41 +739,7 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    fn parse_if_expr(&mut self, if_span: Span) -> Result<ast::Expr, Diagnostic<FileId>> {
-        let condition = self.parse_expr()?;
-        let then_branch = self.parse_block()?;
-        let mut else_branch = None;
 
-        if self.check(Token::KwElse) {
-            self.advance();
-            else_branch = Some(if self.check(Token::KwIf) {
-                let if_span = self.peek_span();
-                self.advance();
-                let inner_if = self.parse_if_expr(if_span)?;
-                let inner_span = inner_if.span();
-                vec![ast::Stmt::Expr(inner_if, inner_span)]
-            } else {
-                self.parse_block()?
-            });
-        }
-
-        let end_span = else_branch
-            .as_ref()
-            .and_then(|b| b.last())
-            .map(|s| s.span().end())
-            .unwrap_or_else(|| then_branch.last().unwrap().span().end());
-
-        Ok(ast::Expr::If(
-            Box::new(condition),
-            then_branch,
-            else_branch,
-            ast::ExprInfo {
-                span: Span::new(if_span.start(), end_span),
-                ty: ast::Type::Unknown,
-                is_tail: false,
-            },
-        ))
-    }
 
     fn parse_let(&mut self, expect_semi: bool) -> Result<ast::Stmt, Diagnostic<FileId>> {
         let let_span = self.previous().map(|(_, s)| *s).unwrap();
@@ -1232,35 +1198,4 @@ impl<'a> Parser<'a> {
         self.mark_as_tail(&mut expr);
         Ok(expr)
     }
-
-
-
-
-
-
-
-
-    fn parse_loop_expr(&mut self, loop_span: Span) -> Result<ast::Expr, Diagnostic<FileId>> {
-        let body = self.parse_block()?;
-
-        let end_span = body.last()
-            .map(|s| s.span().end())
-            .unwrap_or(loop_span.end());
-
-        Ok(ast::Expr::Loop(
-            body,
-            ast::ExprInfo {
-                span: Span::new(loop_span.start(), end_span),
-                ty: ast::Type::Unknown,
-                is_tail: false,
-            },
-        ))
-    }
-
-
-
-
-
-
-
 }
