@@ -176,29 +176,21 @@ fn suggest_similar_files(missing_path: &Path) -> Option<String> {
         .collect();
     (!matches.is_empty()).then(|| matches.join("\n"))
 }
-
 #[cfg(target_os = "windows")]
 pub fn prepare_windows_clang_args(
     output: &Path,
     optimize: bool,
     c_file: &Path,
 ) -> Result<Vec<String>> {
-    // Dev-friendly behavior:
-    // 1) If bundled llvm-mingw sysroot exists or VEIL_FORCE_LLVM_MINGW=1 → use self-contained args
-    // 2) Otherwise assume system Clang environment (e.g., MSVC dev shell or system MinGW) → minimal args
-
     let opt_flag = if optimize { "-O3" } else { "-O0" }.to_string();
 
-    // Bundled sysroot detection
     let exe_dir = std::env::current_exe()?.parent().unwrap().to_path_buf();
     let sysroot = exe_dir.join("tools").join("windows-x64").join("llvm-mingw");
-
     let force_llvm_mingw = std::env::var("VEIL_FORCE_LLVM_MINGW").ok().as_deref() == Some("1");
 
     if force_llvm_mingw || sysroot.exists() {
-        // Self-contained llvm-mingw toolchain
         let mut clang_args = vec![
-            opt_flag,
+            opt_flag.clone(),
             "-pipe".to_string(),
             "-fno-exceptions".to_string(),
             "-fuse-ld=lld".to_string(),
@@ -207,20 +199,28 @@ pub fn prepare_windows_clang_args(
             c_file.to_str().unwrap().into(),
             "-o".to_string(),
             output.to_str().unwrap().into(),
+            "--sysroot".to_string(),
+            sysroot.to_string_lossy().to_string(),
         ];
-
-        clang_args.push("--sysroot".to_string());
-        clang_args.push(sysroot.to_string_lossy().to_string());
+        if std::env::var("VEIL_CLANG_VERBOSE").ok().as_deref() == Some("1") {
+            clang_args.insert(0, "-v".to_string());
+        }
+        if let Ok(extra) = std::env::var("VEIL_EXTRA_CLANG_ARGS") {
+            let mut split: Vec<String> = shell_words::split(&extra).unwrap_or_default().into_iter().collect();
+            clang_args.splice(1..1, split.drain(..));
+        }
         return Ok(clang_args);
     }
 
-    // System toolchain (dev) – auto-detect MSVC vs GNU (MinGW/llvm-mingw)
     let prefer = std::env::var("VEIL_WINDOWS_TOOLCHAIN").unwrap_or_default();
     let have_link = which::which("link.exe").is_ok();
+    let have_lld_link = which::which("lld-link").is_ok()
+        || std::path::Path::new(r"C:\Program Files\LLVM\bin\lld-link.exe").exists();
     let have_mingw = which::which("x86_64-w64-mingw32-clang").is_ok()
         || which::which("x86_64-w64-mingw32-gcc").is_ok();
 
-    // Start with common args
+    let msvc_libs = discover_msvc_lib_paths();
+
     let mut args = vec![
         opt_flag,
         c_file.to_str().unwrap().into(),
@@ -228,36 +228,38 @@ pub fn prepare_windows_clang_args(
         output.to_str().unwrap().into(),
     ];
 
-    // Choose toolchain
-    let use_msvc =
-        (prefer == "msvc" && have_link) || (prefer.is_empty() && have_link && !have_mingw);
-    let use_gnu =
-        (prefer == "gnu" && have_mingw) || (prefer.is_empty() && (have_mingw || !have_link));
+    let use_msvc = match prefer.as_str() {
+        "msvc" => true,
+        "gnu" => false,
+        _ => !msvc_libs.is_empty() || have_link || have_lld_link,
+    };
+    let use_gnu = match prefer.as_str() {
+        "gnu" => true,
+        "msvc" => false,
+        _ => !use_msvc && have_mingw,
+    };
 
     if use_msvc {
-        args.insert(1, "-fuse-ld=link".to_string());
         args.insert(1, "-target".to_string());
         args.insert(2, "x86_64-pc-windows-msvc".to_string());
-
-        for lib_path in discover_msvc_lib_paths() {
+        args.insert(1, if have_lld_link { "-fuse-ld=lld-link".to_string() } else { "-fuse-ld=link".to_string() });
+        for lib_path in msvc_libs {
             args.push("-Xlinker".to_string());
             args.push(format!("/LIBPATH:{}", lib_path.to_string_lossy()));
         }
-    } else if use_gnu {
+    } else {
         args.insert(1, "-target".to_string());
         args.insert(2, "x86_64-w64-windows-gnu".to_string());
         if which::which("ld.lld").is_ok() || which::which("lld").is_ok() {
             args.insert(1, "-fuse-ld=lld".to_string());
         }
     }
+
     if std::env::var("VEIL_CLANG_VERBOSE").ok().as_deref() == Some("1") {
         args.insert(1, "-v".to_string());
     }
     if let Ok(extra) = std::env::var("VEIL_EXTRA_CLANG_ARGS") {
-        let mut split: Vec<String> = shell_words::split(&extra)
-            .unwrap_or_default()
-            .into_iter()
-            .collect();
+        let mut split: Vec<String> = shell_words::split(&extra).unwrap_or_default().into_iter().collect();
         args.splice(1..1, split.drain(..));
     }
 
@@ -316,36 +318,61 @@ pub fn get_bundled_clang_path() -> Result<PathBuf> {
 #[cfg(target_os = "windows")]
 fn discover_msvc_lib_paths() -> Vec<PathBuf> {
     let mut paths = Vec::new();
-    let vs_base =
-        PathBuf::from(r"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC");
-    if let Ok(read_dir) = fs::read_dir(&vs_base) {
-        let mut versions: Vec<PathBuf> =
-            read_dir.filter_map(|e| e.ok().map(|e| e.path())).collect();
-        versions.sort();
-        if let Some(latest) = versions.into_iter().last() {
-            let lib_host = latest.join("lib").join("x64");
-            if lib_host.exists() {
-                paths.push(lib_host);
-            }
-            let atlmfc = latest.join("atlmfc").join("lib").join("x64");
-            if atlmfc.exists() {
-                paths.push(atlmfc);
+
+    if let Ok(vctools) = std::env::var("VCToolsInstallDir") {
+        let base = PathBuf::from(vctools);
+        let host = base.join("lib").join("x64");
+        if host.exists() {
+            paths.push(host);
+        }
+        let atlmfc = base.join("atlmfc").join("lib").join("x64");
+        if atlmfc.exists() {
+            paths.push(atlmfc);
+        }
+    }
+    if let (Ok(sdkdir), Ok(sdkver)) = (std::env::var("WindowsSdkDir"), std::env::var("WindowsSDKLibVersion")) {
+        let base = PathBuf::from(sdkdir).join("Lib").join(sdkver);
+        for sub in ["ucrt", "um"] {
+            let p = base.join(sub).join("x64");
+            if p.exists() {
+                paths.push(p);
             }
         }
     }
-    let sdk_base = PathBuf::from(r"C:\Program Files (x86)\Windows Kits\10\Lib");
-    if let Ok(read_dir) = fs::read_dir(&sdk_base) {
-        let mut versions: Vec<PathBuf> =
-            read_dir.filter_map(|e| e.ok().map(|e| e.path())).collect();
-        versions.sort();
-        if let Some(latest) = versions.into_iter().last() {
-            for sub in ["ucrt", "um"] {
-                let p = latest.join(sub).join("x64");
-                if p.exists() {
-                    paths.push(p);
+
+    if paths.is_empty() {
+        let vs_base = PathBuf::from(r"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC");
+        if let Ok(read_dir) = fs::read_dir(&vs_base) {
+            let mut versions: Vec<PathBuf> = read_dir.filter_map(|e| e.ok().map(|e| e.path())).collect();
+            versions.sort();
+            if let Some(latest) = versions.into_iter().last() {
+                let lib_host = latest.join("lib").join("x64");
+                if lib_host.exists() {
+                    paths.push(lib_host);
+                }
+                let atlmfc = latest.join("atlmfc").join("lib").join("x64");
+                if atlmfc.exists() {
+                    paths.push(atlmfc);
+                }
+            }
+        }
+        let sdk_base = PathBuf::from(r"C:\Program Files (x86)\Windows Kits\10\Lib");
+        if let Ok(read_dir) = fs::read_dir(&sdk_base) {
+            let mut versions: Vec<PathBuf> = read_dir.filter_map(|e| e.ok().map(|e| e.path())).collect();
+            versions.sort();
+            if let Some(latest) = versions.into_iter().last() {
+                for sub in ["ucrt", "um"] {
+                    let p = latest.join(sub).join("x64");
+                    if p.exists() {
+                        paths.push(p);
+                    }
                 }
             }
         }
     }
+
+    paths.sort();
+    paths.dedup();
     paths
 }
+
