@@ -90,22 +90,44 @@ impl<'a> super::super::Parser<'a> {
             Token::Dot => {
                 let (field, field_span) = self.consume_ident()?;
                 if self.check(Token::LParen) {
-                    let method_span = Span::new(lhs.span().start(), field_span.end());
-                    let args = self.parse_call_args()?;
-                    let end_span = args.1;
-                    Ok(ast::Expr::Call(
-                        format!("<method>.{}", field),
-                        {
-                            let mut v = vec![lhs];
-                            v.extend(args.0);
-                            v
-                        },
-                        ast::ExprInfo {
-                            span: Span::new(method_span.start(), end_span.end()),
-                            ty: ast::Type::Unknown,
-                            is_tail: false,
-                        },
-                    ))
+                    // Distinguish between enum variant construction Enum.Variant(args)
+                    // and method call object.method(args). Jeśli lhs jest identyfikatorem enuma
+                    // i 'field' jest wariantem tego enuma traktujemy to jako EnumConstruct.
+                    let is_enum_variant = if let ast::Expr::Var(enum_name, _) = &lhs {
+                        self.enums.iter().any(|e| e.name == *enum_name && e.variants.iter().any(|v| v.name == field))
+                    } else { false };
+
+                    if is_enum_variant {
+                        let args = self.parse_call_args()?;
+                        let end_span = args.1;
+                        Ok(ast::Expr::EnumConstruct(
+                            if let ast::Expr::Var(enum_name, _) = lhs { enum_name } else { unreachable!() },
+                            field,
+                            args.0,
+                            ast::ExprInfo {
+                                span: Span::new(field_span.start(), end_span.end()),
+                                ty: ast::Type::Unknown,
+                                is_tail: false,
+                            },
+                        ))
+                    } else {
+                        let method_span = Span::new(lhs.span().start(), field_span.end());
+                        let args = self.parse_call_args()?;
+                        let end_span = args.1;
+                        Ok(ast::Expr::Call(
+                            format!("<method>.{}", field),
+                            {
+                                let mut v = vec![lhs];
+                                v.extend(args.0);
+                                v
+                            },
+                            ast::ExprInfo {
+                                span: Span::new(method_span.start(), end_span.end()),
+                                ty: ast::Type::Unknown,
+                                is_tail: false,
+                            },
+                        ))
+                    }
                 } else {
                     if let ast::Expr::Var(_e_num_name, _) = &lhs {
                         let span = Span::new(lhs.span().start(), field_span.end());
