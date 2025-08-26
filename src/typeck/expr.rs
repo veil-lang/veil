@@ -1059,10 +1059,34 @@ impl TypeChecker {
                 Ok(Type::String)
             }
             Expr::FfiCall(_name, _args, _info) => Ok(Type::Unknown),
-            Expr::EnumConstruct(enum_name, _, args, info) => {
+            Expr::EnumConstruct(enum_name, variant_name, args, info) => {
                 for arg in args.iter_mut() {
                     self.check_expr(arg)?;
                 }
+
+                if let Some(enum_def) = self.context.enum_def_map.get(enum_name).cloned() {
+                    if let Some(variant) = enum_def.variants.iter().find(|v| &v.name == variant_name) {
+                        let data_types = if let Some(data) = &variant.data { data.clone() } else { vec![] };
+
+                        let enum_name_clone = enum_name.clone();
+                        let variant_name_clone = variant.name.clone();
+
+                        for (i, arg) in args.iter_mut().enumerate() {
+                            let arg_ty = arg.get_type();
+                            let expected_ty = data_types.get(i).cloned().unwrap_or(Type::Unknown);
+                            if !Self::is_convertible(&arg_ty, &expected_ty) {
+                                self.report_error(
+                                    &format!(
+                                        "Enum variant '{}' of '{}' expects {}, got {}",
+                                        variant_name_clone, enum_name_clone, expected_ty, arg_ty
+                                    ),
+                                    arg.span(),
+                                );
+                            }
+                        }
+                    }
+                }
+
                 let ty = if let Some(enum_def) = self.context.enum_def_map.get(enum_name) {
                     if !enum_def.generic_params.is_empty() {
                         let mut context_ty = None;
@@ -1114,7 +1138,7 @@ impl TypeChecker {
                 for arm in arms.iter_mut() {
                     let original_variables = self.context.variables.clone();
                     match &arm.pattern {
-                        ast::Pattern::EnumVariant(enum_name, variant_name, subpatterns, _) => {
+                        ast::Pattern::EnumVariant(enum_name, _variant_name, _subpatterns, _) => {
                             let expected = if let Type::GenericInstance(name, args) = &matched_ty {
                                 if name == enum_name {
                                     Type::GenericInstance(name.clone(), args.clone())
