@@ -50,7 +50,7 @@ impl Lexer {
     }
 
     fn advance(self) {
-        self.pos = self.pos + 1
+        self.pos = self.pos + 1;
         if self.pos >= self.len {
             self.curr = -1;
         } else {
@@ -338,6 +338,37 @@ impl Parser {
             self.current = Token.Eof;
         }
     }
+
+    fn parse_primary(self) -> Expr {
+        match self.current {
+            Token.Ident(name) => {
+                self.advance();
+                return Expr.Ident(name);
+            }
+            Token.Int(value) => {
+                self.advance();
+                return Expr.Int(value);
+            }
+            Token.LParen => {
+                self.advance(); // skip '('
+                let expr = self.parse_expr();
+                // expect ')'
+                self.advance();
+                return expr;
+            }
+        }
+    }
+
+    fn parse_expr(self) -> Expr {
+        let left = self.parse_primary();
+        if self.current == Token.Plus {
+            self.advance();
+            let right = self.parse_expr();
+            return Expr.Binary { left: left, op: BinOp.Add, right: right };
+        }
+        return left;
+    }
+
 }
 
 

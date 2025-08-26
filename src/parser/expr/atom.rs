@@ -150,6 +150,40 @@ impl<'a> super::super::Parser<'a> {
                 Ok(expr)
             }
             Some((Token::Ident(name), span)) => {
+                if self.check(Token::Dot) {
+                    let look1 = self.peek().cloned();
+                    let look2 = self.tokens.get(self.pos + 1).cloned();
+                    let look3 = self.tokens.get(self.pos + 2).cloned();
+                    if let (Some((Token::Dot, _)), Some((Token::Ident(variant_name), _)), Some((Token::LBrace, _))) = (look1, look2, look3) {
+                        self.advance();
+                        let variant = variant_name.clone();
+                        self.advance();
+                        self.advance();
+                        let mut fields = Vec::new();
+                        let enum_name = name.clone();
+                        while !self.check(Token::RBrace) {
+                            let (field_name, _) = self.consume_ident()?;
+                            self.expect(Token::Colon)?;
+                            let expr = self.parse_expr()?;
+                            fields.push((field_name, expr));
+                            if !self.check(Token::RBrace) {
+                                self.expect(Token::Comma)?;
+                            }
+                        }
+                        let end_span = self.expect(Token::RBrace)?;
+                        return Ok(ast::Expr::EnumConstruct(
+                            enum_name.clone(),
+                            variant.clone(),
+                            fields.into_iter().map(|(_, e)| e).collect(),
+                            ast::ExprInfo {
+                                span: Span::new(span.start(), end_span.end()),
+                                ty: ast::Type::Unknown,
+                                is_tail: false,
+                            },
+                        ));
+                    }
+                }
+
                 if self.check(Token::LBrace) && self.can_start_struct_init() {
                     self.advance();
                     let mut fields = Vec::new();
