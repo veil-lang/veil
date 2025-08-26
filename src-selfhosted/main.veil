@@ -7,7 +7,7 @@ enum Token {
   KwFn, KwTest, KwLet, KwVar, KwIf, KwElse, KwReturn, KwRawPtr, KwDefer,
   KwAs, KwWhile, KwFor, KwStep, KwLoop, KwImport, KwFrom, KwExport,
   KwStruct, KwImpl, KwNew, KwConstructor, KwEnum, KwMatch, KwTrue,
-  KwFalse, KwNone, KwIn, KwBreak, KwContinue,
+  KwFalse, KwNone, KwIn, KwBreak, KwContinue, KwForeign,
 
   TyBool, TyString, TyVoid, TyAny,
   TyU8, TyU16, TyU32, TyU64,
@@ -24,7 +24,7 @@ enum Token {
   Str(string),
   TemplateStr(string),
   Int(string),
-  F32(float),
+  F32(string),
 
   Eof,
   Error(string)
@@ -65,6 +65,177 @@ impl Lexer {
         }
         return self.source.at(i);
     }
+
+    fn skip_whitespace_and_comments(self) {
+        loop {
+            while is_space(self.curr) {
+                self.advance();
+            }
+            if self.curr == 47 { // '/'
+                if self.peek(1) == 47 { // '//'
+                    self.advance(); self.advance();
+                    while self.curr != 10 && self.curr != -1 { // until '\n' or EOF
+                        self.advance();
+                    }
+                    continue;
+                } else if self.peek(1) == 42 { // '/*'
+                    self.advance(); self.advance();
+                    while true {
+                        if self.curr == -1 { break; }
+                        if self.curr == 42 && self.peek(1) == 47 { // '*/'
+                            self.advance(); self.advance();
+                            break;
+                        }
+                        self.advance();
+                    }
+                    continue;
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+    }
+
+    fn next_token(self) -> Token {
+        self.skip_whitespace_and_comments();
+        if self.curr == -1 { return Token.Eof; }
+        if is_alpha(self.curr) { return self.scan_ident(); }
+        if is_digit(self.curr) { return self.scan_number(); }
+        if self.curr == 34 { return self.scan_string(); } // '"'
+        if self.curr == 96 { return self.scan_template_string(); } // '`'
+        if self.curr == 40 { self.advance(); return Token.LParen; } // '('
+        if self.curr == 41 { self.advance(); return Token.RParen; } // ')'
+        if self.curr == 123 { self.advance(); return Token.LBrace; } // '{'
+        if self.curr == 125 { self.advance(); return Token.RBrace; } // '}'
+        if self.curr == 91 { self.advance(); return Token.LBracket; } // '['
+        if self.curr == 93 { self.advance(); return Token.RBracket; } // ']'
+        if self.curr == 44 { self.advance(); return Token.Comma; } // ','
+        if self.curr == 59 { self.advance(); return Token.Semi; } // ';'
+        if self.curr == 58 { self.advance(); return Token.Colon; } // ':'
+        if self.curr == 35 { self.advance(); return Token.Hash; } // '#'
+        if self.curr == 63 { self.advance(); return Token.Question; } // '?'
+        if self.curr == 94 { self.advance(); return Token.Caret; } // '^'
+        if self.curr == 46 { // '.'
+            if self.peek(1) == 46 {
+                if self.peek(2) == 46 { // '...'
+                    self.advance(); self.advance(); self.advance();
+                    return Token.Ellipsis;
+                } else if self.peek(2) == 61 { // '..='
+                    self.advance(); self.advance(); self.advance();
+                    return Token.DotDotEq;
+                } else if self.peek(2) == 62 { // '..>'
+                    self.advance(); self.advance(); self.advance();
+                    return Token.DotDotGt;
+                } else if self.peek(2) == 60 { // '..<'
+                    self.advance(); self.advance(); self.advance();
+                    return Token.DotDotLt;
+                } else { // '..'
+                    self.advance(); self.advance();
+                    return Token.DotDot;
+                }
+            } else {
+                self.advance();
+                return Token.Dot;
+            }
+        }
+        if self.curr == 43 { self.advance(); return Token.Plus; } // '+'
+        if self.curr == 45 {
+            self.advance();
+            if self.curr == 62 { self.advance(); return Token.Arrow; } // '->'
+            return Token.Minus; // '-'
+        }
+        if self.curr == 42 {
+            self.advance();
+            if self.curr == 42 { self.advance(); return Token.DoubleStar; } // '**'
+            return Token.Star; // '*'
+        }
+        if self.curr == 47 { self.advance(); return Token.Slash; } // '/'
+        if self.curr == 37 { self.advance(); return Token.Percent; } // '%'
+        if self.curr == 61 {
+            self.advance();
+            if self.curr == 61 { self.advance(); return Token.EqEq; } // '=='
+            if self.curr == 62 { self.advance(); return Token.Arrow2; } // '=>'
+            return Token.Eq; // '='
+        }
+        if self.curr == 33 {
+            self.advance();
+            if self.curr == 61 { self.advance(); return Token.NotEq; } // '!='
+            return Token.Bang; // '!'
+        }
+        if self.curr == 60 {
+            self.advance();
+            if self.curr == 61 { self.advance(); return Token.LtEq; } // '<='
+            return Token.Lt; // '<'
+        }
+        if self.curr == 62 {
+            self.advance();
+            if self.curr == 61 { self.advance(); return Token.GtEq; } // '>='
+            return Token.Gt; // '>'
+        }
+        if self.curr == 38 {
+            self.advance();
+            if self.curr == 38 { self.advance(); return Token.AndAnd; } // '&&'
+            return Token.Error("Invalid character '&'");
+        }
+        if self.curr == 124 {
+            self.advance();
+            if self.curr == 124 { self.advance(); return Token.OrOr; } // '||'
+            return Token.Pipe; // '|'
+        }
+        return Token.Error("Unknown character");
+    }
+
+    fn scan_ident(self) -> Token {
+        let start = self.pos;
+        while is_alnum(self.curr) { self.advance(); }
+        let text = self.source.slice(start, self.pos);
+        return keyword_or_ident(text);
+    }
+
+    fn scan_number(self) -> Token {
+        let start = self.pos;
+        while is_digit(self.curr) { self.advance(); }
+        if self.curr == 46 && is_digit(self.peek(1)) { // '.'
+            self.advance();
+            while is_digit(self.curr) { self.advance(); }
+            let text = self.source.slice(start, self.pos);
+            return Token.F32(text);
+        }
+        let text = self.source.slice(start, self.pos);
+        return Token.Int(text);
+    }
+
+    fn scan_string(self) -> Token {
+        self.advance(); // skip opening '"'
+        let start = self.pos;
+        while self.curr != 34 && self.curr != -1 { // until '"' or EOF
+            if self.curr == 92 { self.advance(); } // skip escape sequence
+            self.advance();
+        }
+        if self.curr == -1 {
+            return Token.Error("Unterminated string");
+        }
+        let text = self.source.slice(start, self.pos);
+        self.advance(); // skip closing '"'
+        return Token.Str(text);
+    }
+
+    fn scan_template_string(self) -> Token {
+        self.advance(); // skip opening '`'
+        let start = self.pos;
+        while self.curr != 96 && self.curr != -1 { // until '`' or EOF
+            if self.curr == 92 { self.advance(); } // skip escape sequence
+            self.advance();
+        }
+        if self.curr == -1 {
+            return Token.Error("Unterminated template string");
+        }
+        let text = self.source.slice(start, self.pos);
+        self.advance(); // skip closing '`'
+        return Token.TemplateStr(text);
+    }
 }
 
 fn is_digit(c: int) -> bool {
@@ -84,24 +255,54 @@ fn is_space(c: int) -> bool {
 }
 
 fn keyword_or_ident(s: string) -> Token {
-
-    // fix returning enum variants. (call)
     if s == "fn" { return Token.KwFn; }
+    if s == "test" { return Token.KwTest; }
     if s == "let" { return Token.KwLet; }
     if s == "var" { return Token.KwVar; }
     if s == "if" { return Token.KwIf; }
     if s == "else" { return Token.KwElse; }
     if s == "return" { return Token.KwReturn; }
+    if s == "rawptr" { return Token.KwRawPtr; }
+    if s == "defer" { return Token.KwDefer; }
+    if s == "as" { return Token.KwAs; }
+    if s == "while" { return Token.KwWhile; }
+    if s == "for" { return Token.KwFor; }
+    if s == "step" { return Token.KwStep; }
+    if s == "loop" { return Token.KwLoop; }
+    if s == "import" { return Token.KwImport; }
+    if s == "from" { return Token.KwFrom; }
+    if s == "export" { return Token.KwExport; }
+    if s == "struct" { return Token.KwStruct; }
+    if s == "impl" { return Token.KwImpl; }
+    if s == "new" { return Token.KwNew; }
+    if s == "constructor" { return Token.KwConstructor; }
+    if s == "enum" { return Token.KwEnum; }
+    if s == "match" { return Token.KwMatch; }
     if s == "true" { return Token.KwTrue; }
     if s == "false" { return Token.KwFalse; }
-    if s == "int" { return Token.TyI32; }
-    if s == "string" { return Token.TyString; }
+    if s == "None" { return Token.KwNone; }
+    if s == "in" { return Token.KwIn; }
+    if s == "break" { return Token.KwBreak; }
+    if s == "continue" { return Token.KwContinue; }
+    if s == "foreign" { return Token.KwForeign; }
+
     if s == "bool" { return Token.TyBool; }
+    if s == "string" { return Token.TyString; }
+    if s == "void" { return Token.TyVoid; }
+    if s == "any" { return Token.TyAny; }
+    if s == "u8" || s == "byte" { return Token.TyU8; }
+    if s == "u16" || s == "ushort" { return Token.TyU16; }
+    if s == "u32" || s == "uint" { return Token.TyU32; }
+    if s == "u64" || s == "ulong" { return Token.TyU64; }
+    if s == "i8" || s == "sbyte" { return Token.TyI8; }
+    if s == "i16" || s == "short" { return Token.TyI16; }
+    if s == "i32" || s == "int" { return Token.TyI32; }
+    if s == "i64" || s == "long" { return Token.TyI64; }
+    if s == "f32" || s == "float" { return Token.TyF32; }
+    if s == "f64" || s == "double" { return Token.TyF64; }
 
     return Token.Ident(s);
 }
-
-
 
 fn main() {
 }
