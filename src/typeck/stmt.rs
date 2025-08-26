@@ -94,14 +94,16 @@ impl TypeChecker {
             Stmt::While(cond, body, _) => {
                 let cond_ty = self.check_expr(cond)?;
                 self.expect_type(&cond_ty, &Type::Bool, cond.span())?;
+                let previous_in_loop = self.context.in_loop;
                 self.context.in_loop = true;
                 self.check_block(body)?;
-                self.context.in_loop = false;
+                self.context.in_loop = previous_in_loop;
             }
             Stmt::Loop(body, _) => {
+                let previous_in_loop = self.context.in_loop;
                 self.context.in_loop = true;
                 self.check_block(body)?;
-                self.context.in_loop = false;
+                self.context.in_loop = previous_in_loop;
             }
             Stmt::For(name, index_var, range, step, body, _) => {
                 self.check_expr(range)?;
@@ -118,9 +120,10 @@ impl TypeChecker {
                 if let Some(idx_var) = index_var {
                     self.context.variables.insert(idx_var.clone(), Type::I32);
                 }
+                let previous_in_loop = self.context.in_loop;
                 self.context.in_loop = true;
                 self.check_block(body)?;
-                self.context.in_loop = false;
+                self.context.in_loop = previous_in_loop;
                 self.context.variables = old_variables;
             }
             Stmt::Break(expr, span) => {
