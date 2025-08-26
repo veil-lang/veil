@@ -308,7 +308,7 @@ fn keyword_or_ident(s: string) -> Token {
 enum Expr {
     Ident(string),
     Int(string),
-    Binary { left: Expr, op: Binop, right: Expr },
+    Binary { left: Expr, op: BinOp, right: Expr },
 }
 
 enum BinOp { Add, Sub, Mul, Div }
@@ -324,6 +324,23 @@ struct Parser {
     pos: int,
     current: Token
 }
+
+impl Parser {
+    constructor(tokens: Token[]) -> Parser {
+        return Parser { tokens: tokens, pos: 0, current: tokens[0] };
+    }
+
+    fn advance(self) {
+        self.pos = self.pos + 1;
+        if self.pos < self.tokens.length() {
+            self.current = self.tokens[self.pos];
+        } else {
+            self.current = Token.Eof;
+        }
+    }
+}
+
+
 
 fn main() {
 }
