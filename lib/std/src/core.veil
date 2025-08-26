@@ -51,6 +51,12 @@ impl string[] {
     }
 }
 
+impl T[] {
+    fn length(self) -> i32 {
+        return ve_array_length(self as rawptr) as i32;
+    }
+}
+
 impl i32[] {
     fn length(self) -> i32 {
         return ve_array_length(self as rawptr) as i32;
