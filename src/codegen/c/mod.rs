@@ -94,7 +94,11 @@ impl CBackend {
         program: &ast::Program,
         output_path: &Path,
     ) -> Result<(), CompileError> {
-        let program = self.monomorphize_generics(program)?;
+        let mut program = program.clone();
+        if let Err(e) = crate::ast::merge_impl_blocks(&mut program) {
+            return Err(CompileError::CodegenError { message: e, span: None, file_id: self.file_id });
+        }
+        let program = self.monomorphize_generics(&program)?;
 
         self.analyze_memory_requirements(&program);
         self.emit_header();
@@ -347,7 +351,144 @@ impl CBackend {
             ..program.clone()
         });
 
-        Ok(transformed_program)
+
+        let mut concrete_array_inners: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+
+        fn collect_types_in_expr(expr: &ast::Expr, out: &mut std::collections::HashSet<String>, c: &CBackend) {
+            use ast::Expr;
+            match expr {
+                Expr::ArrayInit(elems, _) => {
+                    for e in elems { collect_types_in_expr(e, out, c); }
+                }
+                Expr::ArrayAccess(a, _, _) => {
+                    collect_types_in_expr(a, out, c);
+                }
+                Expr::Call(_, args, info) => {
+                    if let ast::Type::Array(inner) = &info.ty {
+                        out.insert(c.type_to_c_name(inner));
+                    }
+                    for a in args { collect_types_in_expr(a, out, c); }
+                }
+                Expr::New(_, args, _) => { for a in args { collect_types_in_expr(a, out, c); } }
+                Expr::BinOp(l, _, r, _) => { collect_types_in_expr(l, out, c); collect_types_in_expr(r, out, c); }
+                Expr::UnaryOp(_, e, _) => collect_types_in_expr(e, out, c),
+                Expr::StructInit(_, fields, _) => { for (_, e) in fields { collect_types_in_expr(e, out, c); } }
+                Expr::FieldAccess(e, _, _) => collect_types_in_expr(e, out, c),
+                Expr::Match(_, arms, _) => {
+                    for arm in arms {
+                        match &arm.body {
+                            ast::MatchArmBody::Expr(e) => collect_types_in_expr(e, out, c),
+                            ast::MatchArmBody::Block(stmts) => {
+                                for s in stmts { collect_types_in_stmt(s, out, c); }
+                            }
+                        }
+                    }
+                }
+                Expr::Cast(e, _, _) => collect_types_in_expr(e, out, c),
+                Expr::Deref(e, _) => collect_types_in_expr(e, out, c),
+                _ => {}
+            }
+        }
+
+        fn collect_types_in_stmt(stmt: &ast::Stmt, out: &mut std::collections::HashSet<String>, c: &CBackend) {
+            match stmt {
+                ast::Stmt::Let(_, ty_opt, expr, _, _) => {
+                    if let Some(ty) = ty_opt {
+                        if let ast::Type::Array(inner) = ty { out.insert(c.type_to_c_name(inner)); }
+                    }
+                    collect_types_in_expr(expr, out, c);
+                }
+                ast::Stmt::Expr(expr, _) => collect_types_in_expr(expr, out, c),
+                ast::Stmt::Return(expr, _) => collect_types_in_expr(expr, out, c),
+                ast::Stmt::If(cond, then_branch, else_branch, _) => {
+                    collect_types_in_expr(cond, out, c);
+                    for s in then_branch { collect_types_in_stmt(s, out, c); }
+                    if let Some(else_b) = else_branch { for s in else_b { collect_types_in_stmt(s, out, c); } }
+                }
+                ast::Stmt::Block(stmts, _) => for s in stmts { collect_types_in_stmt(s, out, c); },
+                ast::Stmt::While(cond, body, _) => { collect_types_in_expr(cond, out, c); for s in body { collect_types_in_stmt(s, out, c); } }
+                ast::Stmt::Loop(body, _) => for s in body { collect_types_in_stmt(s, out, c); },
+                ast::Stmt::For(_, _, range, step, body, _) => { collect_types_in_expr(range, out, c); if let Some(st) = step { collect_types_in_expr(st, out, c); } for s in body { collect_types_in_stmt(s, out, c); } }
+                ast::Stmt::Break(expr_opt, _) => if let Some(e) = expr_opt { collect_types_in_expr(e, out, c); },
+                _ => {}
+            }
+        }
+
+        for func in &transformed_program.functions {
+            if let ast::Type::Array(inner) = &func.return_type {
+                concrete_array_inners.insert(self.type_to_c_name(inner));
+            }
+            for (_, p) in &func.params {
+                if let ast::Type::Array(inner) = p { concrete_array_inners.insert(self.type_to_c_name(inner)); }
+            }
+            for stmt in &func.body { collect_types_in_stmt(stmt, &mut concrete_array_inners, self); }
+        }
+
+        for stmt in &program.stmts { collect_types_in_stmt(stmt, &mut concrete_array_inners, self); }
+
+        for struct_def in &program.structs {
+            for field in &struct_def.fields {
+                if let ast::Type::Array(inner) = &field.ty {
+                    concrete_array_inners.insert(self.type_to_c_name(inner));
+                }
+            }
+        }
+
+        let mut new_impls: Vec<ast::ImplBlock> = Vec::new();
+        let existing_impl_targets: std::collections::HashSet<String> = program
+            .impls
+            .iter()
+            .map(|ib| ib.target_type.clone())
+            .collect();
+
+        for impl_block in &program.impls {
+            if impl_block.target_type.contains('T') && impl_block.target_type.contains("[]") {
+                for inner in &concrete_array_inners {
+                    let t1 = format!("[]{}", inner);
+                    let t2 = format!("{}[]", inner);
+                    if existing_impl_targets.contains(&t1) || existing_impl_targets.contains(&t2) {
+                        continue;
+                    }
+                    let mut type_map = std::collections::HashMap::new();
+                    let concrete_type = if inner == "i32" {
+                        ast::Type::I32
+                    } else if inner == "string" {
+                        ast::Type::String
+                    } else if inner == "bool" {
+                        ast::Type::Bool
+                    } else {
+                        ast::Type::Struct(inner.clone())
+                    };
+                    type_map.insert("T".to_string(), concrete_type.clone());
+
+                    let mut new_methods = Vec::new();
+                    for m in &impl_block.methods {
+                        let mut new_m = m.clone();
+                        new_m.return_type = self.substitute_type(&m.return_type, &type_map)?;
+                        let mut new_params = Vec::new();
+                        for (n, t) in &m.params {
+                            new_params.push((n.clone(), self.substitute_type(t, &type_map)?));
+                        }
+                        new_m.params = new_params;
+                        new_methods.push(new_m);
+                    }
+
+                    new_impls.push(ast::ImplBlock {
+                        target_type: format!("[]{}", inner),
+                        methods: new_methods,
+                        span: impl_block.span.clone(),
+                    });
+                }
+            } else {
+                new_impls.push(impl_block.clone());
+            }
+        }
+
+        let mut final_program = transformed_program.clone();
+        final_program.impls = new_impls;
+
+        Ok(final_program)
     }
 
     fn instantiate_generic_function(

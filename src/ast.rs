@@ -156,6 +156,69 @@ pub struct ImplBlock {
     pub span: Span,
 }
 
+impl ImplBlock {
+    pub fn normalized_target(&self) -> String {
+        if self.target_type.ends_with("[]") {
+            let inner = &self.target_type[..self.target_type.len() - 2];
+            format!("[]{}", inner)
+        } else {
+            self.target_type.clone()
+        }
+    }
+}
+
+pub fn merge_impl_blocks(program: &mut Program) -> Result<(), String> {
+    use std::collections::HashMap;
+
+    let mut map: HashMap<String, Vec<Function>> = HashMap::new();
+
+    for ib in &program.impls {
+        let key = if ib.target_type.ends_with("[]") {
+            ib.target_type.clone()
+        } else if ib.target_type.starts_with("[]") {
+            ib.target_type.clone()
+        } else {
+            ib.target_type.clone()
+        };
+
+        let entry = map.entry(key).or_insert_with(Vec::new);
+        for m in &ib.methods {
+            entry.push(m.clone());
+        }
+    }
+
+    let mut merged: Vec<ImplBlock> = Vec::new();
+    for (target, methods) in map.into_iter() {
+        let mut seen: HashMap<String, Function> = HashMap::new();
+        for m in methods {
+            if let Some(existing) = seen.get(&m.name) {
+                let existing_sig: Vec<_> = existing.params.iter().map(|(_, t)| t.clone()).collect();
+                let new_sig: Vec<_> = m.params.iter().map(|(_, t)| t.clone()).collect();
+                if existing_sig == new_sig && existing.return_type == m.return_type {
+                    continue;
+                } else {
+                    return Err(format!(
+                        "Conflicting method '{}' in multiple impl blocks for type {}",
+                        m.name, target
+                    ));
+                }
+            } else {
+                seen.insert(m.name.clone(), m.clone());
+            }
+        }
+
+        let merged_methods = seen.into_iter().map(|(_, f)| f).collect();
+        merged.push(ImplBlock {
+            target_type: target,
+            methods: merged_methods,
+            span: Span::new(0, 0),
+        });
+    }
+
+    program.impls = merged;
+    Ok(())
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Visibility {
     Private,

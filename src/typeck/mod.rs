@@ -218,6 +218,12 @@ impl TypeChecker {
             return Type::Array(Box::new(inner_type));
         }
 
+        if type_name.ends_with("[]") {
+            let inner_type_name = &type_name[..type_name.len() - 2];
+            let inner_type = self.parse_type_name(inner_type_name);
+            return Type::Array(Box::new(inner_type));
+        }
+
         match type_name {
             "string" => Type::String,
             "i32" => Type::I32,
@@ -237,6 +243,8 @@ impl TypeChecker {
                     Type::Struct(type_name.to_string())
                 } else if self.context.enum_defs.contains_key(type_name) {
                     Type::Enum(type_name.to_string())
+                } else if type_name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                    Type::Generic(type_name.to_string())
                 } else {
                     Type::Unknown
                 }

@@ -154,8 +154,33 @@ impl CBackend {
                             .replace("[]", "_array")
                             .replace("[", "_")
                             .replace("]", "_");
-                        let method_func_name =
-                            format!("ve_method_{}_{}", sanitized_type_name, method_name);
+                            let is_static_method = matches!(obj_expr, ast::Expr::Var(var_name, _) if self.struct_defs.contains_key(var_name.as_str()) || self.enum_defs.contains_key(var_name.as_str()) || matches!(var_name.as_str(), "Command" | "Array" | "Option"));
+
+                            if method_name == "length" {
+                                if let ast::Type::Array(_) = obj_type {
+                                    let obj_code = self.emit_expr(obj_expr)?;
+                                    return Ok(format!("(int)ve_array_length({})", obj_code));
+                                }
+                            }
+
+                            if method_name == "append" {
+                                if let ast::Type::Array(inner_ty) = obj_type {
+                                    let arg_code = if args.len() > 1 { self.emit_expr(&args[1])? } else { "".to_string() };
+                                    let obj_code = self.emit_expr(obj_expr)?;
+                                    match inner_ty.as_ref() {
+                                        ast::Type::I32 => return Ok(format!("ve_array_append_i32({}, {})", obj_code, arg_code)),
+                                        ast::Type::String => return Ok(format!("ve_array_append_string({}, {})", obj_code, arg_code)),
+                                        ast::Type::Bool => return Ok(format!("ve_array_append_bool({}, {})", obj_code, arg_code)),
+                                        _ => {
+                                            let c_type = self.type_to_c(inner_ty);
+                                            return Ok(format!("(ve_Array*)ve_array_append_element({}, &({}), sizeof({}))", obj_code, arg_code, c_type));
+                                        }
+                                    }
+                                }
+                            }
+
+                            let method_func_name =
+                                format!("ve_method_{}_{}", sanitized_type_name, method_name);
 
                         let mut args_code = Vec::new();
 

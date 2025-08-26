@@ -6,6 +6,70 @@ use codespan_reporting::diagnostic::{Diagnostic, Label};
 use std::collections::HashMap;
 
 impl TypeChecker {
+    fn unify_types(
+        &self,
+        pattern: &crate::ast::Type,
+        concrete: &crate::ast::Type,
+        subst: &mut std::collections::HashMap<String, crate::ast::Type>,
+    ) -> bool {
+        use crate::ast::Type;
+        match (pattern, concrete) {
+            (Type::Generic(name), _) => {
+                if let Some(existing) = subst.get(name) {
+                    existing == concrete
+                } else {
+                    subst.insert(name.clone(), concrete.clone());
+                    true
+                }
+            }
+            (Type::Array(p), Type::Array(c)) => self.unify_types(p, c, subst),
+            (Type::Pointer(p), Type::Pointer(c)) => self.unify_types(p, c, subst),
+            (Type::SizedArray(p, n1), Type::SizedArray(c, n2)) => n1 == n2 && self.unify_types(p, c, subst),
+            (Type::GenericInstance(name_p, args_p), Type::GenericInstance(name_c, args_c)) => {
+                if name_p != name_c || args_p.len() != args_c.len() {
+                    return false;
+                }
+                for (ap, ac) in args_p.iter().zip(args_c.iter()) {
+                    if !self.unify_types(ap, ac, subst) {
+                        return false;
+                    }
+                }
+                true
+            }
+            (Type::Struct(n1), Type::Struct(n2)) => n1 == n2,
+            (Type::Enum(n1), Type::Enum(n2)) => n1 == n2,
+            (Type::I32, Type::I32)
+            | (Type::I64, Type::I64)
+            | (Type::I8, Type::I8)
+            | (Type::I16, Type::I16)
+            | (Type::U8, Type::U8)
+            | (Type::U16, Type::U16)
+            | (Type::U32, Type::U32)
+            | (Type::U64, Type::U64)
+            | (Type::F32, Type::F32)
+            | (Type::F64, Type::F64)
+            | (Type::Bool, Type::Bool)
+            | (Type::String, Type::String)
+            | (Type::Void, Type::Void)
+            | (Type::RawPtr, Type::RawPtr)
+            | (Type::Unknown, Type::Unknown) => true,
+            _ => false,
+        }
+    }
+
+    fn try_match_impl_target(
+        &self,
+        impl_target: &str,
+        obj_type: &crate::ast::Type,
+    ) -> Option<std::collections::HashMap<String, crate::ast::Type>> {
+        let pattern = self.parse_type_name(impl_target);
+        let mut subst: std::collections::HashMap<String, crate::ast::Type> = std::collections::HashMap::new();
+        if self.unify_types(&pattern, obj_type, &mut subst) {
+            Some(subst)
+        } else {
+            None
+        }
+    }
     pub fn check_expr(&mut self, expr: &mut Expr) -> Result<Type, Vec<Diagnostic<FileId>>> {
         if let Expr::FieldAccess(obj, field_name, span_info) = expr {
             if let Expr::Var(name, _) = obj.as_ref() {
@@ -439,15 +503,16 @@ impl TypeChecker {
                         let mut method_param_types = Vec::new();
 
                         for impl_block in &impls {
-                            if impl_block.target_type == type_name {
+                            if let Some(subst) = self.try_match_impl_target(&impl_block.target_type, &obj_type) {
                                 for method in &impl_block.methods {
                                     if method.name == method_name {
                                         method_found = true;
-                                        method_return_type = method.return_type.clone();
+                                        // substitute generics in return type and param types
+                                        method_return_type = crate::typeck::pattern::substitute_generics(&method.return_type, &subst.iter().map(|(k,v)| (k, v)).collect());
                                         method_param_types = method
                                             .params
                                             .iter()
-                                            .map(|(_, ty)| ty.clone())
+                                            .map(|(_, ty)| crate::typeck::pattern::substitute_generics(ty, &subst.iter().map(|(k,v)| (k, v)).collect()))
                                             .collect();
                                         break;
                                     }
