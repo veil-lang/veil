@@ -120,13 +120,15 @@ impl CBackend {
             self.enum_defs
                 .insert(enum_def.name.clone(), enum_def.clone());
         }
+
+        for enum_def in &program.enums {
+            self.emit_enum(enum_def)?;
+        }
+
         for struct_def in &program.structs {
             if !imported_struct_names.contains(&struct_def.name) {
                 self.emit_struct(struct_def)?;
             }
-        }
-        for enum_def in &program.enums {
-            self.emit_enum(enum_def)?;
         }
         use crate::ast::Expr;
         fn collect_generic_enum_instances(expr: &Expr, out: &mut Vec<Type>) {
@@ -1358,20 +1360,42 @@ impl CBackend {
                                                 .find(|v| v.name == *variant_name)
                                                 .map(|variant| {
                                                     if let Some(data_types) = &variant.data {
-                                                        if let Some(ty) = data_types.get(i) {
-                                                            field_type = self.type_to_c(
-                                                                if let Some(idx) = enum_def
-                                                                    .generic_params
-                                                                    .iter()
-                                                                    .position(|gp| {
-                                                                        gp == &ty.to_string()
-                                                                    })
-                                                                {
-                                                                    &args[idx]
-                                                                } else {
-                                                                    ty
-                                                                },
-                                                            );
+                                                        match data_types {
+                                                            crate::ast::EnumVariantData::Tuple(types) => {
+                                                                if let Some(ty) = types.get(i) {
+                                                                    field_type = self.type_to_c(
+                                                                        if let Some(idx) = enum_def
+                                                                            .generic_params
+                                                                            .iter()
+                                                                            .position(|gp| {
+                                                                                gp == &ty.to_string()
+                                                                            })
+                                                                        {
+                                                                            &args[idx]
+                                                                        } else {
+                                                                            ty
+                                                                        },
+                                                                    );
+                                                                }
+                                                            }
+                                                            crate::ast::EnumVariantData::Struct(fields) => {
+                                                                if let Some(f) = fields.get(i) {
+                                                                    let ty = &f.ty;
+                                                                    field_type = self.type_to_c(
+                                                                        if let Some(idx) = enum_def
+                                                                            .generic_params
+                                                                            .iter()
+                                                                            .position(|gp| {
+                                                                                gp == &ty.to_string()
+                                                                            })
+                                                                        {
+                                                                            &args[idx]
+                                                                        } else {
+                                                                            ty
+                                                                        },
+                                                                    );
+                                                                }
+                                                            }
                                                         }
                                                     }
                                                 });
@@ -1493,20 +1517,42 @@ impl CBackend {
                                             .find(|v| v.name == *variant_name)
                                             .map(|variant| {
                                                 if let Some(data_types) = &variant.data {
-                                                    if let Some(ty) = data_types.get(i) {
-                                                        field_type = self.type_to_c(
-                                                            if let Some(idx) = enum_def
-                                                                .generic_params
-                                                                .iter()
-                                                                .position(|gp| {
-                                                                    gp == &ty.to_string()
-                                                                })
-                                                            {
-                                                                &args[idx]
-                                                            } else {
-                                                                ty
-                                                            },
-                                                        );
+                                                    match data_types {
+                                                        crate::ast::EnumVariantData::Tuple(types) => {
+                                                            if let Some(ty) = types.get(i) {
+                                                                field_type = self.type_to_c(
+                                                                    if let Some(idx) = enum_def
+                                                                        .generic_params
+                                                                        .iter()
+                                                                        .position(|gp| {
+                                                                            gp == &ty.to_string()
+                                                                        })
+                                                                    {
+                                                                        &args[idx]
+                                                                    } else {
+                                                                        ty
+                                                                    },
+                                                                );
+                                                            }
+                                                        }
+                                                        crate::ast::EnumVariantData::Struct(fields) => {
+                                                            if let Some(f) = fields.get(i) {
+                                                                let ty = &f.ty;
+                                                                field_type = self.type_to_c(
+                                                                    if let Some(idx) = enum_def
+                                                                        .generic_params
+                                                                        .iter()
+                                                                        .position(|gp| {
+                                                                            gp == &ty.to_string()
+                                                                        })
+                                                                    {
+                                                                        &args[idx]
+                                                                    } else {
+                                                                        ty
+                                                                    },
+                                                                );
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             });

@@ -32,9 +32,16 @@ impl TypeChecker {
                                 subst.insert(gp, arg);
                             }
                             let data_types = if let Some(data) = &variant.data {
-                                data.iter()
-                                    .map(|t| substitute_generics(t, &subst))
-                                    .collect::<Vec<_>>()
+                                match data {
+                                    crate::ast::EnumVariantData::Tuple(types) => types
+                                        .iter()
+                                        .map(|t| substitute_generics(t, &subst))
+                                        .collect::<Vec<_>>(),
+                                    crate::ast::EnumVariantData::Struct(fields) => fields
+                                        .iter()
+                                        .map(|f| substitute_generics(&f.ty, &subst))
+                                        .collect::<Vec<_>>(),
+                                }
                             } else {
                                 vec![]
                             };

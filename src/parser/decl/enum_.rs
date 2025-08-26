@@ -50,9 +50,33 @@ impl<'a> super::super::Parser<'a> {
                 }
 
                 self.expect(Token::RParen)?;
-                Some(types)
+                Some(crate::ast::EnumVariantData::Tuple(types))
             } else {
-                None
+                if self.check(Token::LBrace) {
+                    self.advance();
+                    let mut fields = Vec::new();
+                    if !self.check(Token::RBrace) {
+                        loop {
+                            let (field_name, field_span) = self.consume_ident()?;
+                            self.expect(Token::Colon)?;
+                            let ty = self.parse_type()?;
+                            fields.push(crate::ast::StructField {
+                                name: field_name,
+                                ty,
+                                span: field_span,
+                            });
+
+                            if !self.check(Token::Comma) {
+                                break;
+                            }
+                            self.advance();
+                        }
+                    }
+                    self.expect(Token::RBrace)?;
+                    Some(crate::ast::EnumVariantData::Struct(fields))
+                } else {
+                    None
+                }
             };
 
             variants.push(ast::EnumVariant {

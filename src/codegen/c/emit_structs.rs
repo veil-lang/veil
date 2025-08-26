@@ -96,22 +96,45 @@ impl CBackend {
         self.header.push_str("    union {\n");
 
         for variant in &enum_def.variants {
-            if let Some(data_types) = &variant.data {
-                if !data_types.is_empty() {
+            if let Some(data) = &variant.data {
+                let mut fields: Vec<(String, &ast::Type)> = Vec::new();
+                match data {
+                    crate::ast::EnumVariantData::Tuple(types) => {
+                        for (i, ty) in types.iter().enumerate() {
+                            let concrete_ty = if let Some(idx) = enum_def
+                                .generic_params
+                                .iter()
+                                .position(|gp| gp == &ty.to_string())
+                            {
+                                type_args.get(idx).unwrap_or(ty)
+                            } else {
+                                ty
+                            };
+                            fields.push((format!("field{}", i), concrete_ty));
+                        }
+                    }
+                    crate::ast::EnumVariantData::Struct(struct_fields) => {
+                        for f in struct_fields.iter() {
+                            let concrete_ty = if let Some(idx) = enum_def
+                                .generic_params
+                                .iter()
+                                .position(|gp| gp == &f.ty.to_string())
+                            {
+                                type_args.get(idx).unwrap_or(&f.ty)
+                            } else {
+                                &f.ty
+                            };
+                            fields.push((self.sanitize_member_name(&f.name), concrete_ty));
+                        }
+                    }
+                }
+
+                if !fields.is_empty() {
                     self.header.push_str("        struct {\n");
-                    for (i, ty) in data_types.iter().enumerate() {
-                        let concrete_ty = if let Some(idx) = enum_def
-                            .generic_params
-                            .iter()
-                            .position(|gp| gp == &ty.to_string())
-                        {
-                            type_args.get(idx).unwrap_or(ty)
-                        } else {
-                            ty
-                        };
-                        let c_type = self.type_to_c(concrete_ty);
+                    for (name, ty) in fields.iter() {
+                        let c_type = self.type_to_c(ty);
                         self.header
-                            .push_str(&format!("            {} field{};\n", c_type, i));
+                            .push_str(&format!("            {} {};\n", c_type, name));
                     }
                     self.header
                         .push_str(&format!("        }} {};\n", self.sanitize_member_name(&variant.name)));
@@ -123,22 +146,46 @@ impl CBackend {
         self.header.push_str(&format!("}} {};\n\n", enum_name));
 
         for variant in &enum_def.variants {
-            if let Some(data_types) = &variant.data {
-                if !data_types.is_empty() {
-                    let mut params = Vec::new();
-                    for (i, ty) in data_types.iter().enumerate() {
-                        let concrete_ty = if let Some(idx) = enum_def
-                            .generic_params
-                            .iter()
-                            .position(|gp| gp == &ty.to_string())
-                        {
-                            type_args.get(idx).unwrap_or(ty)
-                        } else {
-                            ty
-                        };
-                        params.push(format!("{} field{}", self.type_to_c(concrete_ty), i));
+            if let Some(data) = &variant.data {
+                let mut params: Vec<String> = Vec::new();
+                let mut assignments: Vec<(String, String)> = Vec::new();
+                match data {
+                    crate::ast::EnumVariantData::Tuple(types) => {
+                        for (i, ty) in types.iter().enumerate() {
+                            let concrete_ty = if let Some(idx) = enum_def
+                                .generic_params
+                                .iter()
+                                .position(|gp| gp == &ty.to_string())
+                            {
+                                type_args.get(idx).unwrap_or(ty)
+                            } else {
+                                ty
+                            };
+                            let cname = self.type_to_c(concrete_ty);
+                            params.push(format!("{} field{}", cname, i));
+                            assignments.push((format!("field{}", i), format!("field{}", i)));
+                        }
                     }
+                    crate::ast::EnumVariantData::Struct(struct_fields) => {
+                        for f in struct_fields.iter() {
+                            let concrete_ty = if let Some(idx) = enum_def
+                                .generic_params
+                                .iter()
+                                .position(|gp| gp == &f.ty.to_string())
+                            {
+                                type_args.get(idx).unwrap_or(&f.ty)
+                            } else {
+                                &f.ty
+                            };
+                            let cname = self.type_to_c(concrete_ty);
+                            let param_name = self.sanitize_member_name(&f.name);
+                            params.push(format!("{} {}", cname, param_name));
+                            assignments.push((param_name.clone(), param_name));
+                        }
+                    }
+                }
 
+                if !params.is_empty() {
                     self.header.push_str(&format!(
                         "static {} {}_{}_new({}) {{\n",
                         enum_name,
@@ -153,12 +200,12 @@ impl CBackend {
                         enum_name, variant.name
                     ));
 
-                    for (i, _) in data_types.iter().enumerate() {
+                    for (field_member, param_name) in assignments.iter() {
                         self.header.push_str(&format!(
-                            "    result.data.{}.field{} = field{};\n",
+                            "    result.data.{}.{} = {};\n",
                             self.sanitize_member_name(&variant.name),
-                            i,
-                            i
+                            field_member,
+                            param_name
                         ));
                     }
 

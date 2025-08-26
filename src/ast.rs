@@ -92,10 +92,16 @@ pub struct StructDef {
 #[derive(Debug, Clone)]
 pub struct EnumVariant {
     pub name: String,
-    pub data: Option<Vec<Type>>,
+    pub data: Option<EnumVariantData>,
     pub value: Option<i32>,
     #[allow(dead_code)]
     pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub enum EnumVariantData {
+    Tuple(Vec<Type>),
+    Struct(Vec<StructField>),
 }
 
 #[derive(Debug, Clone)]
@@ -598,9 +604,18 @@ pub trait AstVisitor {
     }
 
     fn visit_enum_variant(&mut self, variant: &EnumVariant) {
-        if let Some(types) = &variant.data {
-            for ty in types {
-                self.visit_type(ty);
+        if let Some(data) = &variant.data {
+            match data {
+                EnumVariantData::Tuple(types) => {
+                    for ty in types {
+                        self.visit_type(ty);
+                    }
+                }
+                EnumVariantData::Struct(fields) => {
+                    for f in fields {
+                        self.visit_type(&f.ty);
+                    }
+                }
             }
         }
     }

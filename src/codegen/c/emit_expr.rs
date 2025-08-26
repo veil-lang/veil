@@ -660,30 +660,42 @@ impl CBackend {
                                                     .iter()
                                                     .find(|v| v.name == *variant_name)
                                                     .map(|variant| {
-                                                        if let Some(data_types) = &variant.data {
-                                                            if let Some(ty) = data_types.get(i) {
-                                                                if let Type::Generic(param_name) =
-                                                                    ty
-                                                                {
-                                                                    if let Some(generic_idx) =
-                                                                        enum_def
-                                                                            .generic_params
-                                                                            .iter()
-                                                                            .position(|p| {
-                                                                                p == param_name
-                                                                            })
-                                                                    {
-                                                                        if let Some(concrete_type) =
-                                                                            args.get(generic_idx)
-                                                                        {
-                                                                            field_type = self
-                                                                                .type_to_c(
-                                                                                    concrete_type,
-                                                                                );
+                                                        if let Some(data) = &variant.data {
+                                                            match data {
+                                                                crate::ast::EnumVariantData::Tuple(types) => {
+                                                                    if let Some(ty) = types.get(i) {
+                                                                        if let Type::Generic(param_name) = ty {
+                                                                            if let Some(generic_idx) = enum_def
+                                                                                .generic_params
+                                                                                .iter()
+                                                                                .position(|p| p == param_name)
+                                                                            {
+                                                                                if let Some(concrete_type) = args.get(generic_idx) {
+                                                                                    field_type = self.type_to_c(concrete_type);
+                                                                                }
+                                                                            }
+                                                                        } else {
+                                                                            field_type = self.type_to_c(ty);
                                                                         }
                                                                     }
-                                                                } else {
-                                                                    field_type = self.type_to_c(ty);
+                                                                }
+                                                                crate::ast::EnumVariantData::Struct(fields) => {
+                                                                    if let Some(f) = fields.get(i) {
+                                                                        let ty = &f.ty;
+                                                                        if let Type::Generic(param_name) = ty {
+                                                                            if let Some(generic_idx) = enum_def
+                                                                                .generic_params
+                                                                                .iter()
+                                                                                .position(|p| p == param_name)
+                                                                            {
+                                                                                if let Some(concrete_type) = args.get(generic_idx) {
+                                                                                    field_type = self.type_to_c(concrete_type);
+                                                                                }
+                                                                            }
+                                                                        } else {
+                                                                            field_type = self.type_to_c(ty);
+                                                                        }
+                                                                    }
                                                                 }
                                                             }
                                                         }
