@@ -304,5 +304,26 @@ fn keyword_or_ident(s: string) -> Token {
     return Token.Ident(s);
 }
 
+
+enum Expr {
+    Ident(string),
+    Int(string),
+    Binary { left: Expr, op: Binop, right: Expr },
+}
+
+enum BinOp { Add, Sub, Mul, Div }
+
+enum Stmt {
+    Let(string, Expr),
+    Return(Expr),
+    Expr(Expr),
+}
+
+struct Parser {
+    tokens: Token[],
+    pos: int,
+    current: Token
+}
+
 fn main() {
 }
