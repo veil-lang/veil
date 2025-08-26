@@ -90,9 +90,6 @@ impl<'a> super::super::Parser<'a> {
             Token::Dot => {
                 let (field, field_span) = self.consume_ident()?;
                 if self.check(Token::LParen) {
-                    // Distinguish between enum variant construction Enum.Variant(args)
-                    // and method call object.method(args). Jeśli lhs jest identyfikatorem enuma
-                    // i 'field' jest wariantem tego enuma traktujemy to jako EnumConstruct.
                     let is_enum_variant = if let ast::Expr::Var(enum_name, _) = &lhs {
                         self.enums.iter().any(|e| e.name == *enum_name && e.variants.iter().any(|v| v.name == field))
                     } else { false };
