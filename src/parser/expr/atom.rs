@@ -154,7 +154,12 @@ impl<'a> super::super::Parser<'a> {
                     let look1 = self.peek().cloned();
                     let look2 = self.tokens.get(self.pos + 1).cloned();
                     let look3 = self.tokens.get(self.pos + 2).cloned();
-                    if let (Some((Token::Dot, _)), Some((Token::Ident(variant_name), _)), Some((Token::LBrace, _))) = (look1, look2, look3) {
+                    
+                    // Check if this is an enum construction pattern: identifier.variant { ... }
+                    // Only trigger if the variant and brace are immediately adjacent
+                    if let (Some((Token::Dot, _)), Some((Token::Ident(variant_name), variant_span)), Some((Token::LBrace, brace_span))) = (look1, look2, look3) {
+                        // Check if the variant and brace are adjacent (no other tokens in between)
+                        if variant_span.end() == brace_span.start() {
                         self.advance();
                         let variant = variant_name.clone();
                         self.advance();
@@ -181,6 +186,7 @@ impl<'a> super::super::Parser<'a> {
                                 is_tail: false,
                             },
                         ));
+                        }
                     }
                 }
 
