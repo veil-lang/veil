@@ -292,7 +292,7 @@ pub enum Expr {
     F32(f32, ExprInfo),
     FfiCall(String, Vec<Expr>, ExprInfo),
     EnumConstruct(String, String, Vec<Expr>, ExprInfo),
-    Match(Box<Pattern>, Vec<MatchArm>, ExprInfo),
+    Match(Box<Expr>, Vec<MatchArm>, ExprInfo),
     If(Box<Expr>, Vec<Stmt>, Option<Vec<Stmt>>, ExprInfo),
     Loop(Vec<Stmt>, ExprInfo),
     Void(ExprInfo),
@@ -904,7 +904,7 @@ pub trait AstVisitor {
                 }
             }
             Expr::Match(pattern, arms, _) => {
-                self.visit_pattern(pattern);
+                self.visit_expr(pattern);
                 for arm in arms {
                     self.visit_match_arm(arm);
                 }
@@ -1104,7 +1104,7 @@ impl AstVisitor for GenericCallCollector {
                 }
             }
             Expr::Match(pattern, arms, _) => {
-                self.visit_pattern(pattern);
+                self.visit_expr(pattern);
                 for arm in arms {
                     self.visit_match_arm(arm);
                 }

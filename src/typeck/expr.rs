@@ -1198,17 +1198,9 @@ impl TypeChecker {
                 info.ty = ty.clone();
                 Ok(ty)
             }
-            Expr::Match(pattern, arms, info) => {
-                let matched_ty = match pattern.as_ref() {
-                    ast::Pattern::Variable(var_name, _) => self
-                        .context
-                        .variables
-                        .get(var_name)
-                        .cloned()
-                        .unwrap_or(Type::Unknown),
-                    ast::Pattern::EnumVariant(enum_name, _, _, _) => Type::Enum(enum_name.clone()),
-                    _ => Type::Unknown,
-                };
+            Expr::Match(expr, arms, info) => {
+                // First, typecheck the expression being matched
+                let matched_ty = self.check_expr(expr)?;
                 let mut arm_types = Vec::new();
                 for arm in arms.iter_mut() {
                     let original_variables = self.context.variables.clone();

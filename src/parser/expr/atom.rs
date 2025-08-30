@@ -154,7 +154,10 @@ impl<'a> super::super::Parser<'a> {
                     let look1 = self.peek().cloned();
                     let look2 = self.tokens.get(self.pos + 1).cloned();
                     let look3 = self.tokens.get(self.pos + 2).cloned();
-                    if let (Some((Token::Dot, _)), Some((Token::Ident(variant_name), _)), Some((Token::LBrace, _))) = (look1, look2, look3) {
+                    let look4 = self.tokens.get(self.pos + 3).cloned();
+                    let look5 = self.tokens.get(self.pos + 4).cloned();
+                    
+                    if let (Some((Token::Dot, _)), Some((Token::Ident(variant_name), _)), Some((Token::LBrace, _)), Some((Token::Ident(_), _)), Some((Token::Colon, _))) = (look1, look2, look3, look4, look5) {
                         self.advance();
                         let variant = variant_name.clone();
                         self.advance();

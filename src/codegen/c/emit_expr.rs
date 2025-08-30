@@ -19,6 +19,97 @@ impl CBackend {
 
                 let left_type = left.get_type();
                 let right_type = right.get_type();
+                
+                // Handle enum comparisons
+                let is_enum_cmp = matches!(left_type, Type::Enum(_) | Type::GenericInstance(_, _)) 
+                    || matches!(right_type, Type::Enum(_) | Type::GenericInstance(_, _));
+                if is_enum_cmp {
+                    match op {
+                        ast::BinOp::Eq => {
+                            // For enums, we need to check if they are simple enums or complex enums
+                            let left_expr = if let Type::Enum(name) = &left_type {
+                                if let Some(enum_def) = self.enum_defs.get(name) {
+                                    let is_simple_enum = enum_def.variants.iter().all(|v| v.data.is_none());
+                                    if is_simple_enum {
+                                        left_code.clone() // Simple enum - direct comparison
+                                    } else {
+                                        format!("({}).tag", left_code) // Complex enum - compare tag
+                                    }
+                                } else {
+                                    format!("({}).tag", left_code) // Default to tag comparison
+                                }
+                            } else if matches!(left_type, Type::GenericInstance(_, _)) {
+                                format!("({}).tag", left_code) // Generic instances always use tag
+                            } else {
+                                left_code.clone()
+                            };
+                            
+                            let right_expr = if let Type::Enum(name) = &right_type {
+                                if let Some(enum_def) = self.enum_defs.get(name) {
+                                    let is_simple_enum = enum_def.variants.iter().all(|v| v.data.is_none());
+                                    if is_simple_enum {
+                                        right_code.clone() // Simple enum - direct comparison
+                                    } else {
+                                        format!("({}).tag", right_code) // Complex enum - compare tag
+                                    }
+                                } else {
+                                    format!("({}).tag", right_code) // Default to tag comparison
+                                }
+                            } else if matches!(right_type, Type::GenericInstance(_, _)) {
+                                format!("({}).tag", right_code) // Generic instances always use tag
+                            } else {
+                                right_code.clone()
+                            };
+                            
+                            return Ok(format!("({} == {})", left_expr, right_expr));
+                        }
+                        ast::BinOp::NotEq => {
+                            // For enums, we need to check if they are simple enums or complex enums
+                            let left_expr = if let Type::Enum(name) = &left_type {
+                                if let Some(enum_def) = self.enum_defs.get(name) {
+                                    let is_simple_enum = enum_def.variants.iter().all(|v| v.data.is_none());
+                                    if is_simple_enum {
+                                        left_code.clone() // Simple enum - direct comparison
+                                    } else {
+                                        format!("({}).tag", left_code) // Complex enum - compare tag
+                                    }
+                                } else {
+                                    format!("({}).tag", left_code) // Default to tag comparison
+                                }
+                            } else if matches!(left_type, Type::GenericInstance(_, _)) {
+                                format!("({}).tag", left_code) // Generic instances always use tag
+                            } else {
+                                left_code.clone()
+                            };
+                            
+                            let right_expr = if let Type::Enum(name) = &right_type {
+                                if let Some(enum_def) = self.enum_defs.get(name) {
+                                    let is_simple_enum = enum_def.variants.iter().all(|v| v.data.is_none());
+                                    if is_simple_enum {
+                                        right_code.clone() // Simple enum - direct comparison
+                                    } else {
+                                        format!("({}).tag", right_code) // Complex enum - compare tag
+                                    }
+                                } else {
+                                    format!("({}).tag", right_code) // Default to tag comparison
+                                }
+                            } else if matches!(right_type, Type::GenericInstance(_, _)) {
+                                format!("({}).tag", right_code) // Generic instances always use tag
+                            } else {
+                                right_code.clone()
+                            };
+                            
+                            return Ok(format!("({} != {})", left_expr, right_expr));
+                        }
+                        _ => {
+                            // Other operations not supported for enums
+                            return Err(CompileError::UnsupportedOperation(
+                                format!("Unsupported operation {:?} for enum types", op)
+                            ));
+                        }
+                    }
+                }
+                
                 let is_string_cmp =
                     matches!(left_type, Type::String) || matches!(right_type, Type::String);
                 if is_string_cmp {
@@ -118,6 +209,8 @@ impl CBackend {
                     | Type::Pointer(_)
                     | Type::RawPtr
                     | Type::Struct(_)
+                    | Type::Enum(_)
+                    | Type::GenericInstance(_, _)
                     | Type::Array(_)
                     | Type::SizedArray(_, _)
                     | Type::F32
@@ -616,69 +709,81 @@ impl CBackend {
                 }
             }
 
-            ast::Expr::Match(pattern, arms, info) => {
-                let matched_var = match pattern.as_ref() {
-                    ast::Pattern::Variable(var_name, _) => var_name.clone(),
-                    _ => {
-                        return Err(CompileError::CodegenError {
-                            message: "Only variable patterns supported in match".to_string(),
-                            span: None,
-                            file_id: self.file_id,
-                        });
-                    }
-                };
-
-                let matched_type = self
-                    .variables
-                    .borrow()
-                    .get(&matched_var)
-                    .cloned()
-                    .unwrap_or(Type::Unknown);
-
+            ast::Expr::Match(expr, arms, info) => {
+                // Generate code for the expression being matched
+                let expr_code = self.emit_expr(expr)?;
+                let matched_type = expr.get_type();
+                
+                // Generate a unique temporary variable name to hold the matched expression
+                let temp_var = format!("_match_temp_{}", self.temp_counter);
+                self.temp_counter += 1;
+                
+                // Determine the expression to use in the switch statement
                 let switch_expr = match matched_type {
-                    Type::Enum(enum_name) => {
+                    Type::Enum(ref enum_name) => {
                         if self.is_simple_enum(&enum_name) {
-                            matched_var.clone()
+                            temp_var.clone()
                         } else {
-                            format!("{}.tag", matched_var)
+                            format!("{}.tag", temp_var)
                         }
                     }
-                    Type::GenericInstance(_, _) => format!("{}.tag", matched_var),
-                    _ => matched_var.clone(),
+                    Type::GenericInstance(_, _) => format!("{}.tag", temp_var),
+                    _ => temp_var.clone(),
                 };
 
                 let mut code = String::new();
+                
+                // Declare and initialize the temporary variable  
+                let c_type = self.type_to_c(&matched_type);
+                code.push_str(&format!("{{ {} {} = {};\n", c_type, temp_var, expr_code));
                 code.push_str(&format!("switch ({}) {{\n", switch_expr));
 
                 for arm in arms {
                     match &arm.pattern {
                         ast::Pattern::EnumVariant(enum_name, variant_name, patterns, _) => {
-                            let case_value = if let Some(matched_type) =
-                                self.variables.borrow().get(&matched_var)
-                            {
-                                match matched_type {
-                                    Type::GenericInstance(_, _) => {
-                                        format!(
-                                            "ve_{}_{}",
-                                            self.type_to_c_name(matched_type),
-                                            variant_name
-                                        )
-                                    }
-                                    _ => format!("ve_{}_{}", enum_name, variant_name),
+                            let case_value = match &matched_type {
+                                Type::GenericInstance(_, _) => {
+                                    format!(
+                                        "ve_{}_{}",
+                                        self.type_to_c_name(&matched_type),
+                                        variant_name
+                                    )
                                 }
-                            } else {
-                                format!("ve_{}_{}", enum_name, variant_name)
+                                _ => format!("ve_{}_{}", enum_name, variant_name),
                             };
                             code.push_str(&format!("case {}: {{\n", case_value));
 
                             for (i, pattern) in patterns.iter().enumerate() {
                                 if let ast::Pattern::Variable(var_name, _) = pattern {
                                     let mut field_type = "int".to_string();
-                                    if let Some(matched_type) =
-                                        self.variables.borrow().get(&matched_var)
-                                    {
-                                        if let Type::GenericInstance(enum_name, args) = matched_type
-                                        {
+                                    
+                                    // Handle both regular enums and generic instances
+                                    match &matched_type {
+                                        Type::Enum(enum_name) => {
+                                            if let Some(enum_def) = self.enum_defs.get(enum_name) {
+                                                enum_def
+                                                    .variants
+                                                    .iter()
+                                                    .find(|v| v.name == *variant_name)
+                                                    .map(|variant| {
+                                                        if let Some(data) = &variant.data {
+                                                            match data {
+                                                                crate::ast::EnumVariantData::Tuple(types) => {
+                                                                    if let Some(ty) = types.get(i) {
+                                                                        field_type = self.type_to_c(ty);
+                                                                    }
+                                                                }
+                                                                crate::ast::EnumVariantData::Struct(fields) => {
+                                                                    if let Some(f) = fields.get(i) {
+                                                                        field_type = self.type_to_c(&f.ty);
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    });
+                                            }
+                                        }
+                                        Type::GenericInstance(enum_name, args) => {
                                             if let Some(enum_def) = self.enum_defs.get(enum_name) {
                                                 enum_def
                                                     .variants
@@ -727,36 +832,38 @@ impl CBackend {
                                                     });
                                             }
                                         }
-                                        code.push_str(&format!(
-                                            "    {} {} = {}.data.{}.field{};\n",
-                                            field_type,
-                                            var_name,
-                                            matched_var,
-                                            variant_name.to_lowercase(),
-                                            i
-                                        ));
+                                        _ => {}
                                     }
-                                }
-
-                                let body_code = match &arm.body {
-                                    ast::MatchArmBody::Expr(expr) => self.emit_expr(expr)?,
-                                    ast::MatchArmBody::Block(stmts) => {
-                                        let mut block_code = String::new();
-                                        for stmt in stmts {
-                                            block_code.push_str(&self.emit_stmt_to_string(stmt)?);
-                                        }
-                                        block_code
+                                    
+                                    code.push_str(&format!(
+                                        "    {} {} = {}.data.{}.field{};\n",
+                                        field_type,
+                                        var_name,
+                                        temp_var,
+                                        self.sanitize_member_name(&variant_name.to_lowercase()),
+                                        i
+                                    ));
                                     }
-                                };
-
-                                if info.is_tail {
-                                    code.push_str(&format!("    return {};\n", body_code));
-                                } else {
-                                    code.push_str(&format!("    {};\n", body_code));
-                                    code.push_str("    break;\n");
-                                }
-                                code.push_str("}\n");
                             }
+
+                            let body_code = match &arm.body {
+                                ast::MatchArmBody::Expr(expr) => self.emit_expr(expr)?,
+                                ast::MatchArmBody::Block(stmts) => {
+                                    let mut block_code = String::new();
+                                    for stmt in stmts {
+                                        block_code.push_str(&self.emit_stmt_to_string(stmt)?);
+                                    }
+                                    block_code
+                                }
+                            };
+
+                            if info.is_tail {
+                                code.push_str(&format!("    return {};\n", body_code));
+                            } else {
+                                code.push_str(&format!("    {};\n", body_code));
+                                code.push_str("    break;\n");
+                            }
+                            code.push_str("}\n");
                         }
                         ast::Pattern::Literal(expr, _) => {
                             let literal_code = self.emit_expr(expr)?;
@@ -808,7 +915,8 @@ impl CBackend {
                         }
                     }
                 }
-                code.push_str("}\n");
+                code.push_str("}\n"); // close switch
+                code.push_str("}\n"); // close temp variable block
                 Ok(code)
             }
             ast::Expr::If(condition, then_branch, else_branch, _info) => {
