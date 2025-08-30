@@ -3,9 +3,9 @@ mod expr;
 mod pattern;
 mod stmt;
 
-use super::ast::{self, BinOp, Expr, Stmt, Type};
-use codespan::{FileId, Span};
-use codespan_reporting::diagnostic::{Diagnostic, Label};
+use super::ast::{self, Type};
+use codespan::FileId;
+use codespan_reporting::diagnostic::Diagnostic;
 use std::collections::HashMap;
 
 #[derive(Debug)]
@@ -136,6 +136,11 @@ impl TypeChecker {
                     let constructor_name = format!("{}.constructor", impl_block.target_type);
                     self.functions
                         .insert(constructor_name, (params, method.return_type.clone()));
+                } else {
+                    let params: Vec<Type> = method.params.iter().map(|(_, t)| t.clone()).collect();
+                    let method_key = format!("{}.{}", impl_block.target_type, method.name);
+                    self.functions
+                        .insert(method_key, (params, method.return_type.clone()));
                 }
             }
         }

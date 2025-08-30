@@ -373,5 +373,121 @@ impl Parser {
 
 
 
+fn token_to_string(tok: Token) -> string {
+    match tok {
+        Token.KwFn => "KwFn",
+        Token.KwTest => "KwTest",
+        Token.KwLet => "KwLet",
+        Token.KwVar => "KwVar",
+        Token.KwIf => "KwIf",
+        Token.KwElse => "KwElse",
+        Token.KwReturn => "KwReturn",
+        Token.KwRawPtr => "KwRawPtr",
+        Token.KwDefer => "KwDefer",
+        Token.KwAs => "KwAs",
+        Token.KwWhile => "KwWhile",
+        Token.KwFor => "KwFor",
+        Token.KwStep => "KwStep",
+        Token.KwLoop => "KwLoop",
+        Token.KwImport => "KwImport",
+        Token.KwFrom => "KwFrom",
+        Token.KwExport => "KwExport",
+        Token.KwStruct => "KwStruct",
+        Token.KwImpl => "KwImpl",
+        Token.KwNew => "KwNew",
+        Token.KwConstructor => "KwConstructor",
+        Token.KwEnum => "KwEnum",
+        Token.KwMatch => "KwMatch",
+        Token.KwTrue => "KwTrue",
+        Token.KwFalse => "KwFalse",
+        Token.KwNone => "KwNone",
+        Token.KwIn => "KwIn",
+        Token.KwBreak => "KwBreak",
+        Token.KwContinue => "KwContinue",
+        Token.KwForeign => "KwForeign",
+
+        Token.TyBool => "TyBool",
+        Token.TyString => "TyString",
+        Token.TyVoid => "TyVoid",
+        Token.TyAny => "TyAny",
+        Token.TyU8 => "TyU8",
+        Token.TyU16 => "TyU16",
+        Token.TyU32 => "TyU32",
+        Token.TyU64 => "TyU64",
+        Token.TyI8 => "TyI8",
+        Token.TyI16 => "TyI16",
+        Token.TyI32 => "TyI32",
+        Token.TyI64 => "TyI64",
+        Token.TyF32 => "TyF32",
+        Token.TyF64 => "TyF64",
+
+        Token.Dot => "Dot",
+        Token.Ellipsis => "Ellipsis",
+        Token.Arrow => "Arrow",
+        Token.Colon => "Colon",
+        Token.EqEq => "EqEq",
+        Token.NotEq => "NotEq",
+        Token.GtEq => "GtEq",
+        Token.LtEq => "LtEq",
+        Token.LParen => "LParen",
+        Token.RParen => "RParen",
+        Token.LBrace => "LBrace",
+        Token.RBrace => "RBrace",
+        Token.LBracket => "LBracket",
+        Token.RBracket => "RBracket",
+        Token.EmptyArray => "EmptyArray",
+        Token.Comma => "Comma",
+        Token.Eq => "Eq",
+        Token.Semi => "Semi",
+        Token.Plus => "Plus",
+        Token.Minus => "Minus",
+        Token.Star => "Star",
+        Token.Slash => "Slash",
+        Token.DoubleStar => "DoubleStar",
+        Token.Caret => "Caret",
+        Token.Percent => "Percent",
+        Token.Gt => "Gt",
+        Token.Lt => "Lt",
+        Token.DotDotEq => "DotDotEq",
+        Token.DotDotGt => "DotDotGt",
+        Token.DotDotLt => "DotDotLt",
+        Token.DotDot => "DotDot",
+        Token.AndAnd => "AndAnd",
+        Token.OrOr => "OrOr",
+        Token.Pipe => "Pipe",
+        Token.Arrow2 => "Arrow2",
+        Token.Hash => "Hash",
+        Token.Bang => "Bang",
+        Token.Question => "Question",
+
+        Token.Ident(name) => "Ident(" + name + ")",
+        Token.Str(s) => "Str(\"" + s + "\")",
+        Token.TemplateStr(s) => "TemplateStr(`" + s + "`)",
+        Token.Int(v) => "Int(" + v + ")",
+        Token.F32(v) => "F32(" + v + ")",
+
+        Token.Error(msg) => "Error(" + msg + ")",
+        Token.Eof => "Eof",
+
+        _ => "OtherToken",
+    }
+}
+
+fn run_on_source(src: string) {
+    print("=== SOURCE ===");
+    print(src);
+    print("=== TOKENS ===");
+    let lexer = new Lexer(src);
+    loop {
+        let tok = lexer.next_token();
+        let s = token_to_string(tok);
+        print(s);
+        if tok == Token.Eof {
+            break;
+        }
+    }
+    print("=== END ===");
+}
+
 fn main() {
 }

@@ -59,8 +59,31 @@ impl TypeChecker {
                     Ok(())
                 }
                 Type::Enum(expected_enum) if expected_enum == enum_name => {
-                    for pattern in patterns {
-                        self.check_pattern(pattern, &Type::Unknown)?;
+                    if let Some(enum_def) = self.enums.iter().find(|e| &e.name == enum_name) {
+                        if let Some(variant) = enum_def
+                            .variants
+                            .iter()
+                            .find(|v| &v.name == variant_name)
+                        {
+                            let data_types: Vec<Type> = if let Some(data) = &variant.data {
+                                match data {
+                                    crate::ast::EnumVariantData::Tuple(types) => types.clone(),
+                                    crate::ast::EnumVariantData::Struct(fields) => {
+                                        fields.iter().map(|f| f.ty.clone()).collect()
+                                    }
+                                }
+                            } else {
+                                vec![]
+                            };
+                            for (i, subpat) in patterns.iter().enumerate() {
+                                let ty = data_types.get(i).cloned().unwrap_or(Type::Unknown);
+                                self.check_pattern(subpat, &ty)?;
+                            }
+                            return Ok(());
+                        }
+                    }
+                    for subpat in patterns {
+                        self.check_pattern(subpat, &Type::Unknown)?;
                     }
                     Ok(())
                 }

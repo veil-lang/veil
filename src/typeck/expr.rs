@@ -324,11 +324,30 @@ impl TypeChecker {
                             } else {
                                 left_ty
                             }
-                        } else if left_ty == Type::String
-                            && right_ty == Type::String
-                            && matches!(op, BinOp::Add)
+                        } else if matches!(op, BinOp::Add)
+                            && (left_ty == Type::String
+                                || right_ty == Type::String)
                         {
-                            Type::String
+                            if left_ty == Type::String && right_ty == Type::String {
+                                Type::String
+                            } else if left_ty == Type::String
+                                && Self::is_convertible(&right_ty, &Type::String)
+                            {
+                                Type::String
+                            } else if right_ty == Type::String
+                                && Self::is_convertible(&left_ty, &Type::String)
+                            {
+                                Type::String
+                            } else {
+                                self.report_error(
+                                    &format!(
+                                        "Cannot apply {:?} to {} and {}",
+                                        op, left_ty, right_ty
+                                    ),
+                                    *span,
+                                );
+                                Type::Unknown
+                            }
                         } else {
                             self.report_error(
                                 &format!("Cannot apply {:?} to {} and {}", op, left_ty, right_ty),
@@ -519,6 +538,33 @@ impl TypeChecker {
                                 }
                                 if method_found {
                                     break;
+                                }
+                            }
+                        }
+
+                        if !method_found {
+                            if let Type::Struct(ref simple_name) = obj_type {
+                                for impl_block in &impls {
+                                    if impl_block.target_type == *simple_name {
+                                        if let Some(method) = impl_block.methods.iter().find(|m| m.name == method_name) {
+                                            method_found = true;
+                                            method_return_type = method.return_type.clone();
+                                            method_param_types = method
+                                                .params
+                                                .iter()
+                                                .map(|(_, ty)| ty.clone())
+                                                .collect();
+                                            break;
+                                        }
+                                    }
+                                }
+                                if !method_found {
+                                    let synthetic_key = format!("{}.{}", simple_name, method_name);
+                                    if let Some((params, ret)) = self.functions.get(&synthetic_key).cloned() {
+                                        method_found = true;
+                                        method_param_types = params;
+                                        method_return_type = ret;
+                                    }
                                 }
                             }
                         }
@@ -810,11 +856,7 @@ impl TypeChecker {
             Expr::FieldAccess(
                 obj,
                 field_name,
-                ast::ExprInfo {
-                    span,
-                    ty: expr_type,
-                    is_tail,
-                },
+                ast::ExprInfo { span, ty: expr_type, is_tail: _ },
             ) => {
                 let obj_ty = self.check_expr(obj)?;
                 match obj_ty {
@@ -851,11 +893,7 @@ impl TypeChecker {
             }
             Expr::ArrayInit(
                 elements,
-                ast::ExprInfo {
-                    span,
-                    ty: expr_type,
-                    is_tail,
-                },
+                ast::ExprInfo { span, ty: expr_type, is_tail: _ },
             ) => {
                 if elements.is_empty() {
                     self.report_error("Cannot infer type of empty array", *span);
