@@ -7,17 +7,22 @@ impl CBackend {
     pub fn emit_stmt(&mut self, stmt: &ast::Stmt) -> Result<(), CompileError> {
         match stmt {
             ast::Stmt::Let(name, ty, expr, _, _) => {
-                if let ast::Expr::Match(pattern, arms, info) = expr {
+                if let ast::Expr::Match(expr, arms, info) = expr {
                     let var_type = ty.clone().unwrap_or_else(|| info.ty.clone());
                     let c_ty = self.type_to_c(&var_type);
                     let temp_var = format!("_match_result_{}", info.span.start());
                     self.body.push_str(&format!("{} {} = 0;\n", c_ty, temp_var));
+                    
+                    // Generate code for the expression being matched
+                    let expr_code = self.emit_expr(expr)?;
+                    let matched_type = expr.get_type();
+                    let temp_input = format!("_match_input_{}", info.span.start());
+                    let c_input_type = self.type_to_c(&matched_type);
+                    self.body.push_str(&format!("{} {} = {};\n", c_input_type, temp_input, expr_code));
+                    
                     let mut match_code = String::new();
                     self.emit_match_switch_with_result(
-                        &match pattern.as_ref() {
-                            ast::Pattern::Variable(var_name, _) => var_name.clone(),
-                            _ => "_match_input".to_string(),
-                        },
+                        &temp_input,
                         &temp_var,
                         arms,
                         &mut match_code,

@@ -35,6 +35,7 @@ pub struct CBackend {
     generated_optional_types: HashSet<String>,
     current_loop_result: Option<String>,
     current_loop_break: Option<String>,
+    temp_counter: usize,
 }
 
 #[derive(Debug, Default)]
@@ -86,6 +87,7 @@ impl CBackend {
             generated_optional_types: HashSet::new(),
             current_loop_result: None,
             current_loop_break: None,
+            temp_counter: 0,
         }
     }
 

@@ -5,7 +5,7 @@ use codespan_reporting::diagnostic::Diagnostic;
 
 impl<'a> super::super::Parser<'a> {
     pub fn parse_match(&mut self, start_span: Span) -> Result<ast::Expr, Diagnostic<FileId>> {
-        let expr = self.parse_pattern()?;
+        let expr = self.parse_expr()?;
         self.expect(Token::LBrace)?;
 
         let mut arms = Vec::new();
