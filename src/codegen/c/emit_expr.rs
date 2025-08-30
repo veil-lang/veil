@@ -118,6 +118,8 @@ impl CBackend {
                     | Type::Pointer(_)
                     | Type::RawPtr
                     | Type::Struct(_)
+                    | Type::Enum(_)
+                    | Type::GenericInstance(_, _)
                     | Type::Array(_)
                     | Type::SizedArray(_, _)
                     | Type::F32
