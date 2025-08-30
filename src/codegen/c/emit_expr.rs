@@ -19,6 +19,97 @@ impl CBackend {
 
                 let left_type = left.get_type();
                 let right_type = right.get_type();
+                
+                // Handle enum comparisons
+                let is_enum_cmp = matches!(left_type, Type::Enum(_) | Type::GenericInstance(_, _)) 
+                    || matches!(right_type, Type::Enum(_) | Type::GenericInstance(_, _));
+                if is_enum_cmp {
+                    match op {
+                        ast::BinOp::Eq => {
+                            // For enums, we need to check if they are simple enums or complex enums
+                            let left_expr = if let Type::Enum(name) = &left_type {
+                                if let Some(enum_def) = self.enum_defs.get(name) {
+                                    let is_simple_enum = enum_def.variants.iter().all(|v| v.data.is_none());
+                                    if is_simple_enum {
+                                        left_code.clone() // Simple enum - direct comparison
+                                    } else {
+                                        format!("({}).tag", left_code) // Complex enum - compare tag
+                                    }
+                                } else {
+                                    format!("({}).tag", left_code) // Default to tag comparison
+                                }
+                            } else if matches!(left_type, Type::GenericInstance(_, _)) {
+                                format!("({}).tag", left_code) // Generic instances always use tag
+                            } else {
+                                left_code.clone()
+                            };
+                            
+                            let right_expr = if let Type::Enum(name) = &right_type {
+                                if let Some(enum_def) = self.enum_defs.get(name) {
+                                    let is_simple_enum = enum_def.variants.iter().all(|v| v.data.is_none());
+                                    if is_simple_enum {
+                                        right_code.clone() // Simple enum - direct comparison
+                                    } else {
+                                        format!("({}).tag", right_code) // Complex enum - compare tag
+                                    }
+                                } else {
+                                    format!("({}).tag", right_code) // Default to tag comparison
+                                }
+                            } else if matches!(right_type, Type::GenericInstance(_, _)) {
+                                format!("({}).tag", right_code) // Generic instances always use tag
+                            } else {
+                                right_code.clone()
+                            };
+                            
+                            return Ok(format!("({} == {})", left_expr, right_expr));
+                        }
+                        ast::BinOp::NotEq => {
+                            // For enums, we need to check if they are simple enums or complex enums
+                            let left_expr = if let Type::Enum(name) = &left_type {
+                                if let Some(enum_def) = self.enum_defs.get(name) {
+                                    let is_simple_enum = enum_def.variants.iter().all(|v| v.data.is_none());
+                                    if is_simple_enum {
+                                        left_code.clone() // Simple enum - direct comparison
+                                    } else {
+                                        format!("({}).tag", left_code) // Complex enum - compare tag
+                                    }
+                                } else {
+                                    format!("({}).tag", left_code) // Default to tag comparison
+                                }
+                            } else if matches!(left_type, Type::GenericInstance(_, _)) {
+                                format!("({}).tag", left_code) // Generic instances always use tag
+                            } else {
+                                left_code.clone()
+                            };
+                            
+                            let right_expr = if let Type::Enum(name) = &right_type {
+                                if let Some(enum_def) = self.enum_defs.get(name) {
+                                    let is_simple_enum = enum_def.variants.iter().all(|v| v.data.is_none());
+                                    if is_simple_enum {
+                                        right_code.clone() // Simple enum - direct comparison
+                                    } else {
+                                        format!("({}).tag", right_code) // Complex enum - compare tag
+                                    }
+                                } else {
+                                    format!("({}).tag", right_code) // Default to tag comparison
+                                }
+                            } else if matches!(right_type, Type::GenericInstance(_, _)) {
+                                format!("({}).tag", right_code) // Generic instances always use tag
+                            } else {
+                                right_code.clone()
+                            };
+                            
+                            return Ok(format!("({} != {})", left_expr, right_expr));
+                        }
+                        _ => {
+                            // Other operations not supported for enums
+                            return Err(CompileError::UnsupportedOperation(
+                                format!("Unsupported operation {:?} for enum types", op)
+                            ));
+                        }
+                    }
+                }
+                
                 let is_string_cmp =
                     matches!(left_type, Type::String) || matches!(right_type, Type::String);
                 if is_string_cmp {
@@ -665,61 +756,91 @@ impl CBackend {
                             for (i, pattern) in patterns.iter().enumerate() {
                                 if let ast::Pattern::Variable(var_name, _) = pattern {
                                     let mut field_type = "int".to_string();
-                                    if let Type::GenericInstance(enum_name, args) = &matched_type {
-                                        if let Some(enum_def) = self.enum_defs.get(enum_name) {
-                                            enum_def
-                                                .variants
-                                                .iter()
-                                                .find(|v| v.name == *variant_name)
-                                                .map(|variant| {
-                                                    if let Some(data) = &variant.data {
-                                                        match data {
-                                                            crate::ast::EnumVariantData::Tuple(types) => {
-                                                                if let Some(ty) = types.get(i) {
-                                                                    if let Type::Generic(param_name) = ty {
-                                                                        if let Some(generic_idx) = enum_def
-                                                                            .generic_params
-                                                                            .iter()
-                                                                            .position(|p| p == param_name)
-                                                                        {
-                                                                            if let Some(concrete_type) = args.get(generic_idx) {
-                                                                                field_type = self.type_to_c(concrete_type);
-                                                                            }
-                                                                        }
-                                                                    } else {
+                                    
+                                    // Handle both regular enums and generic instances
+                                    match &matched_type {
+                                        Type::Enum(enum_name) => {
+                                            if let Some(enum_def) = self.enum_defs.get(enum_name) {
+                                                enum_def
+                                                    .variants
+                                                    .iter()
+                                                    .find(|v| v.name == *variant_name)
+                                                    .map(|variant| {
+                                                        if let Some(data) = &variant.data {
+                                                            match data {
+                                                                crate::ast::EnumVariantData::Tuple(types) => {
+                                                                    if let Some(ty) = types.get(i) {
                                                                         field_type = self.type_to_c(ty);
                                                                     }
                                                                 }
-                                                            }
-                                                            crate::ast::EnumVariantData::Struct(fields) => {
-                                                                if let Some(f) = fields.get(i) {
-                                                                    let ty = &f.ty;
-                                                                    if let Type::Generic(param_name) = ty {
-                                                                        if let Some(generic_idx) = enum_def
-                                                                            .generic_params
-                                                                            .iter()
-                                                                            .position(|p| p == param_name)
-                                                                        {
-                                                                            if let Some(concrete_type) = args.get(generic_idx) {
-                                                                                field_type = self.type_to_c(concrete_type);
-                                                                            }
-                                                                        }
-                                                                    } else {
-                                                                        field_type = self.type_to_c(ty);
+                                                                crate::ast::EnumVariantData::Struct(fields) => {
+                                                                    if let Some(f) = fields.get(i) {
+                                                                        field_type = self.type_to_c(&f.ty);
                                                                     }
                                                                 }
                                                             }
                                                         }
-                                                    }
-                                                });
+                                                    });
+                                            }
                                         }
+                                        Type::GenericInstance(enum_name, args) => {
+                                            if let Some(enum_def) = self.enum_defs.get(enum_name) {
+                                                enum_def
+                                                    .variants
+                                                    .iter()
+                                                    .find(|v| v.name == *variant_name)
+                                                    .map(|variant| {
+                                                        if let Some(data) = &variant.data {
+                                                            match data {
+                                                                crate::ast::EnumVariantData::Tuple(types) => {
+                                                                    if let Some(ty) = types.get(i) {
+                                                                        if let Type::Generic(param_name) = ty {
+                                                                            if let Some(generic_idx) = enum_def
+                                                                                .generic_params
+                                                                                .iter()
+                                                                                .position(|p| p == param_name)
+                                                                            {
+                                                                                if let Some(concrete_type) = args.get(generic_idx) {
+                                                                                    field_type = self.type_to_c(concrete_type);
+                                                                                }
+                                                                            }
+                                                                        } else {
+                                                                            field_type = self.type_to_c(ty);
+                                                                        }
+                                                                    }
+                                                                }
+                                                                crate::ast::EnumVariantData::Struct(fields) => {
+                                                                    if let Some(f) = fields.get(i) {
+                                                                        let ty = &f.ty;
+                                                                        if let Type::Generic(param_name) = ty {
+                                                                            if let Some(generic_idx) = enum_def
+                                                                                .generic_params
+                                                                                .iter()
+                                                                                .position(|p| p == param_name)
+                                                                            {
+                                                                                if let Some(concrete_type) = args.get(generic_idx) {
+                                                                                    field_type = self.type_to_c(concrete_type);
+                                                                                }
+                                                                            }
+                                                                        } else {
+                                                                            field_type = self.type_to_c(ty);
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    });
+                                            }
+                                        }
+                                        _ => {}
                                     }
+                                    
                                     code.push_str(&format!(
                                         "    {} {} = {}.data.{}.field{};\n",
                                         field_type,
                                         var_name,
                                         temp_var,
-                                        variant_name.to_lowercase(),
+                                        self.sanitize_member_name(&variant_name.to_lowercase()),
                                         i
                                     ));
                                     }

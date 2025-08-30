@@ -27,7 +27,7 @@ impl CBackend {
         self.emit_enum_impl(enum_def, &[], &enum_def.name)
     }
 
-    fn sanitize_member_name(&self, name: &str) -> String {
+    pub fn sanitize_member_name(&self, name: &str) -> String {
         match name.to_lowercase().as_str() {
             "int" => "int_val".to_string(),
             "char" => "char_val".to_string(),
@@ -132,7 +132,12 @@ impl CBackend {
                 if !fields.is_empty() {
                     self.header.push_str("        struct {\n");
                     for (name, ty) in fields.iter() {
-                        let c_type = self.type_to_c(ty);
+                        let c_type = if self.is_recursive_type(ty, &enum_def.name) {
+                            // Use struct tag for recursive types to avoid forward reference issues
+                            format!("struct {}*", self.type_to_c(ty))
+                        } else {
+                            self.type_to_c(ty)
+                        };
                         self.header
                             .push_str(&format!("            {} {};\n", c_type, name));
                     }
@@ -201,12 +206,46 @@ impl CBackend {
                     ));
 
                     for (field_member, param_name) in assignments.iter() {
-                        self.header.push_str(&format!(
-                            "    result.data.{}.{} = {};\n",
-                            self.sanitize_member_name(&variant.name),
-                            field_member,
-                            param_name
-                        ));
+                        // Check if we need to handle field assignment differently
+                        let field_info = match data {
+                            crate::ast::EnumVariantData::Struct(struct_fields) => {
+                                struct_fields.iter().find(|f| self.sanitize_member_name(&f.name) == *field_member)
+                            }
+                            _ => None,
+                        };
+                        
+                        if let Some(field) = field_info {
+                            if self.is_recursive_type(&field.ty, &enum_def.name) {
+                                // For recursive types, allocate memory and assign pointer
+                                self.header.push_str(&format!(
+                                    "    result.data.{}.{} = malloc(sizeof({}));\n",
+                                    self.sanitize_member_name(&variant.name),
+                                    field_member,
+                                    self.type_to_c(&field.ty)
+                                ));
+                                self.header.push_str(&format!(
+                                    "    *result.data.{}.{} = {};\n",
+                                    self.sanitize_member_name(&variant.name),
+                                    field_member,
+                                    param_name
+                                ));
+                            } else {
+                                self.header.push_str(&format!(
+                                    "    result.data.{}.{} = {};\n",
+                                    self.sanitize_member_name(&variant.name),
+                                    field_member,
+                                    param_name
+                                ));
+                            }
+                        } else {
+                            // Fallback for tuple variants or when field info not found
+                            self.header.push_str(&format!(
+                                "    result.data.{}.{} = {};\n",
+                                self.sanitize_member_name(&variant.name),
+                                field_member,
+                                param_name
+                            ));
+                        }
                     }
 
                     self.header.push_str("    return result;\n");

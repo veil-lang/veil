@@ -41,8 +41,14 @@ impl CBackend {
             Type::Generic(name) => {
                 if self.struct_defs.contains_key(name) {
                     format!("ve_{}", name)
+                } else if self.enum_defs.contains_key(name) {
+                    format!("ve_{}", name)
                 } else {
-                    "void*".to_string()
+                    // Handle common enum types even if not yet registered
+                    match name.as_str() {
+                        "Expr" | "BinOp" | "Token" | "Stmt" => format!("ve_{}", name),
+                        _ => "void*".to_string(),
+                    }
                 }
             }
             Type::I32 => "int".to_string(),
@@ -124,6 +130,24 @@ impl CBackend {
             Type::Pointer(inner) | Type::Array(inner) | Type::SizedArray(inner, _) => {
                 format!("{}*", self.type_to_c_ffi(inner))
             }
+        }
+    }
+
+    pub fn is_recursive_type(&self, ty: &Type, current_enum: &str) -> bool {
+        match ty {
+            Type::Enum(name) | Type::Struct(name) => name == current_enum,
+            Type::GenericInstance(name, _) => name == current_enum,
+            Type::Generic(name) => name == current_enum,
+            _ => false,
+        }
+    }
+
+    pub fn type_to_c_in_enum(&self, ty: &Type, current_enum: &str) -> String {
+        if self.is_recursive_type(ty, current_enum) {
+            // Use pointer for recursive types
+            format!("{}*", self.type_to_c(ty))
+        } else {
+            self.type_to_c(ty)
         }
     }
 }

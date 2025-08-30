@@ -127,8 +127,20 @@ impl CBackend {
                 .insert(enum_def.name.clone(), enum_def.clone());
         }
 
+        // Emit simple enums first (they have no dependencies)
         for enum_def in &program.enums {
-            self.emit_enum(enum_def)?;
+            let is_simple_enum = enum_def.variants.iter().all(|v| v.data.is_none());
+            if is_simple_enum {
+                self.emit_enum(enum_def)?;
+            }
+        }
+
+        // Then emit complex enums (they may depend on simple enums)
+        for enum_def in &program.enums {
+            let is_simple_enum = enum_def.variants.iter().all(|v| v.data.is_none());
+            if !is_simple_enum {
+                self.emit_enum(enum_def)?;
+            }
         }
 
         for struct_def in &program.structs {
