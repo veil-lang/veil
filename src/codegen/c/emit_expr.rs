@@ -344,12 +344,27 @@ impl CBackend {
                     }),
                 }
             }
-            ast::Expr::Call(name, args, _expr_info) => {
+            ast::Expr::Call(name, args, expr_info) => {
                 if let Some(method_name) = name.strip_prefix("<method>.")
                     && let Some(obj_expr) = args.first()
                 {
                     let obj_type = &obj_expr.get_type();
-                    let type_name = self.type_to_c_name(obj_type);
+
+                    // For static method calls, use the return type to determine the concrete type
+                    let concrete_type = if matches!(obj_expr, ast::Expr::Var(_, _))
+                        && matches!(obj_type, ast::Type::Struct(_))
+                        && !method_name.starts_with("length")
+                        && !method_name.starts_with("append")
+                    {
+                        // This is likely a static method call on a generic type
+                        // Use the return type to infer the concrete instantiation
+
+                        &expr_info.ty
+                    } else {
+                        obj_type
+                    };
+
+                    let type_name = self.type_to_c_name(concrete_type);
 
                     let sanitized_type_name = type_name
                         .replace("[]", "_array")
@@ -417,6 +432,29 @@ impl CBackend {
                     }
 
                     return Ok(format!("{}({})", method_func_name, args_code.join(", ")));
+                }
+
+                // Handle regular function calls - fix generic function calls in monomorphized contexts
+                if let Some(current_func) = &self.current_function {
+                    // Check if this is a call to a generic function within a monomorphized function
+                    if current_func.starts_with("ve_method_") && name.contains("_T") {
+                        // Extract the concrete type from the current function name
+                        // e.g., "ve_method_array_string_into_iter" -> extract "string"
+                        let parts: Vec<&str> = current_func.split('_').collect();
+                        if parts.len() >= 4 {
+                            // ve_method_array_{TYPE}_into_iter -> TYPE is at index 3
+                            let concrete_type = parts[3];
+
+                            // Replace T with the concrete type in the function name
+                            let fixed_name = name.replace("_T", &format!("_{}", concrete_type));
+
+                            let mut args_code = Vec::new();
+                            for arg in args {
+                                args_code.push(self.emit_expr(arg)?);
+                            }
+                            return Ok(format!("{}({})", fixed_name, args_code.join(", ")));
+                        }
+                    }
                 }
 
                 // Inline common stdlib optional helpers to avoid invalid C casts
@@ -564,14 +602,39 @@ impl CBackend {
                     file_id: self.file_id,
                 }),
             },
-            ast::Expr::StructInit(name, fields, _) => {
+            ast::Expr::StructInit(_name, fields, info) => {
                 let mut field_inits = Vec::new();
                 for (field_name, field_expr) in fields {
                     let field_code = self.emit_expr(field_expr)?;
                     field_inits.push(format!(".{} = {}", field_name, field_code));
                 }
 
-                Ok(format!("(ve_{}){{ {} }}", name, field_inits.join(", ")))
+                // Determine the concrete type name
+                let concrete_type_name = if let Some(current_func) = &self.current_function {
+                    // Check if we're in a monomorphized function
+                    if current_func.starts_with("ve_method_") && current_func.contains('_') {
+                        // Extract the concrete type from the function name
+                        // e.g., "ve_method_Box_i32_create" -> "Box_i32"
+                        let parts: Vec<&str> = current_func.split('_').collect();
+                        if parts.len() >= 4 {
+                            // ve_method_{Type}_{ConcreteType}_{method}
+                            let type_parts = &parts[2..parts.len() - 1];
+                            format!("ve_{}", type_parts.join("_"))
+                        } else {
+                            self.type_to_c_name(&info.ty)
+                        }
+                    } else {
+                        self.type_to_c_name(&info.ty)
+                    }
+                } else {
+                    self.type_to_c_name(&info.ty)
+                };
+
+                Ok(format!(
+                    "({}){{ {} }}",
+                    concrete_type_name,
+                    field_inits.join(", ")
+                ))
             }
             ast::Expr::FieldAccess(obj, field_name, _info) => {
                 let obj_code = self.emit_expr(obj)?;

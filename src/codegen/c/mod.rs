@@ -110,7 +110,7 @@ impl CBackend {
         output_path: &Path,
     ) -> Result<(), CompileError> {
         let mut program = program.clone();
-        // Removed redundant monomorphize_generics call
+        program = self.monomorphize_generics(&program)?;
         if let Err(e) = crate::ast::merge_impl_blocks(&mut program) {
             return Err(CompileError::CodegenError {
                 message: e,
@@ -164,6 +164,15 @@ impl CBackend {
         for struct_def in &program.structs {
             if !imported_struct_names.contains(&struct_def.name) {
                 self.emit_struct(struct_def)?;
+            }
+        }
+        // Provide aliases for ArrayIter_* types to handle compound literals emitted under method names with underscores (e.g., from_array)
+        // This maps ve_ArrayIter_X to ve_ArrayIter_X_from, which the emitter may use in compound literals.
+        for (name, _) in self.struct_defs.clone() {
+            if name.starts_with("ArrayIter_") {
+                // Use struct tag to allow forward reference before typedef is emitted
+                self.header
+                    .push_str(&format!("typedef struct ve_{} ve_{}_from;\n", name, name));
             }
         }
         use crate::ast::Expr;
@@ -623,14 +632,40 @@ impl CBackend {
             .map(|ib| ib.target_type.clone())
             .collect();
 
+        // Add common array types that are likely to be used
+        concrete_array_inners.insert("i32".to_string());
+        concrete_array_inners.insert("string".to_string());
+        concrete_array_inners.insert("bool".to_string());
+
+        // Keep track of array impls we've already created to avoid duplicates
+        let mut created_array_impls: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+
         for impl_block in &program.impls {
-            if impl_block.target_type.contains('T') && impl_block.target_type.contains("[]") {
-                for inner in &concrete_array_inners {
-                    let t1 = format!("[]{}", inner);
-                    let t2 = format!("{}[]", inner);
-                    if existing_impl_targets.contains(&t1) || existing_impl_targets.contains(&t2) {
+            // Specialize only generic array impl blocks: "T[]" or "[]T"
+            let is_generic_array_impl =
+                impl_block.target_type.contains("[]") && impl_block.target_type.contains('T');
+
+            if is_generic_array_impl {
+                // Filter out generic types and only use concrete types
+                let concrete_inners: Vec<String> = concrete_array_inners
+                    .iter()
+                    .filter(|s| *s != "T")
+                    .cloned()
+                    .collect();
+
+                for inner in &concrete_inners {
+                    // Skip if we've already created this array impl
+                    if created_array_impls.contains(inner) {
                         continue;
                     }
+                    // Skip if a concrete impl already exists in source (e.g., "i32[]" or "[]i32")
+                    let has_concrete = existing_impl_targets.contains(&format!("{}[]", inner))
+                        || existing_impl_targets.contains(&format!("[]{}", inner));
+                    if has_concrete {
+                        continue;
+                    }
+                    created_array_impls.insert(inner.clone());
                     let mut type_map = std::collections::HashMap::new();
                     let concrete_type = if inner == "i32" {
                         ast::Type::I32
@@ -652,19 +687,26 @@ impl CBackend {
                             new_params.push((n.clone(), self.substitute_type(t, &type_map)?));
                         }
                         new_m.params = new_params;
+                        // Monomorphize method body so inner expressions/types become concrete
+                        let mut new_body = Vec::new();
+                        for stmt in &m.body {
+                            new_body.push(self.substitute_stmt(stmt, &type_map)?);
+                        }
+                        new_m.body = new_body;
                         new_methods.push(new_m);
                     }
 
+                    let target_name = format!("array_{}", inner);
                     new_impls.push(ast::ImplBlock {
-                        target_type: format!("[]{}", inner),
+                        target_type: target_name,
                         target_type_parsed: Some(ast::Type::Array(Box::new(concrete_type))),
                         methods: new_methods,
                         span: impl_block.span,
                     });
                 }
                 // Do not push the original generic array impl
-            } else if !impl_block.target_type.contains('<') {
-                // Keep non-generic impls as-is; generic struct impls will be specialized below
+            } else if !impl_block.target_type.contains('<') && !is_generic_array_impl {
+                // Keep non-generic, non-array impls as-is; generic struct impls will be specialized below
                 new_impls.push(impl_block.clone());
             }
         }
@@ -947,6 +989,22 @@ impl CBackend {
                                             ));
                                         }
                                         new_m.params = new_params;
+                                        // Monomorphize method body so generic references inside become concrete
+                                        let mut new_body = Vec::new();
+                                        for stmt in &m.body {
+                                            // Reuse struct generics substitution for statements
+                                            new_body.push(self.substitute_stmt(stmt, &{
+                                                // Build a concrete type map from struct generics to inst_args
+                                                let mut map = std::collections::HashMap::new();
+                                                for (gp, arg) in
+                                                    def.generic_params.iter().zip(inst_args.iter())
+                                                {
+                                                    map.insert(gp.clone(), arg.clone());
+                                                }
+                                                map
+                                            })?);
+                                        }
+                                        new_m.body = new_body;
                                         new_methods.push(new_m);
                                     }
 
@@ -1176,6 +1234,31 @@ impl CBackend {
                     is_tail: info.is_tail,
                 };
                 Ok(ast::Expr::Cast(Box::new(new_inner), new_ty, new_info))
+            }
+            // Ensure FieldAccess types are concretized (e.g., self.arr: T[] -> i32[])
+            ast::Expr::FieldAccess(obj, field_name, info) => {
+                let new_obj = Box::new(self.substitute_expr(obj, type_map)?);
+                let new_info = ast::ExprInfo {
+                    span: info.span,
+                    ty: self.substitute_type(&info.ty, type_map)?,
+                    is_tail: info.is_tail,
+                };
+                Ok(ast::Expr::FieldAccess(
+                    new_obj,
+                    field_name.clone(),
+                    new_info,
+                ))
+            }
+            // Ensure ArrayAccess element types are concretized (e.g., (T[])[idx] -> i32)
+            ast::Expr::ArrayAccess(array, index, info) => {
+                let new_array = Box::new(self.substitute_expr(array, type_map)?);
+                let new_index = Box::new(self.substitute_expr(index, type_map)?);
+                let new_info = ast::ExprInfo {
+                    span: info.span,
+                    ty: self.substitute_type(&info.ty, type_map)?,
+                    is_tail: info.is_tail,
+                };
+                Ok(ast::Expr::ArrayAccess(new_array, new_index, new_info))
             }
             _ => {
                 let new_info = ast::ExprInfo {
