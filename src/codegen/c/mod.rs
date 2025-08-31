@@ -350,16 +350,88 @@ impl CBackend {
 
         let mut seen: HashSet<(String, Vec<Type>)> = HashSet::new();
 
-        for (func_name, type_args) in &collector.generic_calls {
-            if !seen.insert((func_name.clone(), type_args.clone())) {
-                continue;
+        // Helper to unify a generic pattern type against a concrete call-site type.
+        fn unify_types(
+            pattern: &Type,
+            concrete: &Type,
+            subst: &mut std::collections::HashMap<String, Type>,
+        ) -> bool {
+            match (pattern, concrete) {
+                // Bind generic to the concrete type (if not already bound) or ensure consistency
+                (Type::Generic(name), c) => {
+                    if let Some(existing) = subst.get(name) {
+                        existing == c
+                    } else {
+                        subst.insert(name.clone(), c.clone());
+                        true
+                    }
+                }
+                // Optional patterns: accept both Optional(X) vs Optional(Y) and Optional(X) vs Y
+                (Type::Optional(p), Type::Optional(c)) => unify_types(p, c, subst),
+                (Type::Optional(p), c) => unify_types(p, c, subst),
+                // Structural recursion
+                (Type::Array(p), Type::Array(c)) => unify_types(p, c, subst),
+                (Type::Pointer(p), Type::Pointer(c)) => unify_types(p, c, subst),
+                (Type::SizedArray(p, n1), Type::SizedArray(c, n2)) => {
+                    n1 == n2 && unify_types(p, c, subst)
+                }
+                (Type::GenericInstance(n1, a1), Type::GenericInstance(n2, a2)) => {
+                    if n1 != n2 || a1.len() != a2.len() {
+                        return false;
+                    }
+                    for (pp, cc) in a1.iter().zip(a2.iter()) {
+                        if !unify_types(pp, cc, subst) {
+                            return false;
+                        }
+                    }
+                    true
+                }
+                // Allow exact concrete matches to pass
+                (p, c) if p == c => true,
+                // Permit some numeric/compat conversions to still infer the generic (e.g., i32 vs u32)
+                // For inference we keep it simple: only identical shapes or generic binds
+                _ => false,
             }
+        }
 
+        for (func_name, call_arg_types) in &collector.generic_calls {
             if let Some(gen_func) = generic_func_map.get(func_name) {
-                let mono_func = self.instantiate_generic_function(gen_func, type_args)?;
+                // Infer generic args by unifying each declared param type against the call arg type.
+                let mut subst: std::collections::HashMap<String, Type> =
+                    std::collections::HashMap::new();
+                let mut ok = true;
+                for ((_, param_ty), arg_ty) in gen_func.params.iter().zip(call_arg_types.iter()) {
+                    if !unify_types(param_ty, arg_ty, &mut subst) {
+                        ok = false;
+                        break;
+                    }
+                }
+                if !ok {
+                    continue;
+                }
+
+                // Produce ordered type args according to the function's generic parameter list.
+                let mut inferred: Vec<Type> = Vec::new();
+                for gp in &gen_func.generic_params {
+                    if let Some(t) = subst.get(gp) {
+                        inferred.push(t.clone());
+                    } else {
+                        ok = false;
+                        break;
+                    }
+                }
+                if !ok {
+                    continue;
+                }
+
+                if !seen.insert((func_name.clone(), inferred.clone())) {
+                    continue;
+                }
+
+                let mono_func = self.instantiate_generic_function(gen_func, &inferred)?;
                 let mono_name = mono_func.name.clone();
 
-                transformer.add_mapping(func_name.clone(), type_args.clone(), mono_name);
+                transformer.add_mapping(func_name.clone(), inferred, mono_name);
                 new_functions.push(mono_func);
             }
         }

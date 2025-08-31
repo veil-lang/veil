@@ -63,9 +63,13 @@ impl<'a> Parser<'a> {
         while let Some((token, _)) = self.tokens.get(i) {
             match token {
                 Token::KwLet
+                | Token::KwVar
                 | Token::KwReturn
                 | Token::KwWhile
                 | Token::KwFor
+                | Token::KwLoop
+                | Token::KwIf
+                | Token::KwDefer
                 | Token::KwBreak
                 | Token::KwContinue => {
                     return false;

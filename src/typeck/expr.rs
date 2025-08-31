@@ -766,47 +766,41 @@ impl TypeChecker {
                 result?;
                 Ok(Type::Void)
             }
-            Expr::Cast(
-                expr,
-                target_ty,
-                ast::ExprInfo {
-                    span,
-                    ty: _expr_type,
-                    is_tail: _,
-                },
-            ) => {
+            Expr::Cast(expr, target_ty, info) => {
                 let source_ty = self.check_expr(expr)?;
-
-                match (&source_ty, &target_ty) {
-                    (Type::RawPtr, Type::Pointer(_)) => Ok(target_ty.clone()),
-                    (Type::Pointer(_), Type::RawPtr) => Ok(target_ty.clone()),
-                    (Type::Pointer(_), Type::I32) => Ok(target_ty.clone()),
-                    (Type::I32, Type::Pointer(_)) => Ok(target_ty.clone()),
-                    (Type::I32, Type::I32) => Ok(source_ty),
-                    (Type::I32, Type::Bool) => Ok(target_ty.clone()),
-                    (Type::F32, Type::F32) => Ok(source_ty),
-                    (Type::F32, Type::I32) => Ok(target_ty.clone()),
-                    (Type::I32, Type::F32) => Ok(target_ty.clone()),
-                    (Type::F64, Type::F64) => Ok(source_ty),
-                    (Type::F64, Type::I32) => Ok(target_ty.clone()),
-                    (Type::I32, Type::F64) => Ok(target_ty.clone()),
-                    (Type::I32, Type::U32) => Ok(target_ty.clone()),
-                    (Type::U32, Type::I32) => Ok(target_ty.clone()),
-                    (Type::String, Type::I32) => Ok(target_ty.clone()),
-                    (Type::String, Type::RawPtr) => Ok(target_ty.clone()),
-                    (Type::F32, Type::String) => Ok(target_ty.clone()),
+                let result_ty = match (&source_ty, &target_ty) {
+                    (Type::RawPtr, Type::Pointer(_)) => target_ty.clone(),
+                    (Type::Pointer(_), Type::RawPtr) => target_ty.clone(),
+                    (Type::Pointer(_), Type::I32) => target_ty.clone(),
+                    (Type::I32, Type::Pointer(_)) => target_ty.clone(),
+                    (Type::I32, Type::I32) => source_ty,
+                    (Type::I32, Type::Bool) => target_ty.clone(),
+                    (Type::F32, Type::F32) => source_ty,
+                    (Type::F32, Type::I32) => target_ty.clone(),
+                    (Type::I32, Type::F32) => target_ty.clone(),
+                    (Type::F64, Type::F64) => source_ty,
+                    (Type::F64, Type::I32) => target_ty.clone(),
+                    (Type::I32, Type::F64) => target_ty.clone(),
+                    (Type::I32, Type::U32) => target_ty.clone(),
+                    (Type::U32, Type::I32) => target_ty.clone(),
+                    (Type::String, Type::I32) => target_ty.clone(),
+                    (Type::String, Type::RawPtr) => target_ty.clone(),
+                    (Type::F32, Type::String) => target_ty.clone(),
                     _ => {
                         if !self.is_cast_allowed(&source_ty, target_ty) {
                             self.report_error(
                                 &format!("Invalid cast from {} to {}", source_ty, target_ty),
-                                *span,
+                                info.span,
                             );
-                            Ok(Type::Unknown)
+                            Type::Unknown
                         } else {
-                            Ok(target_ty.clone())
+                            target_ty.clone()
                         }
                     }
-                }
+                };
+                // Update the expression's type info
+                info.ty = result_ty.clone();
+                Ok(result_ty)
             }
             Expr::Range(start, end, _, _) => {
                 let start_ty = self.check_expr(start)?;

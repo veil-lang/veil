@@ -83,6 +83,13 @@ impl TypeChecker {
                 }
             }
             Stmt::Defer(expr, span) => {
+                if !self.context.in_safe {
+                    self.report_error(
+                        "Defer statements are only allowed within a safe { } block",
+                        *span,
+                    );
+                }
+
                 let expr_ty = self.check_expr(expr)?;
 
                 if expr_ty != Type::Void {
