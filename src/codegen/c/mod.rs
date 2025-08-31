@@ -110,7 +110,7 @@ impl CBackend {
         output_path: &Path,
     ) -> Result<(), CompileError> {
         let mut program = program.clone();
-        // Removed redundant monomorphize_generics call
+        program = self.monomorphize_generics(&program)?;
         if let Err(e) = crate::ast::merge_impl_blocks(&mut program) {
             return Err(CompileError::CodegenError {
                 message: e,
@@ -623,14 +623,40 @@ impl CBackend {
             .map(|ib| ib.target_type.clone())
             .collect();
 
+        // Add common array types that are likely to be used
+        concrete_array_inners.insert("i32".to_string());
+        concrete_array_inners.insert("string".to_string());
+        concrete_array_inners.insert("bool".to_string());
+
+        // Keep track of array impls we've already created to avoid duplicates
+        let mut created_array_impls: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+
         for impl_block in &program.impls {
-            if impl_block.target_type.contains('T') && impl_block.target_type.contains("[]") {
-                for inner in &concrete_array_inners {
-                    let t1 = format!("[]{}", inner);
-                    let t2 = format!("{}[]", inner);
-                    if existing_impl_targets.contains(&t1) || existing_impl_targets.contains(&t2) {
+            // Check for array impl blocks: "T[]", "[]T", "i32[]", "[]i32", "string[]", "[]string", etc.
+            let is_array_impl = impl_block.target_type.contains("[]")
+                && (impl_block.target_type.contains('T')
+                    || impl_block.target_type == "[]i32"
+                    || impl_block.target_type == "[]string"
+                    || impl_block.target_type == "[]bool"
+                    || impl_block.target_type == "i32[]"
+                    || impl_block.target_type == "string[]"
+                    || impl_block.target_type == "bool[]");
+
+            if is_array_impl {
+                // Filter out generic types and only use concrete types
+                let concrete_inners: Vec<String> = concrete_array_inners
+                    .iter()
+                    .filter(|s| *s != "T")
+                    .cloned()
+                    .collect();
+
+                for inner in &concrete_inners {
+                    // Skip if we've already created this array impl
+                    if created_array_impls.contains(inner) {
                         continue;
                     }
+                    created_array_impls.insert(inner.clone());
                     let mut type_map = std::collections::HashMap::new();
                     let concrete_type = if inner == "i32" {
                         ast::Type::I32
@@ -655,16 +681,17 @@ impl CBackend {
                         new_methods.push(new_m);
                     }
 
+                    let target_name = format!("array_{}", inner);
                     new_impls.push(ast::ImplBlock {
-                        target_type: format!("[]{}", inner),
+                        target_type: target_name,
                         target_type_parsed: Some(ast::Type::Array(Box::new(concrete_type))),
                         methods: new_methods,
                         span: impl_block.span,
                     });
                 }
                 // Do not push the original generic array impl
-            } else if !impl_block.target_type.contains('<') {
-                // Keep non-generic impls as-is; generic struct impls will be specialized below
+            } else if !impl_block.target_type.contains('<') && !is_array_impl {
+                // Keep non-generic, non-array impls as-is; generic struct impls will be specialized below
                 new_impls.push(impl_block.clone());
             }
         }

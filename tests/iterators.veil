@@ -1,0 +1,236 @@
+//
+// Generalized iterator protocol (userland) + tests
+// - Provides ArrayIter<T> as a concrete iterator for T[]
+// - Arrays implement into_iter() -> ArrayIter<T>
+// - Iterator supports has_next(), value(), advance() (persistent/immutable style)
+//
+
+// ====== Assertions ======
+
+fn assert_true(cond: bool) -> void {
+    if !cond {
+        println("assert_true failed");
+        panic("assert failed");
+    }
+}
+
+fn assert_eq_i32(a: i32, b: i32) -> void {
+    if a != b {
+        println(`assert_eq_i32 failed: ${a} != ${b}`);
+        panic("assert failed");
+    }
+}
+
+fn assert_eq_string(a: string, b: string) -> void {
+    if a != b {
+        println(`assert_eq_string failed: "${a}" != "${b}"`);
+        panic("assert failed");
+    }
+}
+
+// ====== Generalized Iterator: ArrayIter<T> ======
+
+struct ArrayIter<T> {
+    arr: T[],
+    idx: i32,
+    len: i32,
+}
+
+impl ArrayIter<T> {
+    // Constructor from an array
+    fn from_array(arr: T[]) -> ArrayIter<T> {
+        return ArrayIter {
+            arr: arr,
+            idx: 0 as i32,
+            len: arr.length(),
+        };
+    }
+
+    // True if there is a current value (idx within bounds)
+    fn has_next(self) -> bool {
+        return self.idx < self.len;
+    }
+
+    // Returns the current value (call only if has_next() is true)
+    fn value(self) -> T {
+        return self.arr[self.idx];
+    }
+
+    // Returns a new iterator advanced by one position
+    fn advance(self) -> ArrayIter<T> {
+        return ArrayIter {
+            arr: self.arr,
+            idx: self.idx + 1 as i32,
+            len: self.len,
+        };
+    }
+}
+
+// Array implements IntoIter via method
+impl T[] {
+    fn into_iter(self) -> ArrayIter<T> {
+        return ArrayIter.from_array(self);
+    }
+}
+
+// ====== Tests ======
+
+test array_into_iter_basic_sum {
+    let arr: i32[] = [];
+    arr = arr.append(1 as i32);
+    arr = arr.append(2 as i32);
+    arr = arr.append(3 as i32);
+    arr = arr.append(4 as i32);
+
+    let it = arr.into_iter();
+    let sum = 0 as i32;
+
+    let cur = it;
+    while cur.has_next() {
+        let val = cur.value();
+        sum = sum + val;
+        cur = cur.advance();
+    }
+
+    assert_eq_i32(sum, 10 as i32);
+}
+
+test array_into_iter_order_and_len {
+    let arr: i32[] = [];
+    for v in 0..5 { // 0..4
+        arr = arr.append(v);
+    }
+
+    let it = arr.into_iter();
+    let count = 0 as i32;
+    let last = -1 as i32;
+
+    let cur = it;
+    while cur.has_next() {
+        let v = cur.value();
+        count = count + 1 as i32;
+        last = v;
+        cur = cur.advance();
+    }
+
+    assert_eq_i32(count, 5 as i32);
+    assert_eq_i32(last, 4 as i32);
+}
+
+test array_iterator_over_strings_concat {
+    let s: string[] = [];
+    s = s.append("a");
+    s = s.append("b");
+    s = s.append("c");
+    s = s.append("d");
+
+    let it = s.into_iter();
+    let acc = "";
+
+    let cur = it;
+    while cur.has_next() {
+        let ch = cur.value();
+        acc = acc + ch;
+        cur = cur.advance();
+    }
+
+    assert_eq_string(acc, "abcd");
+}
+
+test iterator_is_persistent_and_cheap_to_advance {
+    // Show that advancing returns new iter and original still valid
+    let arr: i32[] = [];
+    arr = arr.append(10 as i32);
+    arr = arr.append(20 as i32);
+    arr = arr.append(30 as i32);
+
+    let it0 = arr.into_iter();
+    assert_true(it0.has_next());
+    assert_eq_i32(it0.value(), 10 as i32);
+
+    // Advance to create it1; it0 should still point at first
+    let it1 = it0.advance();
+    assert_true(it0.has_next());
+    assert_eq_i32(it0.value(), 10 as i32);
+
+    assert_true(it1.has_next());
+    assert_eq_i32(it1.value(), 20 as i32);
+
+    // Advance again to it2
+    let it2 = it1.advance();
+    assert_true(it2.has_next());
+    assert_eq_i32(it2.value(), 30 as i32);
+
+    // Advance past end
+    let it3 = it2.advance();
+    assert_true(!it3.has_next());
+}
+
+test iterator_works_with_mutated_array_post_creation {
+    // Iteration snapshot: len captured at construction time
+    let base: i32[] = [];
+    base = base.append(1 as i32);
+    base = base.append(2 as i32);
+
+    let it = base.into_iter(); // len = 2 captured
+
+    // Mutate array after iterator creation
+    base = base.append(3 as i32);
+    base = base.append(4 as i32);
+
+    // Consume iterator: should only see first 2
+    let seen = 0 as i32;
+    let sum = 0 as i32;
+
+    let cur = it;
+    while cur.has_next() {
+        let v = cur.value();
+        sum = sum + v;
+        seen = seen + 1 as i32;
+        cur = cur.advance();
+    }
+
+    assert_eq_i32(seen, 2 as i32);
+    assert_eq_i32(sum, (1 + 2) as i32);
+
+    // Array did grow; confirm length is 4
+    assert_eq_i32(base.length(), 4 as i32);
+}
+
+test iterator_composed_in_nested_loops {
+    // Cartesian concat using two independent iterators
+    let a: string[] = [];
+    a = a.append("x");
+    a = a.append("y");
+
+    let b: string[] = [];
+    b = b.append("1");
+    b = b.append("2");
+    b = b.append("3");
+
+    let acc: string[] = [];
+
+    let it_a = a.into_iter();
+    let i = it_a;
+    while i.has_next() {
+        let sa = i.value();
+
+        let it_b = b.into_iter();
+        let j = it_b;
+        while j.has_next() {
+            let sb = j.value();
+            acc = acc.append(sa + sb);
+            j = j.advance();
+        }
+
+        i = i.advance();
+    }
+
+    assert_eq_i32(acc.length(), 6 as i32);
+    assert_eq_string(acc[0], "x1");
+    assert_eq_string(acc[1], "x2");
+    assert_eq_string(acc[2], "x3");
+    assert_eq_string(acc[3], "y1");
+    assert_eq_string(acc[4], "y2");
+    assert_eq_string(acc[5], "y3");
+}
