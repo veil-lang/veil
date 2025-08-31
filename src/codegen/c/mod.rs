@@ -110,7 +110,7 @@ impl CBackend {
         output_path: &Path,
     ) -> Result<(), CompileError> {
         let mut program = program.clone();
-        program = self.monomorphize_generics(&program)?;
+        // Removed redundant monomorphize_generics call
         if let Err(e) = crate::ast::merge_impl_blocks(&mut program) {
             return Err(CompileError::CodegenError {
                 message: e,
