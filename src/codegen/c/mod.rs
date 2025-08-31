@@ -166,6 +166,15 @@ impl CBackend {
                 self.emit_struct(struct_def)?;
             }
         }
+        // Provide aliases for ArrayIter_* types to handle compound literals emitted under method names with underscores (e.g., from_array)
+        // This maps ve_ArrayIter_X to ve_ArrayIter_X_from, which the emitter may use in compound literals.
+        for (name, _) in self.struct_defs.clone() {
+            if name.starts_with("ArrayIter_") {
+                // Use struct tag to allow forward reference before typedef is emitted
+                self.header
+                    .push_str(&format!("typedef struct ve_{} ve_{}_from;\n", name, name));
+            }
+        }
         use crate::ast::Expr;
         fn collect_generic_enum_instances(expr: &Expr, out: &mut Vec<Type>) {
             fn add_if_generic_instance(ty: &Type, out: &mut Vec<Type>) {
@@ -633,17 +642,11 @@ impl CBackend {
             std::collections::HashSet::new();
 
         for impl_block in &program.impls {
-            // Check for array impl blocks: "T[]", "[]T", "i32[]", "[]i32", "string[]", "[]string", etc.
-            let is_array_impl = impl_block.target_type.contains("[]")
-                && (impl_block.target_type.contains('T')
-                    || impl_block.target_type == "[]i32"
-                    || impl_block.target_type == "[]string"
-                    || impl_block.target_type == "[]bool"
-                    || impl_block.target_type == "i32[]"
-                    || impl_block.target_type == "string[]"
-                    || impl_block.target_type == "bool[]");
+            // Specialize only generic array impl blocks: "T[]" or "[]T"
+            let is_generic_array_impl =
+                impl_block.target_type.contains("[]") && impl_block.target_type.contains('T');
 
-            if is_array_impl {
+            if is_generic_array_impl {
                 // Filter out generic types and only use concrete types
                 let concrete_inners: Vec<String> = concrete_array_inners
                     .iter()
@@ -654,6 +657,12 @@ impl CBackend {
                 for inner in &concrete_inners {
                     // Skip if we've already created this array impl
                     if created_array_impls.contains(inner) {
+                        continue;
+                    }
+                    // Skip if a concrete impl already exists in source (e.g., "i32[]" or "[]i32")
+                    let has_concrete = existing_impl_targets.contains(&format!("{}[]", inner))
+                        || existing_impl_targets.contains(&format!("[]{}", inner));
+                    if has_concrete {
                         continue;
                     }
                     created_array_impls.insert(inner.clone());
@@ -678,6 +687,12 @@ impl CBackend {
                             new_params.push((n.clone(), self.substitute_type(t, &type_map)?));
                         }
                         new_m.params = new_params;
+                        // Monomorphize method body so inner expressions/types become concrete
+                        let mut new_body = Vec::new();
+                        for stmt in &m.body {
+                            new_body.push(self.substitute_stmt(stmt, &type_map)?);
+                        }
+                        new_m.body = new_body;
                         new_methods.push(new_m);
                     }
 
@@ -690,7 +705,7 @@ impl CBackend {
                     });
                 }
                 // Do not push the original generic array impl
-            } else if !impl_block.target_type.contains('<') && !is_array_impl {
+            } else if !impl_block.target_type.contains('<') && !is_generic_array_impl {
                 // Keep non-generic, non-array impls as-is; generic struct impls will be specialized below
                 new_impls.push(impl_block.clone());
             }
@@ -974,6 +989,22 @@ impl CBackend {
                                             ));
                                         }
                                         new_m.params = new_params;
+                                        // Monomorphize method body so generic references inside become concrete
+                                        let mut new_body = Vec::new();
+                                        for stmt in &m.body {
+                                            // Reuse struct generics substitution for statements
+                                            new_body.push(self.substitute_stmt(stmt, &{
+                                                // Build a concrete type map from struct generics to inst_args
+                                                let mut map = std::collections::HashMap::new();
+                                                for (gp, arg) in
+                                                    def.generic_params.iter().zip(inst_args.iter())
+                                                {
+                                                    map.insert(gp.clone(), arg.clone());
+                                                }
+                                                map
+                                            })?);
+                                        }
+                                        new_m.body = new_body;
                                         new_methods.push(new_m);
                                     }
 
@@ -1203,6 +1234,31 @@ impl CBackend {
                     is_tail: info.is_tail,
                 };
                 Ok(ast::Expr::Cast(Box::new(new_inner), new_ty, new_info))
+            }
+            // Ensure FieldAccess types are concretized (e.g., self.arr: T[] -> i32[])
+            ast::Expr::FieldAccess(obj, field_name, info) => {
+                let new_obj = Box::new(self.substitute_expr(obj, type_map)?);
+                let new_info = ast::ExprInfo {
+                    span: info.span,
+                    ty: self.substitute_type(&info.ty, type_map)?,
+                    is_tail: info.is_tail,
+                };
+                Ok(ast::Expr::FieldAccess(
+                    new_obj,
+                    field_name.clone(),
+                    new_info,
+                ))
+            }
+            // Ensure ArrayAccess element types are concretized (e.g., (T[])[idx] -> i32)
+            ast::Expr::ArrayAccess(array, index, info) => {
+                let new_array = Box::new(self.substitute_expr(array, type_map)?);
+                let new_index = Box::new(self.substitute_expr(index, type_map)?);
+                let new_info = ast::ExprInfo {
+                    span: info.span,
+                    ty: self.substitute_type(&info.ty, type_map)?,
+                    is_tail: info.is_tail,
+                };
+                Ok(ast::Expr::ArrayAccess(new_array, new_index, new_info))
             }
             _ => {
                 let new_info = ast::ExprInfo {
