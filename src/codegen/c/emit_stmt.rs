@@ -294,7 +294,9 @@ impl CBackend {
                         var_name
                     };
 
-                    /* removed RNG-based includes for deterministic infinite loops */
+                    /* removed RNG-based includes for deterministic infinite loops.
+                       Infinite ranges now use simple incrementing (or decrementing) counters starting from 0,
+                       e.g., for (int var = 0; ; var++) for InfiniteUp, and for (int var = 0; ; var--) for InfiniteDown. */
 
                     /* removed unique_id generation */
 
