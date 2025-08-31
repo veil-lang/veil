@@ -10,7 +10,9 @@ const GITHUB_API_URL: &str = "https://api.github.com/repos/veil-lang/veil/releas
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug, Clone, PartialEq)]
+#[derive(Default)]
 pub enum Channel {
+    #[default]
     Stable,
     Canary,
 }
@@ -31,11 +33,6 @@ impl Channel {
     }
 }
 
-impl Default for Channel {
-    fn default() -> Self {
-        Channel::Stable
-    }
-}
 
 #[derive(Serialize, Deserialize)]
 struct UpdateConfig {
@@ -118,7 +115,7 @@ fn check_for_updates(channel: &Channel) -> Result<Option<String>> {
     fs::create_dir_all(&temp_dir)?;
 
     let git_status = Command::new("git")
-        .args(&[
+        .args([
             "clone",
             "--depth",
             "1",
@@ -144,15 +141,14 @@ fn check_for_updates(channel: &Channel) -> Result<Option<String>> {
     fs::remove_dir_all(&temp_dir).ok();
 
     for line in cargo_content.lines() {
-        if line.trim().starts_with("version = ") {
-            if let Some(version_str) = line.split('"').nth(1) {
+        if line.trim().starts_with("version = ")
+            && let Some(version_str) = line.split('"').nth(1) {
                 if version_str != CURRENT_VERSION {
                     return Ok(Some(version_str.to_string()));
                 } else {
                     return Ok(None);
                 }
             }
-        }
     }
 
     Ok(None)
@@ -357,7 +353,7 @@ fn upgrade_veil_binary(verbose: bool) -> Result<()> {
     #[cfg(not(windows))]
     {
         let tar_status = Command::new("tar")
-            .args(&[
+            .args([
                 "-xzf",
                 archive_path.to_str().unwrap(),
                 "-C",
@@ -405,11 +401,10 @@ fn upgrade_veil_binary(verbose: bool) -> Result<()> {
             let _ = fs::remove_file(&backup_exe);
         }
 
-        if let Err(e) = fs::rename(&target_exe, &backup_exe) {
-            if verbose {
+        if let Err(e) = fs::rename(&target_exe, &backup_exe)
+            && verbose {
                 println!("   Warning: Could not backup current executable: {}", e);
             }
-        }
     }
 
     // Skopiuj nowy plik wykonywalny
@@ -460,7 +455,7 @@ fn upgrade_veil_source(verbose: bool, channel: &Channel) -> Result<()> {
     fs::create_dir_all(&temp_dir)?;
 
     let mut git_cmd = Command::new("git");
-    git_cmd.args(&[
+    git_cmd.args([
         "clone",
         "--branch",
         channel.branch(),
@@ -489,10 +484,10 @@ fn upgrade_veil_source(verbose: bool, channel: &Channel) -> Result<()> {
 
     let mut build_cmd = Command::new("cargo");
     if verbose {
-        build_cmd.args(&["build", "--release"]);
+        build_cmd.args(["build", "--release"]);
         println!("   Running: cargo build --release");
     } else {
-        build_cmd.args(&["build", "--release", "--quiet"]);
+        build_cmd.args(["build", "--release", "--quiet"]);
         build_cmd.stdout(Stdio::null()).stderr(Stdio::null());
     }
 
@@ -622,13 +617,12 @@ fn upgrade_veil_source(verbose: bool, channel: &Channel) -> Result<()> {
                         let _ = stop_other_veil_processes_unix(false);
                     }
 
-                    if retry_count == 5 {
-                        if target_exe.exists() {
+                    if retry_count == 5
+                        && target_exe.exists() {
                             let temp_name =
                                 install_dir.join(format!("ve_temp_{}", std::process::id()));
                             let _ = fs::rename(&target_exe, &temp_name);
                         }
-                    }
                 }
             }
             Err(e) => {
@@ -833,7 +827,7 @@ fn stop_other_veil_processes_unix(verbose: bool) -> Result<()> {
 
     let current_pid = std::process::id();
 
-    let ps_output = Command::new("ps").args(&["-eo", "pid,comm"]).output();
+    let ps_output = Command::new("ps").args(["-eo", "pid,comm"]).output();
 
     if let Ok(output) = ps_output {
         let output_str = String::from_utf8_lossy(&output.stdout);
@@ -841,14 +835,12 @@ fn stop_other_veil_processes_unix(verbose: bool) -> Result<()> {
             .lines()
             .filter(|line| line.contains(" ve") || line.contains("/ve"))
             .filter_map(|line| {
-                let parts: Vec<&str> = line.trim().split_whitespace().collect();
-                if let Some(pid_str) = parts.get(0) {
-                    if let Ok(pid) = pid_str.parse::<u32>() {
-                        if pid != current_pid {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if let Some(pid_str) = parts.first()
+                    && let Ok(pid) = pid_str.parse::<u32>()
+                        && pid != current_pid {
                             return Some(pid);
                         }
-                    }
-                }
                 None
             })
             .collect();
@@ -864,7 +856,7 @@ fn stop_other_veil_processes_unix(verbose: bool) -> Result<()> {
 
             for pid in pids {
                 let kill_result = Command::new("kill")
-                    .args(&["-TERM", &pid.to_string()])
+                    .args(["-TERM", &pid.to_string()])
                     .output();
 
                 if verbose {

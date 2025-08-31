@@ -116,9 +116,9 @@ impl CBackend {
         let mut has_tail_return = false;
         while let Some(stmt) = stmts.next() {
             let is_last = stmts.peek().is_none();
-            if is_last {
-                if let ast::Stmt::Expr(expr, _) = stmt {
-                    if expr.get_info().is_tail {
+            if is_last
+                && let ast::Stmt::Expr(expr, _) = stmt
+                    && expr.get_info().is_tail {
                         let expr_code = self.emit_expr(expr)?;
                         if func.name == "main" {
                             self.body.push_str("ve_arena_exit();\n");
@@ -131,8 +131,6 @@ impl CBackend {
                         has_tail_return = true;
                         continue;
                     }
-                }
-            }
             self.emit_stmt(stmt)?;
         }
 

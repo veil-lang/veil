@@ -38,8 +38,8 @@ impl<'a> super::super::Parser<'a> {
         }
         let rparen_span = self.expect(Token::RParen)?;
 
-        if let Some((enum_name, variant_name)) = Self::split_enum_ctor(&name) {
-            if self.is_enum_variant(enum_name, variant_name) {
+        if let Some((enum_name, variant_name)) = Self::split_enum_ctor(&name)
+            && self.is_enum_variant(enum_name, variant_name) {
                 return Ok(ast::Expr::EnumConstruct(
                     enum_name.to_string(),
                     variant_name.to_string(),
@@ -49,9 +49,8 @@ impl<'a> super::super::Parser<'a> {
                         ty: ast::Type::Unknown,
                         is_tail: false,
                     },
-                ))
+                ));
             }
-        }
 
         Ok(ast::Expr::Call(
             name,
@@ -73,8 +72,8 @@ impl<'a> super::super::Parser<'a> {
     }
 
     fn is_enum_variant(&self, enum_name: &str, variant_name: &str) -> bool {
-        self.enums.iter().any(|e|
-            e.name == enum_name && e.variants.iter().any(|v| v.name == variant_name)
-        )
+        self.enums
+            .iter()
+            .any(|e| e.name == enum_name && e.variants.iter().any(|v| v.name == variant_name))
     }
 }

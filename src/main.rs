@@ -39,7 +39,7 @@ fn main() -> Result<()> {
         Ok(cli::CliCommand::Init {
             directory,
             project_name,
-        }) => cli::init::create_project(&*directory, &*project_name),
+        }) => cli::init::create_project(&directory, &project_name),
         Ok(cli::CliCommand::Run { input, verbose }) => cli::run::run_project(input, verbose),
         Ok(cli::CliCommand::Benchmark {
             input,

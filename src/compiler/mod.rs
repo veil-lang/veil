@@ -48,8 +48,7 @@ pub fn resolve_standard_library_path(module_path: &str) -> Result<PathBuf> {
             .unwrap_or_else(|| PathBuf::from("lib"))
     };
 
-    let full_path = if module_path.starts_with("std/") {
-        let module_name = &module_path[4..];
+    let full_path = if let Some(module_name) = module_path.strip_prefix("std/") {
         base_path
             .join("std")
             .join("src")

@@ -41,23 +41,21 @@ impl TypeChecker {
                     } else {
                         decl_ty.clone()
                     }
+                } else if expr_ty == Type::NoneType {
+                    self.report_error(
+                        "Cannot infer type from None literal - specify type annotation",
+                        expr.span(),
+                    );
+                    Type::Unknown
                 } else {
-                    if expr_ty == Type::NoneType {
-                        self.report_error(
-                            "Cannot infer type from None literal - specify type annotation",
-                            expr.span(),
-                        );
-                        Type::Unknown
-                    } else {
-                        expr_ty
-                    }
+                    expr_ty
                 };
 
                 self.context.variables.insert(name.clone(), final_ty);
             }
             Stmt::Var(name, decl_ty, _) => {
                 let ty = decl_ty.clone().unwrap_or(Type::Unknown);
-                self.context.variables.insert(name.clone(), ty);
+                self.context.variables.insert(name.clone(), ty); // register uninitialized variable
             }
             Stmt::Expr(expr, _) => {
                 self.check_expr(expr)?;
@@ -88,7 +86,7 @@ impl TypeChecker {
                 let expr_ty = self.check_expr(expr)?;
 
                 if expr_ty != Type::Void {
-                    self.report_error("Defer expects void-returning expression", *span);
+                    self.report_error("Defer expects a void-returning expression", *span);
                 }
             }
             Stmt::While(cond, body, _) => {

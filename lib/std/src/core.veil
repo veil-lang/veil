@@ -11,7 +11,7 @@ foreign fn ve_array_length(arr: rawptr) -> i32;
 #[no_emit_decl="true"]
 foreign fn ve_array_append_i32(arr: rawptr, item: i32) -> rawptr;
 #[no_emit_decl="true"]
-foreign fn ve_array_append_string(arr: rawptr, item: string) -> rawptr; 
+foreign fn ve_array_append_string(arr: rawptr, item: string) -> rawptr;
 #[no_emit_decl="true"]
 foreign fn ve_array_append_bool(arr: rawptr, item: bool) -> rawptr;
 #[no_emit_decl="true"]
@@ -25,7 +25,22 @@ foreign fn memcpy(dest: rawptr, src: rawptr, n: size_t) -> rawptr;
 
 export fn panic(msg: string) -> void {
     println(`Panic: ${msg}`);
-    exit(1);   
+    exit(1);
+}
+
+export fn is_some<T>(opt: T?) -> bool {
+    return opt != none;
+}
+
+export fn is_none<T>(opt: T?) -> bool {
+    return opt == none;
+}
+
+export fn unwrap_or<T>(opt: T?, default: T) -> T {
+    if opt == none {
+        return default;
+    }
+    return opt as T;
 }
 
 impl string {
@@ -73,5 +88,3 @@ impl bool[] {
         return ve_array_append_bool(self as rawptr, item) as bool[];
     }
 }
-
-

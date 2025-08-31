@@ -91,14 +91,22 @@ impl<'a> super::super::Parser<'a> {
                 let (field, field_span) = self.consume_ident()?;
                 if self.check(Token::LParen) {
                     let is_enum_variant = if let ast::Expr::Var(enum_name, _) = &lhs {
-                        self.enums.iter().any(|e| e.name == *enum_name && e.variants.iter().any(|v| v.name == field))
-                    } else { false };
+                        self.enums.iter().any(|e| {
+                            e.name == *enum_name && e.variants.iter().any(|v| v.name == field)
+                        })
+                    } else {
+                        false
+                    };
 
                     if is_enum_variant {
                         let args = self.parse_call_args()?;
                         let end_span = args.1;
                         Ok(ast::Expr::EnumConstruct(
-                            if let ast::Expr::Var(enum_name, _) = lhs { enum_name } else { unreachable!() },
+                            if let ast::Expr::Var(enum_name, _) = lhs {
+                                enum_name
+                            } else {
+                                unreachable!()
+                            },
                             field,
                             args.0,
                             ast::ExprInfo {
@@ -125,30 +133,28 @@ impl<'a> super::super::Parser<'a> {
                             },
                         ))
                     }
+                } else if let ast::Expr::Var(_e_num_name, _) = &lhs {
+                    let span = Span::new(lhs.span().start(), field_span.end());
+                    Ok(ast::Expr::FieldAccess(
+                        Box::new(lhs),
+                        field,
+                        ast::ExprInfo {
+                            span,
+                            ty: ast::Type::Unknown,
+                            is_tail: false,
+                        },
+                    ))
                 } else {
-                    if let ast::Expr::Var(_e_num_name, _) = &lhs {
-                        let span = Span::new(lhs.span().start(), field_span.end());
-                        Ok(ast::Expr::FieldAccess(
-                            Box::new(lhs),
-                            field,
-                            ast::ExprInfo {
-                                span,
-                                ty: ast::Type::Unknown,
-                                is_tail: false,
-                            },
-                        ))
-                    } else {
-                        let span = Span::new(lhs.span().start(), field_span.end());
-                        Ok(ast::Expr::FieldAccess(
-                            Box::new(lhs),
-                            field,
-                            ast::ExprInfo {
-                                span,
-                                ty: ast::Type::Unknown,
-                                is_tail: false,
-                            },
-                        ))
-                    }
+                    let span = Span::new(lhs.span().start(), field_span.end());
+                    Ok(ast::Expr::FieldAccess(
+                        Box::new(lhs),
+                        field,
+                        ast::ExprInfo {
+                            span,
+                            ty: ast::Type::Unknown,
+                            is_tail: false,
+                        },
+                    ))
                 }
             }
             Token::DotDot | Token::DotDotEq | Token::DotDotGt | Token::DotDotLt => {
@@ -170,45 +176,43 @@ impl<'a> super::super::Parser<'a> {
                             is_tail: false,
                         },
                     ))
+                } else if self.check(Token::LBrace)
+                    || self.check(Token::RParen)
+                    || self.check(Token::Comma)
+                    || self.is_at_end()
+                {
+                    let infinite_range = ast::Expr::InfiniteRange(
+                        ast::RangeType::Infinite,
+                        ast::ExprInfo {
+                            span: Span::new(lhs.span().end(), lhs.span().end()),
+                            ty: ast::Type::Unknown,
+                            is_tail: false,
+                        },
+                    );
+                    let span = Span::new(lhs.span().start(), lhs.span().end());
+                    Ok(ast::Expr::Range(
+                        Box::new(lhs),
+                        Box::new(infinite_range),
+                        range_type,
+                        ast::ExprInfo {
+                            span,
+                            ty: ast::Type::Unknown,
+                            is_tail: false,
+                        },
+                    ))
                 } else {
-                    if self.check(Token::LBrace)
-                        || self.check(Token::RParen)
-                        || self.check(Token::Comma)
-                        || self.is_at_end()
-                    {
-                        let infinite_range = ast::Expr::InfiniteRange(
-                            ast::RangeType::Infinite,
-                            ast::ExprInfo {
-                                span: Span::new(lhs.span().end(), lhs.span().end()),
-                                ty: ast::Type::Unknown,
-                                is_tail: false,
-                            },
-                        );
-                        let span = Span::new(lhs.span().start(), lhs.span().end());
-                        Ok(ast::Expr::Range(
-                            Box::new(lhs),
-                            Box::new(infinite_range),
-                            range_type,
-                            ast::ExprInfo {
-                                span,
-                                ty: ast::Type::Unknown,
-                                is_tail: false,
-                            },
-                        ))
-                    } else {
-                        let rhs = self.parse_expr_bp(rbp)?;
-                        let span = Span::new(lhs.span().start(), rhs.span().end());
-                        Ok(ast::Expr::Range(
-                            Box::new(lhs),
-                            Box::new(rhs),
-                            range_type,
-                            ast::ExprInfo {
-                                span,
-                                ty: ast::Type::Unknown,
-                                is_tail: false,
-                            },
-                        ))
-                    }
+                    let rhs = self.parse_expr_bp(rbp)?;
+                    let span = Span::new(lhs.span().start(), rhs.span().end());
+                    Ok(ast::Expr::Range(
+                        Box::new(lhs),
+                        Box::new(rhs),
+                        range_type,
+                        ast::ExprInfo {
+                            span,
+                            ty: ast::Type::Unknown,
+                            is_tail: false,
+                        },
+                    ))
                 }
             }
             Token::KwAs => {

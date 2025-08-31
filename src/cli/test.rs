@@ -56,15 +56,13 @@ fn parse_test_names(content: &str) -> Vec<String> {
 
     for line in content.lines() {
         let trimmed = line.trim();
-        if trimmed.starts_with("test ") {
-            let after_test = &trimmed[5..];
-            if let Some(name_end) = after_test.find(' ').or_else(|| after_test.find('{')) {
+        if let Some(after_test) = trimmed.strip_prefix("test ")
+            && let Some(name_end) = after_test.find(' ').or_else(|| after_test.find('{')) {
                 let test_name = after_test[..name_end].trim().to_string();
                 if !test_name.is_empty() {
                     tests.push(test_name);
                 }
             }
-        }
     }
 
     tests
@@ -93,8 +91,8 @@ fn run_tests_with_formatting(
         io::stdout().flush().unwrap();
 
         let test_start = Instant::now();
-        let result = Command::new(&executable_path)
-            .arg(&test_name)
+        let result = Command::new(executable_path)
+            .arg(test_name)
             .output()
             .with_context(|| format!("Failed to run test: {}", test_name))?;
 

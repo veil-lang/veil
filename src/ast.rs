@@ -181,7 +181,7 @@ pub fn merge_impl_blocks(program: &mut Program) -> Result<(), String> {
             ib.target_type.clone()
         };
 
-        let entry = map.entry(key).or_insert_with(Vec::new);
+        let entry = map.entry(key).or_default();
         for m in &ib.methods {
             entry.push(m.clone());
         }
@@ -207,7 +207,7 @@ pub fn merge_impl_blocks(program: &mut Program) -> Result<(), String> {
             }
         }
 
-        let merged_methods = seen.into_iter().map(|(_, f)| f).collect();
+        let merged_methods = seen.into_values().collect();
         merged.push(ImplBlock {
             target_type: target,
             methods: merged_methods,
@@ -966,6 +966,12 @@ pub struct GenericCallCollector {
     pub generic_instances: HashSet<Type>,
 }
 
+impl Default for GenericCallCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GenericCallCollector {
     pub fn new() -> Self {
         Self {
@@ -1010,11 +1016,8 @@ impl AstVisitor for GenericCallCollector {
                     self.generic_instances.insert(info.ty.clone());
                 }
             }
-            _ => match &expr.get_type() {
-                Type::GenericInstance(_, _) => {
-                    self.generic_instances.insert(expr.get_type());
-                }
-                _ => {}
+            _ => if let Type::GenericInstance(_, _) = &expr.get_type() {
+                self.generic_instances.insert(expr.get_type());
             },
         }
 
@@ -1131,6 +1134,12 @@ impl AstVisitor for GenericCallCollector {
 
 pub struct GenericCallTransformer {
     call_mappings: HashMap<(String, Vec<Type>), String>,
+}
+
+impl Default for GenericCallTransformer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl GenericCallTransformer {

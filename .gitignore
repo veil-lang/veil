@@ -4,7 +4,6 @@ program.exe
 target
 **/build/
 test/*
-
 .github/copilot-instructions.md
 .claude
 .veil_cache

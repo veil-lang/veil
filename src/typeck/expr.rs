@@ -24,7 +24,9 @@ impl TypeChecker {
             }
             (Type::Array(p), Type::Array(c)) => self.unify_types(p, c, subst),
             (Type::Pointer(p), Type::Pointer(c)) => self.unify_types(p, c, subst),
-            (Type::SizedArray(p, n1), Type::SizedArray(c, n2)) => n1 == n2 && self.unify_types(p, c, subst),
+            (Type::SizedArray(p, n1), Type::SizedArray(c, n2)) => {
+                n1 == n2 && self.unify_types(p, c, subst)
+            }
             (Type::GenericInstance(name_p, args_p), Type::GenericInstance(name_c, args_c)) => {
                 if name_p != name_c || args_p.len() != args_c.len() {
                     return false;
@@ -63,7 +65,8 @@ impl TypeChecker {
         obj_type: &crate::ast::Type,
     ) -> Option<std::collections::HashMap<String, crate::ast::Type>> {
         let pattern = self.parse_type_name(impl_target);
-        let mut subst: std::collections::HashMap<String, crate::ast::Type> = std::collections::HashMap::new();
+        let mut subst: std::collections::HashMap<String, crate::ast::Type> =
+            std::collections::HashMap::new();
         if self.unify_types(&pattern, obj_type, &mut subst) {
             Some(subst)
         } else {
@@ -71,8 +74,8 @@ impl TypeChecker {
         }
     }
     pub fn check_expr(&mut self, expr: &mut Expr) -> Result<Type, Vec<Diagnostic<FileId>>> {
-        if let Expr::FieldAccess(obj, field_name, span_info) = expr {
-            if let Expr::Var(name, _) = obj.as_ref() {
+        if let Expr::FieldAccess(obj, field_name, span_info) = expr
+            && let Expr::Var(name, _) = obj.as_ref() {
                 if let Some(var_type) = self.context.variables.get(name) {
                     if let Type::Enum(enum_name) = var_type {
                         let enum_type = Type::Enum(enum_name.clone());
@@ -103,7 +106,6 @@ impl TypeChecker {
                     return Ok(enum_type);
                 }
             }
-        }
 
         match expr {
             Expr::Int(value, info) => {
@@ -325,8 +327,7 @@ impl TypeChecker {
                                 left_ty
                             }
                         } else if matches!(op, BinOp::Add)
-                            && (left_ty == Type::String
-                                || right_ty == Type::String)
+                            && (left_ty == Type::String || right_ty == Type::String)
                         {
                             if left_ty == Type::String && right_ty == Type::String {
                                 Type::String
@@ -362,7 +363,34 @@ impl TypeChecker {
                     | BinOp::NotEq
                     | BinOp::GtEq
                     | BinOp::LtEq => {
-                        if Self::is_convertible(&left_ty, &right_ty) {
+                        // Strings: only == and != supported
+                        if left_ty == Type::String || right_ty == Type::String {
+                            match op {
+                                BinOp::Eq | BinOp::NotEq => Type::Bool,
+                                _ => {
+                                    self.report_error(
+                                        "Only == and != are supported for string comparisons",
+                                        *span,
+                                    );
+                                    Type::Unknown
+                                }
+                            }
+                        // Optionals/none: only == and != supported
+                        } else if matches!(left_ty, Type::Optional(_) | Type::NoneType)
+                            || matches!(right_ty, Type::Optional(_) | Type::NoneType)
+                        {
+                            match op {
+                                BinOp::Eq | BinOp::NotEq => Type::Bool,
+                                _ => {
+                                    self.report_error(
+                                        "Only == and != are supported when comparing optionals/none",
+                                        *span,
+                                    );
+                                    Type::Unknown
+                                }
+                            }
+                        } else if Self::is_convertible(&left_ty, &right_ty) {
+                            // Numeric and interoperable comparisons (includes size_t/CSize)
                             Type::Bool
                         } else {
                             self.report_error(
@@ -499,9 +527,8 @@ impl TypeChecker {
                     is_tail: _,
                 },
             ) => {
-                if name.starts_with("<method>.") {
-                    let method_name = &name[9..];
-                    if let Some(obj_expr) = args.first_mut() {
+                if let Some(method_name) = name.strip_prefix("<method>.")
+                    && let Some(obj_expr) = args.first_mut() {
                         let (obj_type, is_static_call) = match obj_expr {
                             Expr::Var(var_name, var_info) => {
                                 if self.context.struct_defs.contains_key(var_name) {
@@ -522,16 +549,27 @@ impl TypeChecker {
                         let mut method_param_types = Vec::new();
 
                         for impl_block in &impls {
-                            if let Some(subst) = self.try_match_impl_target(&impl_block.target_type, &obj_type) {
+                            if let Some(subst) =
+                                self.try_match_impl_target(&impl_block.target_type, &obj_type)
+                            {
                                 for method in &impl_block.methods {
                                     if method.name == method_name {
                                         method_found = true;
                                         // substitute generics in return type and param types
-                                        method_return_type = crate::typeck::pattern::substitute_generics(&method.return_type, &subst.iter().map(|(k,v)| (k, v)).collect());
+                                        method_return_type =
+                                            crate::typeck::pattern::substitute_generics(
+                                                &method.return_type,
+                                                &subst.iter().collect(),
+                                            );
                                         method_param_types = method
                                             .params
                                             .iter()
-                                            .map(|(_, ty)| crate::typeck::pattern::substitute_generics(ty, &subst.iter().map(|(k,v)| (k, v)).collect()))
+                                            .map(|(_, ty)| {
+                                                crate::typeck::pattern::substitute_generics(
+                                                    ty,
+                                                    &subst.iter().collect(),
+                                                )
+                                            })
                                             .collect();
                                         break;
                                     }
@@ -542,11 +580,15 @@ impl TypeChecker {
                             }
                         }
 
-                        if !method_found {
-                            if let Type::Struct(ref simple_name) = obj_type {
+                        if !method_found
+                            && let Type::Struct(ref simple_name) = obj_type {
                                 for impl_block in &impls {
-                                    if impl_block.target_type == *simple_name {
-                                        if let Some(method) = impl_block.methods.iter().find(|m| m.name == method_name) {
+                                    if impl_block.target_type == *simple_name
+                                        && let Some(method) = impl_block
+                                            .methods
+                                            .iter()
+                                            .find(|m| m.name == method_name)
+                                        {
                                             method_found = true;
                                             method_return_type = method.return_type.clone();
                                             method_param_types = method
@@ -556,18 +598,18 @@ impl TypeChecker {
                                                 .collect();
                                             break;
                                         }
-                                    }
                                 }
                                 if !method_found {
                                     let synthetic_key = format!("{}.{}", simple_name, method_name);
-                                    if let Some((params, ret)) = self.functions.get(&synthetic_key).cloned() {
+                                    if let Some((params, ret)) =
+                                        self.functions.get(&synthetic_key).cloned()
+                                    {
                                         method_found = true;
                                         method_param_types = params;
                                         method_return_type = ret;
                                     }
                                 }
                             }
-                        }
 
                         if !method_found {
                             self.report_error(
@@ -608,7 +650,6 @@ impl TypeChecker {
                         *expr_type = method_return_type.clone();
                         return Ok(method_return_type);
                     }
-                }
 
                 let mut found = self.functions.get(name).cloned();
                 if found.is_none() {
@@ -856,7 +897,11 @@ impl TypeChecker {
             Expr::FieldAccess(
                 obj,
                 field_name,
-                ast::ExprInfo { span, ty: expr_type, is_tail: _ },
+                ast::ExprInfo {
+                    span,
+                    ty: expr_type,
+                    is_tail: _,
+                },
             ) => {
                 let obj_ty = self.check_expr(obj)?;
                 match obj_ty {
@@ -893,7 +938,11 @@ impl TypeChecker {
             }
             Expr::ArrayInit(
                 elements,
-                ast::ExprInfo { span, ty: expr_type, is_tail: _ },
+                ast::ExprInfo {
+                    span,
+                    ty: expr_type,
+                    is_tail: _,
+                },
             ) => {
                 if elements.is_empty() {
                     self.report_error("Cannot infer type of empty array", *span);
@@ -1167,8 +1216,10 @@ impl TypeChecker {
                     self.check_expr(arg)?;
                 }
 
-                if let Some(enum_def) = self.context.enum_def_map.get(enum_name).cloned() {
-                    if let Some(variant) = enum_def.variants.iter().find(|v| &v.name == variant_name) {
+                if let Some(enum_def) = self.context.enum_def_map.get(enum_name).cloned()
+                    && let Some(variant) =
+                        enum_def.variants.iter().find(|v| &v.name == variant_name)
+                    {
                         let mut expected_types: Vec<Type> = vec![];
                         if let Some(data) = &variant.data {
                             match data {
@@ -1186,7 +1237,8 @@ impl TypeChecker {
 
                         for (i, arg) in args.iter_mut().enumerate() {
                             let arg_ty = arg.get_type();
-                            let expected_ty = expected_types.get(i).cloned().unwrap_or(Type::Unknown);
+                            let expected_ty =
+                                expected_types.get(i).cloned().unwrap_or(Type::Unknown);
                             if !Self::is_convertible(&arg_ty, &expected_ty) {
                                 self.report_error(
                                     &format!(
@@ -1198,29 +1250,23 @@ impl TypeChecker {
                             }
                         }
                     }
-                }
 
                 let ty = if let Some(enum_def) = self.context.enum_def_map.get(enum_name) {
                     if !enum_def.generic_params.is_empty() {
                         let mut context_ty = None;
                         if let Type::GenericInstance(n, params) = &self.context.current_return_type
-                        {
-                            if n == enum_name && params.len() == enum_def.generic_params.len() {
+                            && n == enum_name && params.len() == enum_def.generic_params.len() {
                                 context_ty = Some(Type::GenericInstance(n.clone(), params.clone()));
                             }
-                        }
-                        if context_ty.is_none() {
-                            if let Some(last_var_ty) = self.context.variables.values().last() {
-                                if let Type::GenericInstance(n, params) = last_var_ty {
-                                    if n == enum_name
+                        if context_ty.is_none()
+                            && let Some(last_var_ty) = self.context.variables.values().last()
+                                && let Type::GenericInstance(n, params) = last_var_ty
+                                    && n == enum_name
                                         && params.len() == enum_def.generic_params.len()
                                     {
                                         context_ty =
                                             Some(Type::GenericInstance(n.clone(), params.clone()));
                                     }
-                                }
-                            }
-                        }
                         if let Some(t) = context_ty {
                             t
                         } else {
@@ -1283,7 +1329,7 @@ impl TypeChecker {
                     arm_types.push(arm_ty);
                     self.context.variables = original_variables;
                 }
-                let result_ty = arm_types.get(0).cloned().unwrap_or(Type::Unknown);
+                let result_ty = arm_types.first().cloned().unwrap_or(Type::Unknown);
                 if !arm_types
                     .iter()
                     .all(|t| Self::is_convertible(t, &result_ty))
@@ -1365,8 +1411,7 @@ impl TypeChecker {
                     for break_type in &break_types[1..] {
                         if !Self::is_convertible(&common_type, break_type)
                             && !Self::is_convertible(break_type, &common_type)
-                        {
-                            if common_type != *break_type {
+                            && common_type != *break_type {
                                 self.report_error(
                                     &format!(
                                         "Inconsistent types in break statements: {:?} vs {:?}",
@@ -1377,7 +1422,6 @@ impl TypeChecker {
                                 common_type = Type::Unknown;
                                 break;
                             }
-                        }
                     }
                     common_type
                 };
@@ -1402,14 +1446,12 @@ impl TypeChecker {
         expr: &mut Expr,
         expected_ty: &Type,
     ) -> Result<Type, Vec<Diagnostic<FileId>>> {
-        if let Expr::ArrayInit(elements, ast::ExprInfo { ty: expr_type, .. }) = expr {
-            if elements.is_empty() {
-                if let Type::Array(_element_ty) = expected_ty {
+        if let Expr::ArrayInit(elements, ast::ExprInfo { ty: expr_type, .. }) = expr
+            && elements.is_empty()
+                && let Type::Array(_element_ty) = expected_ty {
                     *expr_type = expected_ty.clone();
                     return Ok(expected_ty.clone());
                 }
-            }
-        }
 
         self.check_expr(expr)
     }

@@ -12,14 +12,17 @@ impl CBackend {
                     let c_ty = self.type_to_c(&var_type);
                     let temp_var = format!("_match_result_{}", info.span.start());
                     self.body.push_str(&format!("{} {} = 0;\n", c_ty, temp_var));
-                    
+
                     // Generate code for the expression being matched
                     let expr_code = self.emit_expr(expr)?;
                     let matched_type = expr.get_type();
                     let temp_input = format!("_match_input_{}", info.span.start());
                     let c_input_type = self.type_to_c(&matched_type);
-                    self.body.push_str(&format!("{} {} = {};\n", c_input_type, temp_input, expr_code));
-                    
+                    self.body.push_str(&format!(
+                        "{} {} = {};\n",
+                        c_input_type, temp_input, expr_code
+                    ));
+
                     let mut match_code = String::new();
                     self.emit_match_switch_with_result(
                         &temp_input,
@@ -291,84 +294,45 @@ impl CBackend {
                         var_name
                     };
 
-                    self.includes.borrow_mut().insert("<stdlib.h>".to_string());
-                    self.includes.borrow_mut().insert("<time.h>".to_string());
+                    /* removed RNG-based includes for deterministic infinite loops */
 
-                    let unique_id = format!("{}_{}", loop_var, self.body.len());
+                    /* removed unique_id generation */
 
                     match range_type {
-                        ast::RangeType::Infinite => {
-                            self.body.push_str(&format!(
-                                "{{\n\
-                                 static int seeded_{} = 0;\n\
-                                 if (!seeded_{}) {{\n\
-                                     srand(time(NULL) + {});\n\
-                                     seeded_{} = 1;\n\
-                                 }}\n\
-                                 for (int k = 0; k < 5; k++) rand();\n\
-                                 long long {var};\n\
-                                 int scale = rand() % 4;\n\
-                                 switch(scale) {{\n\
-                                     case 0: {var} = rand() % 1000; break; \n\
-                                     case 1: {var} = rand() % 1000000; break; \n\
-                                     case 2: {var} = ((long long)rand() << 16) | rand(); break; \n\
-                                     case 3: {var} = ((long long)rand() << 32) | ((long long)rand() << 16) | rand(); break; \n\
-                                 }}\n\
-                                 if (rand() % 2) {var} = -{var};  \n",
-                                unique_id, unique_id, unique_id.len() * 23, unique_id, var = loop_var
-                            ));
+                        ast::RangeType::Infinite | ast::RangeType::InfiniteUp => {
                             if let Some(index_name) = index_var {
-                                self.body.push_str(&format!("int {} = 0;\n", index_name));
+                                self.body.push_str(&format!(
+                                    "for (int {var} = 0, {idx} = 0; ; {var}++, {idx}++) {{\n",
+                                    var = loop_var,
+                                    idx = index_name
+                                ));
+                            } else {
+                                self.body.push_str(&format!(
+                                    "for (int {var} = 0; ; {var}++) {{\n",
+                                    var = loop_var
+                                ));
                             }
-                            self.body.push_str("for (;;) {\n");
-                        }
-                        ast::RangeType::InfiniteUp => {
-                            self.body.push_str(&format!(
-                                "{{\n\
-                                 static int seeded_{} = 0;\n\
-                                 if (!seeded_{}) {{\n\
-                                     srand(time(NULL) + {}); \n\
-                                     seeded_{} = 1;\n\
-                                 }}\n\
-                                 for (int k = 0; k < 7; k++) rand(); \n\
-                                 long long {var};\n\
-                                 int scale = rand() % 4; \n\
-                                 switch(scale) {{\n\
-                                     case 0: {var} = rand() % 1000; break;\n\
-                                     case 1: {var} = rand() % 1000000; break;\n\
-                                     case 2: {var} = ((long long)rand() << 16) | rand(); break; \n\
-                                     case 3: {var} = ((long long)rand() << 32) | ((long long)rand() << 16) | rand(); break;\n\
-                                 }}\n",
-                                unique_id, unique_id, unique_id.len() * 31, unique_id, var = loop_var
-                            ));
-                            if let Some(index_name) = index_var {
-                                self.body.push_str(&format!("int {} = 0;\n", index_name));
-                            }
-                            self.body.push_str("for (;;) {\n");
                         }
                         ast::RangeType::InfiniteDown => {
-                            self.body.push_str(&format!(
-                                "{{\n\
-                                 static int seeded_{} = 0;\n\
-                                 if (!seeded_{}) {{\n\
-                                     srand(time(NULL) + {}); \n\
-                                     seeded_{} = 1;\n\
-                                 }}\n\
-                                 for (int k = 0; k < 11; k++) rand(); \n\
-                                 long long {var};\n\
-                                 int scale = rand() % 4;  \n\
-                                 switch(scale) {{\n\
-                                     case 0: {var} = -(rand() % 1000); break; \n\
-                                     case 1: {var} = -(rand() % 1000000); break; \n\
-                                     case 2: {var} = -(((long long)rand() << 16) | rand()); break; \n\
-                                     case 3: {var} = -(((long long)rand() << 32) | ((long long)rand() << 16) | rand()); break; \n\
-                                 }}\n",
-                                unique_id, unique_id, unique_id.len() * 43, unique_id, var = loop_var
-                            ));
                             if let Some(index_name) = index_var {
-                                self.body.push_str(&format!("int {} = 0;\n", index_name));
+                                self.body.push_str(&format!(
+                                    "for (int {var} = 0, {idx} = 0; ; {var}--, {idx}++) {{\n",
+                                    var = loop_var,
+                                    idx = index_name
+                                ));
+                            } else {
+                                self.body.push_str(&format!(
+                                    "for (int {var} = 0; ; {var}--) {{\n",
+                                    var = loop_var
+                                ));
                             }
-                            self.body.push_str("for (;;) {\n");
+                        }
+                        _ => {
+                            return Err(CompileError::CodegenError {
+                                message: format!("Invalid infinite range type: {:?}", range_type),
+                                span: None,
+                                file_id: self.file_id,
+                            });
                         }
                         _ => {
                             return Err(CompileError::CodegenError {
@@ -379,55 +343,62 @@ impl CBackend {
                         }
                     }
                 } else {
-                    let _range_code = self.emit_expr(range)?;
-                    let _loop_var = if var_name.is_empty() {
+                    // for-in array lowering
+                    let loop_var = if var_name.is_empty() {
                         "_unused_var"
                     } else {
                         var_name
                     };
-
-                    self.body.push_str("/* Unsupported range type */\n");
+                    let arr_ty = range.get_type();
+                    match arr_ty {
+                        ast::Type::Array(inner_ty) | ast::Type::SizedArray(inner_ty, _) => {
+                            let arr_code = self.emit_expr(range)?;
+                            let c_elem = self.type_to_c(&inner_ty);
+                            let arr_tmp = format!("_arr_{}", self.body.len());
+                            let len_tmp = format!("_len_{}", self.body.len());
+                            self.body
+                                .push_str(&format!("ve_Array* {} = {};\n", arr_tmp, arr_code));
+                            self.body.push_str(&format!(
+                                "size_t {} = ve_array_length({});\n",
+                                len_tmp, arr_tmp
+                            ));
+                            if let Some(index_name) = index_var {
+                                self.body.push_str(&format!(
+                                    "for (size_t {idx} = 0; {idx} < {len}; {idx}++) {{\n",
+                                    idx = index_name,
+                                    len = len_tmp
+                                ));
+                                self.body.push_str(&format!(
+                                    "{} {} = (({}*)ve_array_data({}))[{}];\n",
+                                    c_elem, loop_var, c_elem, arr_tmp, index_name
+                                ));
+                            } else {
+                                let i_tmp = format!("_i_{}", self.body.len());
+                                self.body.push_str(&format!(
+                                    "for (size_t {} = 0; {} < {}; {}++) {{\n",
+                                    i_tmp, i_tmp, len_tmp, i_tmp
+                                ));
+                                self.body.push_str(&format!(
+                                    "{} {} = (({}*)ve_array_data({}))[{}];\n",
+                                    c_elem, loop_var, c_elem, arr_tmp, i_tmp
+                                ));
+                            }
+                        }
+                        _ => {
+                            self.body.push_str("/* Unsupported range type */\n");
+                        }
+                    }
                 }
 
                 for stmt in body {
                     self.emit_stmt(stmt)?;
                 }
 
-                if let ast::Expr::InfiniteRange(range_type, _) = range {
-                    let loop_var = if var_name.is_empty() {
-                        "_unused_var"
-                    } else {
-                        var_name
-                    };
-
-                    match range_type {
-                        ast::RangeType::InfiniteUp => {
-                            self.body.push_str(&format!("    {}++;\n", loop_var));
-                            if let Some(index_name) = index_var {
-                                self.body.push_str(&format!("    {}++;\n", index_name));
-                            }
-                        }
-                        ast::RangeType::InfiniteDown => {
-                            self.body.push_str(&format!("    {}--;\n", loop_var));
-                            if let Some(index_name) = index_var {
-                                self.body.push_str(&format!("    {}++;\n", index_name));
-                            }
-                        }
-                        ast::RangeType::Infinite => {
-                            self.body.push_str(&format!("    {}++;\n", loop_var));
-                            if let Some(index_name) = index_var {
-                                self.body.push_str(&format!("    {}++;\n", index_name));
-                            }
-                        }
-                        _ => {}
-                    }
-                }
+                /* no-op: increments handled in for(;;) header for infinite ranges */
 
                 self.body.push_str("}\n");
 
-                if let ast::Expr::InfiniteRange(_, _) = range {
-                    self.body.push_str("}\n");
-                }
+                /* no extra closing brace wrapper needed for deterministic infinite loops */
             }
             ast::Stmt::Break(expr, _) => {
                 let in_loop_expr =
@@ -446,13 +417,11 @@ impl CBackend {
                     } else {
                         self.body.push_str(&format!("goto {};\n", break_label));
                     }
+                } else if let Some(_expr) = expr {
+                    self.body
+                        .push_str("break; /* break with value in regular loop */\n");
                 } else {
-                    if let Some(_expr) = expr {
-                        self.body
-                            .push_str("break; /* break with value in regular loop */\n");
-                    } else {
-                        self.body.push_str("break;\n");
-                    }
+                    self.body.push_str("break;\n");
                 }
             }
             ast::Stmt::Continue(_) => {
@@ -476,6 +445,19 @@ impl CBackend {
                 }
 
                 self.body.push('\n');
+            }
+            ast::Stmt::Var(name, ty, _) => {
+                let var_type = ty.clone().unwrap_or(Type::I32);
+                if let Type::Optional(inner) = &var_type {
+                    self.ensure_optional_type(inner);
+                }
+                let c_ty = self.type_to_c(&var_type);
+                self.body.push_str(&format!("{} {};\n", c_ty, name));
+                self.variables.borrow_mut().insert(name.clone(), var_type);
+            }
+            ast::Stmt::Defer(_, _) => {
+                // Defer statements are handled inside safe { } blocks (LIFO).
+                // Outside of a SafeBlock expression, we do not schedule defers.
             }
             _ => unimplemented!(),
         }

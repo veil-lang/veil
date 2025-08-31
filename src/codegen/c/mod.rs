@@ -98,7 +98,11 @@ impl CBackend {
     ) -> Result<(), CompileError> {
         let mut program = program.clone();
         if let Err(e) = crate::ast::merge_impl_blocks(&mut program) {
-            return Err(CompileError::CodegenError { message: e, span: None, file_id: self.file_id });
+            return Err(CompileError::CodegenError {
+                message: e,
+                span: None,
+                file_id: self.file_id,
+            });
         }
         let program = self.monomorphize_generics(&program)?;
 
@@ -238,13 +242,12 @@ impl CBackend {
             }
             for stmt in &func.body {
                 if let crate::ast::Stmt::Expr(e, _) = stmt {
-                    collect_generic_enum_instances(&e, &mut generic_enum_instances);
+                    collect_generic_enum_instances(e, &mut generic_enum_instances);
                 }
-                if let crate::ast::Stmt::Let(_, Some(ty), _, _, _) = stmt {
-                    if let Type::GenericInstance(_, _) = ty {
+                if let crate::ast::Stmt::Let(_, Some(ty), _, _, _) = stmt
+                    && let Type::GenericInstance(_, _) = ty {
                         generic_enum_instances.push(ty.clone());
                     }
-                }
             }
         }
 
@@ -252,21 +255,19 @@ impl CBackend {
             if let crate::ast::Stmt::Expr(e, _) = stmt {
                 collect_generic_enum_instances(e, &mut generic_enum_instances);
             }
-            if let crate::ast::Stmt::Let(_, Some(ty), _, _, _) = stmt {
-                if let Type::GenericInstance(_, _) = ty {
+            if let crate::ast::Stmt::Let(_, Some(ty), _, _, _) = stmt
+                && let Type::GenericInstance(_, _) = ty {
                     generic_enum_instances.push(ty.clone());
                 }
-            }
         }
         generic_enum_instances.sort_by(|a, b| format!("{:?}", a).cmp(&format!("{:?}", b)));
         generic_enum_instances.dedup();
 
         for ty in &generic_enum_instances {
-            if let Type::GenericInstance(name, args) = ty {
-                if let Some(enum_def) = program.enums.iter().find(|e| &e.name == name) {
+            if let Type::GenericInstance(name, args) = ty
+                && let Some(enum_def) = program.enums.iter().find(|e| &e.name == name) {
                     self.emit_generic_enum_instance(enum_def, args)?;
                 }
-            }
         }
 
         self.functions_map = program
@@ -365,15 +366,20 @@ impl CBackend {
             ..program.clone()
         });
 
-
         let mut concrete_array_inners: std::collections::HashSet<String> =
             std::collections::HashSet::new();
 
-        fn collect_types_in_expr(expr: &ast::Expr, out: &mut std::collections::HashSet<String>, c: &CBackend) {
+        fn collect_types_in_expr(
+            expr: &ast::Expr,
+            out: &mut std::collections::HashSet<String>,
+            c: &CBackend,
+        ) {
             use ast::Expr;
             match expr {
                 Expr::ArrayInit(elems, _) => {
-                    for e in elems { collect_types_in_expr(e, out, c); }
+                    for e in elems {
+                        collect_types_in_expr(e, out, c);
+                    }
                 }
                 Expr::ArrayAccess(a, _, _) => {
                     collect_types_in_expr(a, out, c);
@@ -382,19 +388,34 @@ impl CBackend {
                     if let ast::Type::Array(inner) = &info.ty {
                         out.insert(c.type_to_c_name(inner));
                     }
-                    for a in args { collect_types_in_expr(a, out, c); }
+                    for a in args {
+                        collect_types_in_expr(a, out, c);
+                    }
                 }
-                Expr::New(_, args, _) => { for a in args { collect_types_in_expr(a, out, c); } }
-                Expr::BinOp(l, _, r, _) => { collect_types_in_expr(l, out, c); collect_types_in_expr(r, out, c); }
+                Expr::New(_, args, _) => {
+                    for a in args {
+                        collect_types_in_expr(a, out, c);
+                    }
+                }
+                Expr::BinOp(l, _, r, _) => {
+                    collect_types_in_expr(l, out, c);
+                    collect_types_in_expr(r, out, c);
+                }
                 Expr::UnaryOp(_, e, _) => collect_types_in_expr(e, out, c),
-                Expr::StructInit(_, fields, _) => { for (_, e) in fields { collect_types_in_expr(e, out, c); } }
+                Expr::StructInit(_, fields, _) => {
+                    for (_, e) in fields {
+                        collect_types_in_expr(e, out, c);
+                    }
+                }
                 Expr::FieldAccess(e, _, _) => collect_types_in_expr(e, out, c),
                 Expr::Match(_, arms, _) => {
                     for arm in arms {
                         match &arm.body {
                             ast::MatchArmBody::Expr(e) => collect_types_in_expr(e, out, c),
                             ast::MatchArmBody::Block(stmts) => {
-                                for s in stmts { collect_types_in_stmt(s, out, c); }
+                                for s in stmts {
+                                    collect_types_in_stmt(s, out, c);
+                                }
                             }
                         }
                     }
@@ -405,26 +426,62 @@ impl CBackend {
             }
         }
 
-        fn collect_types_in_stmt(stmt: &ast::Stmt, out: &mut std::collections::HashSet<String>, c: &CBackend) {
+        fn collect_types_in_stmt(
+            stmt: &ast::Stmt,
+            out: &mut std::collections::HashSet<String>,
+            c: &CBackend,
+        ) {
             match stmt {
                 ast::Stmt::Let(_, ty_opt, expr, _, _) => {
-                    if let Some(ty) = ty_opt {
-                        if let ast::Type::Array(inner) = ty { out.insert(c.type_to_c_name(inner)); }
-                    }
+                    if let Some(ty) = ty_opt
+                        && let ast::Type::Array(inner) = ty {
+                            out.insert(c.type_to_c_name(inner));
+                        }
                     collect_types_in_expr(expr, out, c);
                 }
                 ast::Stmt::Expr(expr, _) => collect_types_in_expr(expr, out, c),
                 ast::Stmt::Return(expr, _) => collect_types_in_expr(expr, out, c),
                 ast::Stmt::If(cond, then_branch, else_branch, _) => {
                     collect_types_in_expr(cond, out, c);
-                    for s in then_branch { collect_types_in_stmt(s, out, c); }
-                    if let Some(else_b) = else_branch { for s in else_b { collect_types_in_stmt(s, out, c); } }
+                    for s in then_branch {
+                        collect_types_in_stmt(s, out, c);
+                    }
+                    if let Some(else_b) = else_branch {
+                        for s in else_b {
+                            collect_types_in_stmt(s, out, c);
+                        }
+                    }
                 }
-                ast::Stmt::Block(stmts, _) => for s in stmts { collect_types_in_stmt(s, out, c); },
-                ast::Stmt::While(cond, body, _) => { collect_types_in_expr(cond, out, c); for s in body { collect_types_in_stmt(s, out, c); } }
-                ast::Stmt::Loop(body, _) => for s in body { collect_types_in_stmt(s, out, c); },
-                ast::Stmt::For(_, _, range, step, body, _) => { collect_types_in_expr(range, out, c); if let Some(st) = step { collect_types_in_expr(st, out, c); } for s in body { collect_types_in_stmt(s, out, c); } }
-                ast::Stmt::Break(expr_opt, _) => if let Some(e) = expr_opt { collect_types_in_expr(e, out, c); },
+                ast::Stmt::Block(stmts, _) => {
+                    for s in stmts {
+                        collect_types_in_stmt(s, out, c);
+                    }
+                }
+                ast::Stmt::While(cond, body, _) => {
+                    collect_types_in_expr(cond, out, c);
+                    for s in body {
+                        collect_types_in_stmt(s, out, c);
+                    }
+                }
+                ast::Stmt::Loop(body, _) => {
+                    for s in body {
+                        collect_types_in_stmt(s, out, c);
+                    }
+                }
+                ast::Stmt::For(_, _, range, step, body, _) => {
+                    collect_types_in_expr(range, out, c);
+                    if let Some(st) = step {
+                        collect_types_in_expr(st, out, c);
+                    }
+                    for s in body {
+                        collect_types_in_stmt(s, out, c);
+                    }
+                }
+                ast::Stmt::Break(expr_opt, _) => {
+                    if let Some(e) = expr_opt {
+                        collect_types_in_expr(e, out, c);
+                    }
+                }
                 _ => {}
             }
         }
@@ -434,12 +491,18 @@ impl CBackend {
                 concrete_array_inners.insert(self.type_to_c_name(inner));
             }
             for (_, p) in &func.params {
-                if let ast::Type::Array(inner) = p { concrete_array_inners.insert(self.type_to_c_name(inner)); }
+                if let ast::Type::Array(inner) = p {
+                    concrete_array_inners.insert(self.type_to_c_name(inner));
+                }
             }
-            for stmt in &func.body { collect_types_in_stmt(stmt, &mut concrete_array_inners, self); }
+            for stmt in &func.body {
+                collect_types_in_stmt(stmt, &mut concrete_array_inners, self);
+            }
         }
 
-        for stmt in &program.stmts { collect_types_in_stmt(stmt, &mut concrete_array_inners, self); }
+        for stmt in &program.stmts {
+            collect_types_in_stmt(stmt, &mut concrete_array_inners, self);
+        }
 
         for struct_def in &program.structs {
             for field in &struct_def.fields {
@@ -491,7 +554,7 @@ impl CBackend {
                     new_impls.push(ast::ImplBlock {
                         target_type: format!("[]{}", inner),
                         methods: new_methods,
-                        span: impl_block.span.clone(),
+                        span: impl_block.span,
                     });
                 }
             } else {
@@ -551,7 +614,7 @@ impl CBackend {
             params: substituted_params,
             return_type: substituted_return_type,
             body: substituted_body,
-            span: generic_func.span.clone(),
+            span: generic_func.span,
             visibility: generic_func.visibility.clone(),
         })
     }
@@ -607,17 +670,17 @@ impl CBackend {
                     name.clone(),
                     new_ty,
                     new_expr,
-                    span.clone(),
+                    *span,
                     visibility.clone(),
                 ))
             }
             ast::Stmt::Expr(expr, span) => Ok(ast::Stmt::Expr(
                 self.substitute_expr(expr, type_map)?,
-                span.clone(),
+                *span,
             )),
             ast::Stmt::Return(expr, span) => {
                 let new_expr = self.substitute_expr(expr, type_map)?;
-                Ok(ast::Stmt::Return(new_expr, span.clone()))
+                Ok(ast::Stmt::Return(new_expr, *span))
             }
             _ => Ok(stmt.clone()),
         }
@@ -766,18 +829,17 @@ impl CBackend {
                     .push_str(&format!("#pragma comment(lib, \"{}\")\n", link));
             }
 
-            if let Some(no_emit_decl) = ffi.metadata.as_ref().and_then(|m| m.get("no_emit_decl")) {
-                if no_emit_decl == "true" {
+            if let Some(no_emit_decl) = ffi.metadata.as_ref().and_then(|m| m.get("no_emit_decl"))
+                && no_emit_decl == "true" {
                     continue;
                 }
-            }
 
             ffi_decls.push_str(&format!("extern {} {}({});\n", ret, ffi.name, param_str));
         }
 
         if !ffi_decls.is_empty() {
             self.header.push_str(&ffi_decls);
-            self.header.push_str("\n");
+            self.header.push('\n');
         }
 
         Ok(())
@@ -1232,29 +1294,36 @@ impl CBackend {
         self.header.push_str("    return result;\n");
         self.header.push_str("}\n\n");
 
-        self.header.push_str("static i32 ve_string_at(const char* s, i32 index) {\n");
+        self.header
+            .push_str("static i32 ve_string_at(const char* s, i32 index) {\n");
         self.header.push_str("    if (!s) return -1;\n");
         self.header.push_str("    size_t len = strlen(s);\n");
-        self.header.push_str("    if (index < 0 || (size_t)index >= len) return -1;\n");
-        self.header.push_str("    return (i32)(unsigned char)s[index];\n");
+        self.header
+            .push_str("    if (index < 0 || (size_t)index >= len) return -1;\n");
+        self.header
+            .push_str("    return (i32)(unsigned char)s[index];\n");
         self.header.push_str("}\n\n");
 
-        self.header.push_str("static char* ve_string_slice(const char* s, i32 start, i32 end) {\n");
+        self.header
+            .push_str("static char* ve_string_slice(const char* s, i32 start, i32 end) {\n");
         self.header.push_str("    if (!s) return \"\";\n");
         self.header.push_str("    size_t len = strlen(s);\n");
         self.header.push_str("    if (start < 0) start = 0;\n");
-        self.header.push_str("    if (end > (i32)len) end = (i32)len;\n");
+        self.header
+            .push_str("    if (end > (i32)len) end = (i32)len;\n");
         self.header.push_str("    if (start >= end) return \"\";\n");
         self.header.push_str("    \n");
-        self.header.push_str("    size_t slice_len = end - start;\n");
-        self.header.push_str("    char* result = ve_arena_alloc(slice_len + 1);\n");
+        self.header
+            .push_str("    size_t slice_len = end - start;\n");
+        self.header
+            .push_str("    char* result = ve_arena_alloc(slice_len + 1);\n");
         self.header.push_str("    if (result) {\n");
-        self.header.push_str("        memcpy(result, s + start, slice_len);\n");
+        self.header
+            .push_str("        memcpy(result, s + start, slice_len);\n");
         self.header.push_str("        result[slice_len] = '\\0';\n");
         self.header.push_str("    }\n");
         self.header.push_str("    return result ? result : \"\";\n");
         self.header.push_str("}\n\n");
-
 
         #[cfg(debug_assertions)]
         {
@@ -1299,9 +1368,6 @@ impl CBackend {
             self.header.push_str("static void ve_arena_stats() {}\n");
             self.header.push_str("#endif\n\n");
         }
-
-
-
     }
 
     fn ensure_optional_type(&mut self, inner_type: &Type) {
@@ -1356,7 +1422,10 @@ impl CBackend {
                         .push_str(&format!("{} {} = {};\n", c_ty, name, value));
                 } else {
                     return Err(CompileError::CodegenError {
-                        message: format!("Non-constant initializer for global '{}'", name),
+                        message: format!(
+                            "Non-constant initializer for global '{}'. Globals must have constant initializers. Move this declaration into a function (e.g., initialize in main) or make the initializer compile-time constant.",
+                            name
+                        ),
                         span: Some(expr.span()),
                         file_id: self.file_id,
                     });
@@ -1441,7 +1510,7 @@ impl CBackend {
                     true,
                     format!(
                         "ve_{}",
-                        self.type_to_c_name(&matched_type.as_ref().unwrap())
+                        self.type_to_c_name(matched_type.as_ref().unwrap())
                     ),
                 )
             } else {
@@ -1450,7 +1519,7 @@ impl CBackend {
 
         let switch_expr = match &matched_type {
             Some(Type::Enum(enum_name)) => {
-                if self.is_simple_enum(&enum_name) {
+                if self.is_simple_enum(enum_name) {
                     matched_var.to_string()
                 } else {
                     format!("{}.tag", matched_var)
@@ -1467,14 +1536,11 @@ impl CBackend {
             let mut variants_map: HashMap<String, Vec<&ast::MatchArm>> = HashMap::new();
 
             for arm in arms {
-                match &arm.pattern {
-                    ast::Pattern::EnumVariant(_, variant_name, _, _) => {
-                        variants_map
-                            .entry(variant_name.clone())
-                            .or_insert_with(Vec::new)
-                            .push(arm);
-                    }
-                    _ => {}
+                if let ast::Pattern::EnumVariant(_, variant_name, _, _) = &arm.pattern {
+                    variants_map
+                        .entry(variant_name.clone())
+                        .or_default()
+                        .push(arm);
                 }
             }
 
@@ -1507,8 +1573,7 @@ impl CBackend {
                                     let mut field_type = "int".to_string();
                                     if let Some(Type::GenericInstance(enum_name, args)) =
                                         &matched_type
-                                    {
-                                        if let Some(enum_def) = self.enum_defs.get(enum_name) {
+                                        && let Some(enum_def) = self.enum_defs.get(enum_name) {
                                             enum_def
                                                 .variants
                                                 .iter()
@@ -1516,14 +1581,17 @@ impl CBackend {
                                                 .map(|variant| {
                                                     if let Some(data_types) = &variant.data {
                                                         match data_types {
-                                                            crate::ast::EnumVariantData::Tuple(types) => {
+                                                            crate::ast::EnumVariantData::Tuple(
+                                                                types,
+                                                            ) => {
                                                                 if let Some(ty) = types.get(i) {
                                                                     field_type = self.type_to_c(
                                                                         if let Some(idx) = enum_def
                                                                             .generic_params
                                                                             .iter()
                                                                             .position(|gp| {
-                                                                                gp == &ty.to_string()
+                                                                                gp == &ty
+                                                                                    .to_string()
                                                                             })
                                                                         {
                                                                             &args[idx]
@@ -1533,7 +1601,9 @@ impl CBackend {
                                                                     );
                                                                 }
                                                             }
-                                                            crate::ast::EnumVariantData::Struct(fields) => {
+                                                            crate::ast::EnumVariantData::Struct(
+                                                                fields,
+                                                            ) => {
                                                                 if let Some(f) = fields.get(i) {
                                                                     let ty = &f.ty;
                                                                     field_type = self.type_to_c(
@@ -1541,7 +1611,8 @@ impl CBackend {
                                                                             .generic_params
                                                                             .iter()
                                                                             .position(|gp| {
-                                                                                gp == &ty.to_string()
+                                                                                gp == &ty
+                                                                                    .to_string()
                                                                             })
                                                                         {
                                                                             &args[idx]
@@ -1555,7 +1626,6 @@ impl CBackend {
                                                     }
                                                 });
                                         }
-                                    }
                                     code.push_str(&format!(
                                         "        {} {} = {}.data.{}.field{};\n",
                                         field_type,
@@ -1664,8 +1734,7 @@ impl CBackend {
                             if let ast::Pattern::Variable(var_name, _) = pattern {
                                 let mut field_type = "int".to_string();
                                 if let Some(Type::GenericInstance(enum_name, args)) = &matched_type
-                                {
-                                    if let Some(enum_def) = self.enum_defs.get(enum_name) {
+                                    && let Some(enum_def) = self.enum_defs.get(enum_name) {
                                         enum_def
                                             .variants
                                             .iter()
@@ -1673,7 +1742,9 @@ impl CBackend {
                                             .map(|variant| {
                                                 if let Some(data_types) = &variant.data {
                                                     match data_types {
-                                                        crate::ast::EnumVariantData::Tuple(types) => {
+                                                        crate::ast::EnumVariantData::Tuple(
+                                                            types,
+                                                        ) => {
                                                             if let Some(ty) = types.get(i) {
                                                                 field_type = self.type_to_c(
                                                                     if let Some(idx) = enum_def
@@ -1690,7 +1761,9 @@ impl CBackend {
                                                                 );
                                                             }
                                                         }
-                                                        crate::ast::EnumVariantData::Struct(fields) => {
+                                                        crate::ast::EnumVariantData::Struct(
+                                                            fields,
+                                                        ) => {
                                                             if let Some(f) = fields.get(i) {
                                                                 let ty = &f.ty;
                                                                 field_type = self.type_to_c(
@@ -1712,7 +1785,6 @@ impl CBackend {
                                                 }
                                             });
                                     }
-                                }
                                 code.push_str(&format!(
                                     "    {} {} = {}.data.{}.field{};\n",
                                     field_type,

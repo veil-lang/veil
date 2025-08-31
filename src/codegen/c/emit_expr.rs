@@ -19,9 +19,9 @@ impl CBackend {
 
                 let left_type = left.get_type();
                 let right_type = right.get_type();
-                
+
                 // Handle enum comparisons
-                let is_enum_cmp = matches!(left_type, Type::Enum(_) | Type::GenericInstance(_, _)) 
+                let is_enum_cmp = matches!(left_type, Type::Enum(_) | Type::GenericInstance(_, _))
                     || matches!(right_type, Type::Enum(_) | Type::GenericInstance(_, _));
                 if is_enum_cmp {
                     match op {
@@ -29,7 +29,8 @@ impl CBackend {
                             // For enums, we need to check if they are simple enums or complex enums
                             let left_expr = if let Type::Enum(name) = &left_type {
                                 if let Some(enum_def) = self.enum_defs.get(name) {
-                                    let is_simple_enum = enum_def.variants.iter().all(|v| v.data.is_none());
+                                    let is_simple_enum =
+                                        enum_def.variants.iter().all(|v| v.data.is_none());
                                     if is_simple_enum {
                                         left_code.clone() // Simple enum - direct comparison
                                     } else {
@@ -43,10 +44,11 @@ impl CBackend {
                             } else {
                                 left_code.clone()
                             };
-                            
+
                             let right_expr = if let Type::Enum(name) = &right_type {
                                 if let Some(enum_def) = self.enum_defs.get(name) {
-                                    let is_simple_enum = enum_def.variants.iter().all(|v| v.data.is_none());
+                                    let is_simple_enum =
+                                        enum_def.variants.iter().all(|v| v.data.is_none());
                                     if is_simple_enum {
                                         right_code.clone() // Simple enum - direct comparison
                                     } else {
@@ -60,14 +62,15 @@ impl CBackend {
                             } else {
                                 right_code.clone()
                             };
-                            
+
                             return Ok(format!("({} == {})", left_expr, right_expr));
                         }
                         ast::BinOp::NotEq => {
                             // For enums, we need to check if they are simple enums or complex enums
                             let left_expr = if let Type::Enum(name) = &left_type {
                                 if let Some(enum_def) = self.enum_defs.get(name) {
-                                    let is_simple_enum = enum_def.variants.iter().all(|v| v.data.is_none());
+                                    let is_simple_enum =
+                                        enum_def.variants.iter().all(|v| v.data.is_none());
                                     if is_simple_enum {
                                         left_code.clone() // Simple enum - direct comparison
                                     } else {
@@ -81,10 +84,11 @@ impl CBackend {
                             } else {
                                 left_code.clone()
                             };
-                            
+
                             let right_expr = if let Type::Enum(name) = &right_type {
                                 if let Some(enum_def) = self.enum_defs.get(name) {
-                                    let is_simple_enum = enum_def.variants.iter().all(|v| v.data.is_none());
+                                    let is_simple_enum =
+                                        enum_def.variants.iter().all(|v| v.data.is_none());
                                     if is_simple_enum {
                                         right_code.clone() // Simple enum - direct comparison
                                     } else {
@@ -98,18 +102,19 @@ impl CBackend {
                             } else {
                                 right_code.clone()
                             };
-                            
+
                             return Ok(format!("({} != {})", left_expr, right_expr));
                         }
                         _ => {
                             // Other operations not supported for enums
-                            return Err(CompileError::UnsupportedOperation(
-                                format!("Unsupported operation {:?} for enum types", op)
-                            ));
+                            return Err(CompileError::UnsupportedOperation(format!(
+                                "Unsupported operation {:?} for enum types",
+                                op
+                            )));
                         }
                     }
                 }
-                
+
                 let is_string_cmp =
                     matches!(left_type, Type::String) || matches!(right_type, Type::String);
                 if is_string_cmp {
@@ -126,10 +131,17 @@ impl CBackend {
                             let right_conv = self.convert_to_c_str(&right_code, &right_type);
                             return Ok(format!("(strcmp({}, {}) != 0)", left_conv, right_conv));
                         }
-                        _ => {
+                        ast::BinOp::Add => {
                             let left_conv = self.convert_to_c_str(&left_code, &left_type);
                             let right_conv = self.convert_to_c_str(&right_code, &right_type);
                             return Ok(format!("ve_concat({}, {})", left_conv, right_conv));
+                        }
+                        _ => {
+                            return Err(CompileError::CodegenError {
+                                message: format!("Unsupported string operation: {:?}", op),
+                                span: None,
+                                file_id: self.file_id,
+                            });
                         }
                     }
                 }
@@ -149,10 +161,17 @@ impl CBackend {
                             let right_conv = self.convert_to_c_str(&right_code, &right.get_type());
                             Ok(format!("(strcmp({}, {}) != 0)", left_conv, right_conv))
                         }
-                        _ => {
+                        ast::BinOp::Add => {
                             let left_conv = self.convert_to_c_str(&left_code, &left.get_type());
                             let right_conv = self.convert_to_c_str(&right_code, &right.get_type());
                             Ok(format!("ve_concat({}, {})", left_conv, right_conv))
+                        }
+                        _ => {
+                            Err(CompileError::CodegenError {
+                                message: format!("Unsupported string operation: {:?}", op),
+                                span: None,
+                                file_id: self.file_id,
+                            })
                         }
                     },
                     _ => {
@@ -237,9 +256,8 @@ impl CBackend {
                 }
             }
             ast::Expr::Call(name, args, _expr_info) => {
-                if name.starts_with("<method>.") {
-                    let method_name = &name[9..];
-                    if let Some(obj_expr) = args.first() {
+                if let Some(method_name) = name.strip_prefix("<method>.")
+                    && let Some(obj_expr) = args.first() {
                         let obj_type = &obj_expr.get_type();
                         let type_name = self.type_to_c_name(obj_type);
 
@@ -247,33 +265,53 @@ impl CBackend {
                             .replace("[]", "_array")
                             .replace("[", "_")
                             .replace("]", "_");
-                            let is_static_method = matches!(obj_expr, ast::Expr::Var(var_name, _) if self.struct_defs.contains_key(var_name.as_str()) || self.enum_defs.contains_key(var_name.as_str()) || matches!(var_name.as_str(), "Command" | "Array" | "Option"));
+                        let is_static_method = matches!(obj_expr, ast::Expr::Var(var_name, _) if self.struct_defs.contains_key(var_name.as_str()) || self.enum_defs.contains_key(var_name.as_str()) || matches!(var_name.as_str(), "Command" | "Array" | "Option"));
 
-                            if method_name == "length" {
-                                if let ast::Type::Array(_) = obj_type {
-                                    let obj_code = self.emit_expr(obj_expr)?;
-                                    return Ok(format!("(int)ve_array_length({})", obj_code));
-                                }
+                        if method_name == "length"
+                            && let ast::Type::Array(_) = obj_type {
+                                let obj_code = self.emit_expr(obj_expr)?;
+                                return Ok(format!("(int)ve_array_length({})", obj_code));
                             }
 
-                            if method_name == "append" {
-                                if let ast::Type::Array(inner_ty) = obj_type {
-                                    let arg_code = if args.len() > 1 { self.emit_expr(&args[1])? } else { "".to_string() };
-                                    let obj_code = self.emit_expr(obj_expr)?;
-                                    match inner_ty.as_ref() {
-                                        ast::Type::I32 => return Ok(format!("ve_array_append_i32({}, {})", obj_code, arg_code)),
-                                        ast::Type::String => return Ok(format!("ve_array_append_string({}, {})", obj_code, arg_code)),
-                                        ast::Type::Bool => return Ok(format!("ve_array_append_bool({}, {})", obj_code, arg_code)),
-                                        _ => {
-                                            let c_type = self.type_to_c(inner_ty);
-                                            return Ok(format!("(ve_Array*)ve_array_append_element({}, &({}), sizeof({}))", obj_code, arg_code, c_type));
-                                        }
+                        if method_name == "append"
+                            && let ast::Type::Array(inner_ty) = obj_type {
+                                let arg_code = if args.len() > 1 {
+                                    self.emit_expr(&args[1])?
+                                } else {
+                                    "".to_string()
+                                };
+                                let obj_code = self.emit_expr(obj_expr)?;
+                                match inner_ty.as_ref() {
+                                    ast::Type::I32 => {
+                                        return Ok(format!(
+                                            "ve_array_append_i32({}, {})",
+                                            obj_code, arg_code
+                                        ));
+                                    }
+                                    ast::Type::String => {
+                                        return Ok(format!(
+                                            "ve_array_append_string({}, {})",
+                                            obj_code, arg_code
+                                        ));
+                                    }
+                                    ast::Type::Bool => {
+                                        return Ok(format!(
+                                            "ve_array_append_bool({}, {})",
+                                            obj_code, arg_code
+                                        ));
+                                    }
+                                    _ => {
+                                        let c_type = self.type_to_c(inner_ty);
+                                        return Ok(format!(
+                                            "(ve_Array*)ve_array_append_element({}, &({}), sizeof({}))",
+                                            obj_code, arg_code, c_type
+                                        ));
                                     }
                                 }
                             }
 
-                            let method_func_name =
-                                format!("ve_method_{}_{}", sanitized_type_name, method_name);
+                        let method_func_name =
+                            format!("ve_method_{}_{}", sanitized_type_name, method_name);
 
                         let mut args_code = Vec::new();
 
@@ -290,7 +328,6 @@ impl CBackend {
 
                         return Ok(format!("{}({})", method_func_name, args_code.join(", ")));
                     }
-                }
 
                 let final_name = if self.ffi_functions.contains(name) {
                     name.clone()
@@ -639,11 +676,11 @@ impl CBackend {
                                                 }
                                                 Type::String => expr_code,
                                                 _ => {
-                                                    format!("\"[unsupported array element type]\"")
+                                                    "\"[unsupported array element type]\"".to_string()
                                                 }
                                             }
                                         }
-                                        _ => format!("\"[not an array]\""),
+                                        _ => "\"[not an array]\"".to_string(),
                                     }
                                 }
                                 _ => self.convert_to_c_str(&expr_code, &expr_type),
@@ -673,7 +710,7 @@ impl CBackend {
                 let inner_code = self.emit_expr(expr)?;
                 match op {
                     ast::UnOp::Neg => Ok(format!("-{}", inner_code)),
-                    ast::UnOp::Plus => Ok(format!("{}", inner_code)),
+                    ast::UnOp::Plus => Ok(inner_code.to_string()),
                     ast::UnOp::Not => Ok(format!("!{}", inner_code)),
                 }
             }
@@ -713,15 +750,15 @@ impl CBackend {
                 // Generate code for the expression being matched
                 let expr_code = self.emit_expr(expr)?;
                 let matched_type = expr.get_type();
-                
+
                 // Generate a unique temporary variable name to hold the matched expression
                 let temp_var = format!("_match_temp_{}", self.temp_counter);
                 self.temp_counter += 1;
-                
+
                 // Determine the expression to use in the switch statement
                 let switch_expr = match matched_type {
                     Type::Enum(ref enum_name) => {
-                        if self.is_simple_enum(&enum_name) {
+                        if self.is_simple_enum(enum_name) {
                             temp_var.clone()
                         } else {
                             format!("{}.tag", temp_var)
@@ -732,8 +769,8 @@ impl CBackend {
                 };
 
                 let mut code = String::new();
-                
-                // Declare and initialize the temporary variable  
+
+                // Declare and initialize the temporary variable
                 let c_type = self.type_to_c(&matched_type);
                 code.push_str(&format!("{{ {} {} = {};\n", c_type, temp_var, expr_code));
                 code.push_str(&format!("switch ({}) {{\n", switch_expr));
@@ -756,7 +793,7 @@ impl CBackend {
                             for (i, pattern) in patterns.iter().enumerate() {
                                 if let ast::Pattern::Variable(var_name, _) = pattern {
                                     let mut field_type = "int".to_string();
-                                    
+
                                     // Handle both regular enums and generic instances
                                     match &matched_type {
                                         Type::Enum(enum_name) => {
@@ -799,11 +836,9 @@ impl CBackend {
                                                                                 .generic_params
                                                                                 .iter()
                                                                                 .position(|p| p == param_name)
-                                                                            {
-                                                                                if let Some(concrete_type) = args.get(generic_idx) {
+                                                                                && let Some(concrete_type) = args.get(generic_idx) {
                                                                                     field_type = self.type_to_c(concrete_type);
                                                                                 }
-                                                                            }
                                                                         } else {
                                                                             field_type = self.type_to_c(ty);
                                                                         }
@@ -817,11 +852,9 @@ impl CBackend {
                                                                                 .generic_params
                                                                                 .iter()
                                                                                 .position(|p| p == param_name)
-                                                                            {
-                                                                                if let Some(concrete_type) = args.get(generic_idx) {
+                                                                                && let Some(concrete_type) = args.get(generic_idx) {
                                                                                     field_type = self.type_to_c(concrete_type);
                                                                                 }
-                                                                            }
                                                                         } else {
                                                                             field_type = self.type_to_c(ty);
                                                                         }
@@ -834,7 +867,7 @@ impl CBackend {
                                         }
                                         _ => {}
                                     }
-                                    
+
                                     code.push_str(&format!(
                                         "    {} {} = {}.data.{}.field{};\n",
                                         field_type,
@@ -843,7 +876,7 @@ impl CBackend {
                                         self.sanitize_member_name(&variant_name.to_lowercase()),
                                         i
                                     ));
-                                    }
+                                }
                             }
 
                             let body_code = match &arm.body {
@@ -922,12 +955,11 @@ impl CBackend {
             ast::Expr::If(condition, then_branch, else_branch, _info) => {
                 let condition_code = self.emit_expr(condition)?;
 
-                if let Some(else_stmts) = else_branch.as_ref() {
-                    if then_branch.len() == 1 && else_stmts.len() == 1 {
-                        if let (ast::Stmt::Expr(then_expr, _), ast::Stmt::Expr(else_expr, _)) =
+                if let Some(else_stmts) = else_branch.as_ref()
+                    && then_branch.len() == 1 && else_stmts.len() == 1
+                        && let (ast::Stmt::Expr(then_expr, _), ast::Stmt::Expr(else_expr, _)) =
                             (&then_branch[0], &else_stmts[0])
-                        {
-                            if !matches!(then_expr, ast::Expr::If(_, _, _, _))
+                            && !matches!(then_expr, ast::Expr::If(_, _, _, _))
                                 && !matches!(else_expr, ast::Expr::If(_, _, _, _))
                             {
                                 let then_code = self.emit_expr(then_expr)?;
@@ -937,9 +969,6 @@ impl CBackend {
                                     condition_code, then_code, else_code
                                 ));
                             }
-                        }
-                    }
-                }
 
                 let mut code = String::new();
                 code.push_str(&format!("if ({}) {{\n", condition_code));
@@ -966,9 +995,9 @@ impl CBackend {
                 let result_type = self.type_to_c(&info.ty);
 
                 let old_loop_result =
-                    std::mem::replace(&mut self.current_loop_result, Some(result_var.clone()));
+                    self.current_loop_result.replace(result_var.clone());
                 let old_loop_break =
-                    std::mem::replace(&mut self.current_loop_break, Some(loop_break.clone()));
+                    self.current_loop_break.replace(loop_break.clone());
 
                 let mut code = String::new();
                 code.push_str("({ ");

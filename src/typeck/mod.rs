@@ -151,9 +151,7 @@ impl TypeChecker {
 
         for func in &mut program.functions {
             self.context.current_return_type = func.return_type.clone();
-            if let Err(e) = self.check_function(func) {
-                return Err(e);
-            }
+            self.check_function(func)?
         }
 
         for impl_block in &mut program.impls {
@@ -195,8 +193,8 @@ impl TypeChecker {
         for stmt in &mut func.body {
             self.check_stmt(stmt)?;
 
-            if !explicit_return_type && self.context.inferred_return_type.is_some() {
-                if inferred_return_type.is_none() {
+            if !explicit_return_type && self.context.inferred_return_type.is_some()
+                && inferred_return_type.is_none() {
                     inferred_return_type = self.context.inferred_return_type.clone();
                     self.context.current_return_type = inferred_return_type.clone().unwrap();
                     func.return_type = inferred_return_type.clone().unwrap();
@@ -208,7 +206,6 @@ impl TypeChecker {
                         );
                     }
                 }
-            }
         }
 
         self.context = original_ctx;
@@ -217,14 +214,12 @@ impl TypeChecker {
     }
 
     fn parse_type_name(&self, type_name: &str) -> Type {
-        if type_name.starts_with("[]") {
-            let inner_type_name = &type_name[2..];
+        if let Some(inner_type_name) = type_name.strip_prefix("[]") {
             let inner_type = self.parse_type_name(inner_type_name);
             return Type::Array(Box::new(inner_type));
         }
 
-        if type_name.ends_with("[]") {
-            let inner_type_name = &type_name[..type_name.len() - 2];
+        if let Some(inner_type_name) = type_name.strip_suffix("[]") {
             let inner_type = self.parse_type_name(inner_type_name);
             return Type::Array(Box::new(inner_type));
         }
@@ -248,7 +243,12 @@ impl TypeChecker {
                     Type::Struct(type_name.to_string())
                 } else if self.context.enum_defs.contains_key(type_name) {
                     Type::Enum(type_name.to_string())
-                } else if type_name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                } else if type_name
+                    .chars()
+                    .next()
+                    .map(|c| c.is_uppercase())
+                    .unwrap_or(false)
+                {
                     Type::Generic(type_name.to_string())
                 } else {
                     Type::Unknown

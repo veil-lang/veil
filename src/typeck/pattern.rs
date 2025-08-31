@@ -22,8 +22,8 @@ impl TypeChecker {
                 Type::GenericInstance(expected_enum, generic_args)
                     if expected_enum == enum_name =>
                 {
-                    if let Some(enum_def) = self.enums.iter().find(|e| &e.name == enum_name) {
-                        if let Some(variant) =
+                    if let Some(enum_def) = self.enums.iter().find(|e| &e.name == enum_name)
+                        && let Some(variant) =
                             enum_def.variants.iter().find(|v| &v.name == variant_name)
                         {
                             let mut subst = std::collections::HashMap::new();
@@ -51,7 +51,6 @@ impl TypeChecker {
                             }
                             return Ok(());
                         }
-                    }
                     for (i, subpat) in patterns.iter().enumerate() {
                         let ty = generic_args.get(i).cloned().unwrap_or(Type::Unknown);
                         self.check_pattern(subpat, &ty)?;
@@ -59,11 +58,9 @@ impl TypeChecker {
                     Ok(())
                 }
                 Type::Enum(expected_enum) if expected_enum == enum_name => {
-                    if let Some(enum_def) = self.enums.iter().find(|e| &e.name == enum_name) {
-                        if let Some(variant) = enum_def
-                            .variants
-                            .iter()
-                            .find(|v| &v.name == variant_name)
+                    if let Some(enum_def) = self.enums.iter().find(|e| &e.name == enum_name)
+                        && let Some(variant) =
+                            enum_def.variants.iter().find(|v| &v.name == variant_name)
                         {
                             let data_types: Vec<Type> = if let Some(data) = &variant.data {
                                 match data {
@@ -81,7 +78,6 @@ impl TypeChecker {
                             }
                             return Ok(());
                         }
-                    }
                     for subpat in patterns {
                         self.check_pattern(subpat, &Type::Unknown)?;
                     }
@@ -101,11 +97,10 @@ impl TypeChecker {
             ast::Pattern::Literal(expr, span) => {
                 let literal_ty = expr.get_type();
                 let mut expected = expected_ty;
-                if let Type::Unknown = expected_ty {
-                    if let Some(var_ty) = self.context.variables.values().last() {
+                if let Type::Unknown = expected_ty
+                    && let Some(var_ty) = self.context.variables.values().last() {
                         expected = var_ty;
                     }
-                }
                 if Self::is_convertible(&literal_ty, expected) {
                     Ok(())
                 } else {
