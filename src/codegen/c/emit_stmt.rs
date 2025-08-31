@@ -334,13 +334,6 @@ impl CBackend {
                                 file_id: self.file_id,
                             });
                         }
-                        _ => {
-                            return Err(CompileError::CodegenError {
-                                message: format!("Invalid infinite range type: {:?}", range_type),
-                                span: None,
-                                file_id: self.file_id,
-                            });
-                        }
                     }
                 } else {
                     // for-in array lowering
@@ -459,7 +452,6 @@ impl CBackend {
                 // Defer statements are handled inside safe { } blocks (LIFO).
                 // Outside of a SafeBlock expression, we do not schedule defers.
             }
-            _ => unimplemented!(),
         }
         Ok(())
     }

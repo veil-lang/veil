@@ -20,6 +20,7 @@ use colored::*;
 use std::path::PathBuf;
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct CliError(pub String);
 
 impl std::fmt::Display for CliError {
@@ -458,15 +459,11 @@ pub fn process_build(
         );
     }
 
-    let mut clang_args: Vec<String>;
-
     #[cfg(target_os = "windows")]
-    {
-        clang_args = prepare_windows_clang_args(&output, optimize, &c_file)?;
-    }
+    let mut clang_args: Vec<String> = prepare_windows_clang_args(&output, optimize, &c_file)?;
 
     #[cfg(not(target_os = "windows"))]
-    let mut clang_args = vec![
+    let mut clang_args: Vec<String> = vec![
         if optimize { "-O3" } else { "-O0" }.to_string(),
         c_file.to_str().unwrap().into(),
         "-o".to_string(),

@@ -13,7 +13,7 @@ fn main() {
     let path = &args[1];
     let src = fs::read_to_string(path).expect("read");
     let mut files = Files::new();
-    let file_id = files.add(path.clone(), src.clone());
+    let _file_id = files.add(path.clone(), src.clone());
     for (i, (t, span)) in Token::lexer(&src)
         .spanned()
         .filter_map(|(t, s)| {

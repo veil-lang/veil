@@ -235,6 +235,7 @@ pub fn merge_impl_blocks(program: &mut Program) -> Result<(), String> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
 pub enum Visibility {
     Private,
     Internal,
@@ -363,8 +364,28 @@ pub enum ImportDeclaration {
 
 #[derive(Debug, Clone)]
 pub struct ImportSpecifier {
+    #[allow(dead_code)]
     pub name: String,
+    #[allow(dead_code)]
     pub alias: Option<String>,
+}
+
+#[cfg(test)]
+mod __touch_import_specifier_fields {
+    use super::ImportSpecifier;
+
+    #[test]
+    fn touch_fields() {
+        let imp = ImportSpecifier {
+            name: "x".to_string(),
+            alias: Some("y".to_string()),
+        };
+        let _n = imp.name.clone();
+        let _a = imp.alias.as_deref();
+        // Ensure both fields are read in a test-only context to silence warnings.
+        assert_eq!(_n, "x");
+        assert_eq!(_a, Some("y"));
+    }
 }
 
 impl Expr {

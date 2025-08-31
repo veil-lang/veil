@@ -355,7 +355,6 @@ impl CBackend {
                         .replace("[]", "_array")
                         .replace("[", "_")
                         .replace("]", "_");
-                    let is_static_method = matches!(obj_expr, ast::Expr::Var(var_name, _) if self.struct_defs.contains_key(var_name.as_str()) || self.enum_defs.contains_key(var_name.as_str()) || matches!(var_name.as_str(), "Command" | "Array" | "Option"));
 
                     if method_name == "length"
                         && let ast::Type::Array(_) = obj_type
@@ -407,9 +406,8 @@ impl CBackend {
 
                     let mut args_code = Vec::new();
 
-                    let is_static_method = matches!(obj_expr, ast::Expr::Var(var_name, _) if self.struct_defs.contains_key(var_name.as_str()) || self.enum_defs.contains_key(var_name.as_str()) || matches!(var_name.as_str(), "Command" | "Array" | "Option"));
-
-                    if !is_static_method {
+                    if !matches!(obj_expr, ast::Expr::Var(var_name, _) if self.struct_defs.contains_key(var_name.as_str()) || self.enum_defs.contains_key(var_name.as_str()) || matches!(var_name.as_str(), "Command" | "Array" | "Option"))
+                    {
                         let obj_code = self.emit_expr(obj_expr)?;
                         args_code.push(obj_code);
                     }
