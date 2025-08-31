@@ -28,6 +28,7 @@ impl<'a> super::super::Parser<'a> {
 
         Ok(ast::ImplBlock {
             target_type,
+            target_type_parsed: Some(target_type_ast),
             methods,
             span: Span::new(start_span.start(), end_span.end()),
         })

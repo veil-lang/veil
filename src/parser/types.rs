@@ -118,14 +118,14 @@ impl<'a> super::Parser<'a> {
 
                     self.expect(Token::Gt)?;
                     Ok(ast::Type::GenericInstance(name, generic_args))
+                } else if name == "size_t" {
+                    Ok(ast::Type::CSize)
+                } else if self.enums.iter().any(|e| e.name == name) {
+                    Ok(ast::Type::Enum(name))
+                } else if name.chars().next().unwrap_or('a').is_uppercase() {
+                    Ok(ast::Type::Generic(name))
                 } else {
-                    if self.enums.iter().any(|e| e.name == name) {
-                        Ok(ast::Type::Enum(name))
-                    } else if name.chars().next().unwrap_or('a').is_uppercase() {
-                        Ok(ast::Type::Generic(name))
-                    } else {
-                        Ok(ast::Type::Struct(name))
-                    }
+                    Ok(ast::Type::Struct(name))
                 }
             }
             Some((_, span)) => self.error("Expected type annotation", span),

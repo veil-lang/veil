@@ -10,6 +10,31 @@ impl CBackend {
                 .insert(func.name.clone(), func.return_type.clone());
         }
 
+        // Predeclare optional typedefs used in function and method signatures,
+        // so that prototypes referencing ve_optional_* compile.
+        for func in &program.functions {
+            if let Type::Optional(inner) = &func.return_type {
+                self.ensure_optional_type(inner);
+            }
+            for (_, param_ty) in &func.params {
+                if let Type::Optional(inner) = param_ty {
+                    self.ensure_optional_type(inner);
+                }
+            }
+        }
+        for impl_block in &program.impls {
+            for method in &impl_block.methods {
+                if let Type::Optional(inner) = &method.return_type {
+                    self.ensure_optional_type(inner);
+                }
+                for (_, param_ty) in &method.params {
+                    if let Type::Optional(inner) = param_ty {
+                        self.ensure_optional_type(inner);
+                    }
+                }
+            }
+        }
+
         for func in &program.functions {
             let return_type = if func.name == "main" {
                 "int".to_string()
@@ -37,11 +62,19 @@ impl CBackend {
         for impl_block in &program.impls {
             for method in &impl_block.methods {
                 let return_type = self.type_to_c(&method.return_type);
-                let sanitized_type = if impl_block.target_type.starts_with("[]") {
-                    let inner = &impl_block.target_type[2..];
-                    format!("array_{}", inner)
+                let sanitized_type = if let Some(ty) = &impl_block.target_type_parsed {
+                    self.type_to_c_name(ty)
                 } else {
-                    impl_block.target_type.clone()
+                    let norm = impl_block.normalized_target();
+                    if norm.starts_with("[]") {
+                        let inner = &norm[2..];
+                        format!("array_{}", inner)
+                    } else if norm.ends_with("[]") {
+                        let inner = &norm[..norm.len() - 2];
+                        format!("array_{}", inner)
+                    } else {
+                        norm
+                    }
                 };
                 let method_name = format!("ve_method_{}_{}", sanitized_type, method.name);
 
@@ -116,22 +149,20 @@ impl CBackend {
         let mut has_tail_return = false;
         while let Some(stmt) = stmts.next() {
             let is_last = stmts.peek().is_none();
-            if is_last {
-                if let ast::Stmt::Expr(expr, _) = stmt {
-                    if expr.get_info().is_tail {
-                        let expr_code = self.emit_expr(expr)?;
-                        if func.name == "main" {
-                            self.body.push_str("ve_arena_exit();\n");
-                            self.body.push_str(
-                                "#ifdef VE_DEBUG_MEMORY\n    ve_arena_stats();\n#endif\n",
-                            );
-                            self.body.push_str("    ve_arena_cleanup();\n");
-                        }
-                        self.body.push_str(&format!("return {};\n", expr_code));
-                        has_tail_return = true;
-                        continue;
-                    }
+            if is_last
+                && let ast::Stmt::Expr(expr, _) = stmt
+                && expr.get_info().is_tail
+            {
+                let expr_code = self.emit_expr(expr)?;
+                if func.name == "main" {
+                    self.body.push_str("ve_arena_exit();\n");
+                    self.body
+                        .push_str("#ifdef VE_DEBUG_MEMORY\n    ve_arena_stats();\n#endif\n");
+                    self.body.push_str("    ve_arena_cleanup();\n");
                 }
+                self.body.push_str(&format!("return {};\n", expr_code));
+                has_tail_return = true;
+                continue;
             }
             self.emit_stmt(stmt)?;
         }
@@ -161,17 +192,26 @@ impl CBackend {
 
     pub fn emit_impl_block(&mut self, impl_block: &ast::ImplBlock) -> Result<(), CompileError> {
         for method in &impl_block.methods {
-            let sanitized_type = if impl_block.target_type.starts_with("[]") {
-                let inner = &impl_block.target_type[2..];
-                format!("array_{}", inner)
+            let sanitized_type = if let Some(ty) = &impl_block.target_type_parsed {
+                self.type_to_c_name(ty)
             } else {
-                impl_block.target_type.clone()
+                let norm = impl_block.normalized_target();
+                if norm.starts_with("[]") {
+                    let inner = &norm[2..];
+                    format!("array_{}", inner)
+                } else if norm.ends_with("[]") {
+                    let inner = &norm[..norm.len() - 2];
+                    format!("array_{}", inner)
+                } else {
+                    norm
+                }
             };
             let mangled_name = format!("ve_method_{}_{}", sanitized_type, method.name);
 
-            if impl_block.target_type.ends_with("[]")
-                && self.generate_optimized_array_method(impl_block, method)?
-            {
+            let is_array_target =
+                matches!(impl_block.target_type_parsed, Some(ast::Type::Array(_)))
+                    || impl_block.normalized_target().starts_with("[]");
+            if is_array_target && self.generate_optimized_array_method(impl_block, method)? {
                 continue;
             }
 
@@ -189,11 +229,17 @@ impl CBackend {
         impl_block: &ast::ImplBlock,
         method: &ast::Function,
     ) -> Result<bool, CompileError> {
-        let inner_type = if impl_block.target_type.starts_with("[]") {
-            &impl_block.target_type[2..]
-        } else {
-            return Ok(false);
-        };
+        let inner_type =
+            if let Some(ast::Type::Array(inner)) = impl_block.target_type_parsed.as_ref() {
+                self.type_to_c_name(inner)
+            } else {
+                let norm = impl_block.normalized_target();
+                if norm.starts_with("[]") {
+                    norm[2..].to_string()
+                } else {
+                    return Ok(false);
+                }
+            };
 
         let sanitized_type = format!("array_{}", inner_type);
         let mangled_name = format!("ve_method_{}_{}", sanitized_type, method.name);
@@ -208,8 +254,8 @@ impl CBackend {
                 Ok(true)
             }
             "append" => {
-                let element_type = self.get_c_type_for_veil_type(inner_type);
-                let append_func = self.get_append_function_for_type(inner_type);
+                let element_type = self.get_c_type_for_veil_type(inner_type.as_str());
+                let append_func = self.get_append_function_for_type(inner_type.as_str());
 
                 self.body.push_str(&format!(
                     "ve_Array* {}(ve_Array* self, {} item) {{\n",
@@ -249,6 +295,9 @@ impl CBackend {
         I: IntoIterator<Item = &'a ast::StructDef>,
     {
         for struct_def in structs {
+            if !struct_def.generic_params.is_empty() {
+                continue;
+            }
             let struct_name = &struct_def.name;
             self.header.push_str(&format!(
                 "static char* ve_{}_to_str(const ve_{} *obj) {{\n",

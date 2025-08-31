@@ -142,6 +142,7 @@ impl CBackend {
         }
     }
 
+    #[allow(dead_code)]
     pub fn type_to_c_in_enum(&self, ty: &Type, current_enum: &str) -> String {
         if self.is_recursive_type(ty, current_enum) {
             // Use pointer for recursive types
@@ -149,5 +150,17 @@ impl CBackend {
         } else {
             self.type_to_c(ty)
         }
+    }
+}
+
+#[cfg(test)]
+mod __touch_unused_utils {
+    use super::*;
+
+    #[test]
+    fn touch_type_to_c_in_enum_fn_item() {
+        // Reference the method.
+        let _f: fn(&CBackend, &Type, &str) -> String = CBackend::type_to_c_in_enum;
+        let _ = _f;
     }
 }

@@ -1,7 +1,5 @@
 use anyhow::Result;
 use codespan::{FileId, Files};
-use codespan_reporting;
-use std::fs;
 use std::path::{Path, PathBuf};
 
 pub fn extract_line_col_from_error(
@@ -146,7 +144,7 @@ pub fn validate_ve_file(path: &str) -> std::result::Result<PathBuf, String> {
     };
 
     if !path.exists() {
-        let suggestions = suggest_similar_files(&*path.clone())
+        let suggestions = suggest_similar_files(&path.clone())
             .map(|s| format!("\nDid you mean:\n{}", s))
             .unwrap_or_default();
 
@@ -206,7 +204,10 @@ pub fn prepare_windows_clang_args(
             clang_args.insert(0, "-v".to_string());
         }
         if let Ok(extra) = std::env::var("VEIL_EXTRA_CLANG_ARGS") {
-            let mut split: Vec<String> = shell_words::split(&extra).unwrap_or_default().into_iter().collect();
+            let mut split: Vec<String> = shell_words::split(&extra)
+                .unwrap_or_default()
+                .into_iter()
+                .collect();
             clang_args.splice(1..1, split.drain(..));
         }
         return Ok(clang_args);
@@ -242,7 +243,14 @@ pub fn prepare_windows_clang_args(
     if use_msvc {
         args.insert(1, "-target".to_string());
         args.insert(2, "x86_64-pc-windows-msvc".to_string());
-        args.insert(1, if have_lld_link { "-fuse-ld=lld-link".to_string() } else { "-fuse-ld=link".to_string() });
+        args.insert(
+            1,
+            if have_lld_link {
+                "-fuse-ld=lld-link".to_string()
+            } else {
+                "-fuse-ld=link".to_string()
+            },
+        );
         for lib_path in msvc_libs {
             args.push("-Xlinker".to_string());
             args.push(format!("/LIBPATH:{}", lib_path.to_string_lossy()));
@@ -259,7 +267,10 @@ pub fn prepare_windows_clang_args(
         args.insert(1, "-v".to_string());
     }
     if let Ok(extra) = std::env::var("VEIL_EXTRA_CLANG_ARGS") {
-        let mut split: Vec<String> = shell_words::split(&extra).unwrap_or_default().into_iter().collect();
+        let mut split: Vec<String> = shell_words::split(&extra)
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
         args.splice(1..1, split.drain(..));
     }
 
@@ -273,10 +284,10 @@ pub fn get_bundled_clang_path() -> Result<PathBuf> {
             return Ok(p);
         }
     }
-    if std::env::var("VEIL_USE_SYSTEM_CLANG").ok().as_deref() == Some("1") {
-        if let Ok(p) = which::which("clang") {
-            return Ok(p);
-        }
+    if std::env::var("VEIL_USE_SYSTEM_CLANG").ok().as_deref() == Some("1")
+        && let Ok(p) = which::which("clang")
+    {
+        return Ok(p);
     }
 
     let exe_dir = std::env::current_exe()?.parent().unwrap().to_path_buf();
@@ -330,7 +341,10 @@ fn discover_msvc_lib_paths() -> Vec<PathBuf> {
             paths.push(atlmfc);
         }
     }
-    if let (Ok(sdkdir), Ok(sdkver)) = (std::env::var("WindowsSdkDir"), std::env::var("WindowsSDKLibVersion")) {
+    if let (Ok(sdkdir), Ok(sdkver)) = (
+        std::env::var("WindowsSdkDir"),
+        std::env::var("WindowsSDKLibVersion"),
+    ) {
         let base = PathBuf::from(sdkdir).join("Lib").join(sdkver);
         for sub in ["ucrt", "um"] {
             let p = base.join(sub).join("x64");
@@ -341,9 +355,11 @@ fn discover_msvc_lib_paths() -> Vec<PathBuf> {
     }
 
     if paths.is_empty() {
-        let vs_base = PathBuf::from(r"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC");
+        let vs_base =
+            PathBuf::from(r"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC");
         if let Ok(read_dir) = fs::read_dir(&vs_base) {
-            let mut versions: Vec<PathBuf> = read_dir.filter_map(|e| e.ok().map(|e| e.path())).collect();
+            let mut versions: Vec<PathBuf> =
+                read_dir.filter_map(|e| e.ok().map(|e| e.path())).collect();
             versions.sort();
             if let Some(latest) = versions.into_iter().last() {
                 let lib_host = latest.join("lib").join("x64");
@@ -358,7 +374,8 @@ fn discover_msvc_lib_paths() -> Vec<PathBuf> {
         }
         let sdk_base = PathBuf::from(r"C:\Program Files (x86)\Windows Kits\10\Lib");
         if let Ok(read_dir) = fs::read_dir(&sdk_base) {
-            let mut versions: Vec<PathBuf> = read_dir.filter_map(|e| e.ok().map(|e| e.path())).collect();
+            let mut versions: Vec<PathBuf> =
+                read_dir.filter_map(|e| e.ok().map(|e| e.path())).collect();
             versions.sort();
             if let Some(latest) = versions.into_iter().last() {
                 for sub in ["ucrt", "um"] {
@@ -375,4 +392,3 @@ fn discover_msvc_lib_paths() -> Vec<PathBuf> {
     paths.dedup();
     paths
 }
-

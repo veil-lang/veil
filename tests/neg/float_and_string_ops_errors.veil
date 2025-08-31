@@ -1,0 +1,46 @@
+import std/io;
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+test float_default_f64_concat_with_string_should_error {
+    // Default float literal is f64.
+    let x = 1.5;
+    // ERROR: f64 is not convertible to string in '+' concatenation (only string + convertible-to-string allowed).
+    let bad = x + "s";
+}
+
+test f32_annotation_then_logical_and_should_error {
+    // Annotate to f32 explicitly (valid).
+    let f: f32 = 1.5;
+    // ERROR: Logical && requires bool operands, got f32 and bool.
+    let bad = f && true;
+}
+
+test string_relational_operators_should_error {
+    let a = "a";
+    let b = "b";
+    // ERROR: Only == and != supported for string comparisons.
+    let bad1 = a < b;
+    let bad2 = a > b;
+    let bad3 = a <= b;
+    let bad4 = a >= b;
+}
+
+test string_arithmetic_should_error {
+    let a = "a";
+    let b = "b";
+    // ERROR: Unsupported string operations.
+    let bad_sub = a - b;
+    let bad_mul = a * b;
+    let bad_div = a / b;
+    let bad_mod = a % b;
+}
+
+test string_plus_nonconvertible_struct_should_error {
+    let p = Point { x: 1 as i32, y: 2 as i32 };
+    // ERROR: Concatenation requires the non-string side to be convertible to string; struct is not convertible here.
+    let bad = "p=" + p;
+}

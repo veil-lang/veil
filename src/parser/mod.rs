@@ -13,9 +13,6 @@ use super::{
 };
 use codespan::{FileId, Files, Span};
 use codespan_reporting::diagnostic::Diagnostic;
-use std::collections::HashMap;
-use std::iter::Peekable;
-use std::slice::Iter;
 
 use crate::parser::ffi::ForeignItem;
 pub(super) use precedence::Precedence;
@@ -161,7 +158,7 @@ impl<'a> Parser<'a> {
             None => {
                 if let Some((_, prev_span)) = self.previous() {
                     use codespan::ByteIndex;
-                    let end_pos = prev_span.end().0 as u32;
+                    let end_pos = prev_span.end().0;
                     let error_span = Span::new(prev_span.end(), ByteIndex::from(end_pos + 1));
                     self.error("Expected identifier", error_span)
                 } else {
@@ -185,13 +182,13 @@ impl<'a> Parser<'a> {
             self.advance();
             Ok(span)
         } else {
-            if matches!(token, Token::Semi) {
-                if let Some((_, prev_span)) = self.previous() {
-                    use codespan::ByteIndex;
-                    let end_pos = prev_span.end().0 as u32;
-                    let error_span = Span::new(prev_span.end(), ByteIndex::from(end_pos + 1));
-                    return self.error(&format!("Expected {:?}", token), error_span);
-                }
+            if matches!(token, Token::Semi)
+                && let Some((_, prev_span)) = self.previous()
+            {
+                use codespan::ByteIndex;
+                let end_pos = prev_span.end().0;
+                let error_span = Span::new(prev_span.end(), ByteIndex::from(end_pos + 1));
+                return self.error(&format!("Expected {:?}", token), error_span);
             }
             let span = self.peek().map(|(_, s)| *s).unwrap_or(Span::new(0, 0));
             self.error(&format!("Expected {:?}", token), span)

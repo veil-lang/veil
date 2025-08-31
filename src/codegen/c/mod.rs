@@ -49,6 +49,19 @@ struct MemoryAnalysis {
 }
 
 impl CBackend {
+    fn substitute_type_using_struct_generics(
+        &self,
+        ty: &ast::Type,
+        def: &ast::StructDef,
+        args: &[ast::Type],
+    ) -> Result<ast::Type, CompileError> {
+        let mut type_map = std::collections::HashMap::new();
+        for (gp, arg) in def.generic_params.iter().zip(args.iter()) {
+            type_map.insert(gp.clone(), arg.clone());
+        }
+        self.substitute_type(ty, &type_map)
+    }
+
     pub fn new(
         config: CodegenConfig,
         file_id: FileId,
@@ -97,8 +110,13 @@ impl CBackend {
         output_path: &Path,
     ) -> Result<(), CompileError> {
         let mut program = program.clone();
+        // Removed redundant monomorphize_generics call
         if let Err(e) = crate::ast::merge_impl_blocks(&mut program) {
-            return Err(CompileError::CodegenError { message: e, span: None, file_id: self.file_id });
+            return Err(CompileError::CodegenError {
+                message: e,
+                span: None,
+                file_id: self.file_id,
+            });
         }
         let program = self.monomorphize_generics(&program)?;
 
@@ -238,12 +256,12 @@ impl CBackend {
             }
             for stmt in &func.body {
                 if let crate::ast::Stmt::Expr(e, _) = stmt {
-                    collect_generic_enum_instances(&e, &mut generic_enum_instances);
+                    collect_generic_enum_instances(e, &mut generic_enum_instances);
                 }
-                if let crate::ast::Stmt::Let(_, Some(ty), _, _, _) = stmt {
-                    if let Type::GenericInstance(_, _) = ty {
-                        generic_enum_instances.push(ty.clone());
-                    }
+                if let crate::ast::Stmt::Let(_, Some(ty), _, _, _) = stmt
+                    && let Type::GenericInstance(_, _) = ty
+                {
+                    generic_enum_instances.push(ty.clone());
                 }
             }
         }
@@ -252,20 +270,20 @@ impl CBackend {
             if let crate::ast::Stmt::Expr(e, _) = stmt {
                 collect_generic_enum_instances(e, &mut generic_enum_instances);
             }
-            if let crate::ast::Stmt::Let(_, Some(ty), _, _, _) = stmt {
-                if let Type::GenericInstance(_, _) = ty {
-                    generic_enum_instances.push(ty.clone());
-                }
+            if let crate::ast::Stmt::Let(_, Some(ty), _, _, _) = stmt
+                && let Type::GenericInstance(_, _) = ty
+            {
+                generic_enum_instances.push(ty.clone());
             }
         }
         generic_enum_instances.sort_by(|a, b| format!("{:?}", a).cmp(&format!("{:?}", b)));
         generic_enum_instances.dedup();
 
         for ty in &generic_enum_instances {
-            if let Type::GenericInstance(name, args) = ty {
-                if let Some(enum_def) = program.enums.iter().find(|e| &e.name == name) {
-                    self.emit_generic_enum_instance(enum_def, args)?;
-                }
+            if let Type::GenericInstance(name, args) = ty
+                && let Some(enum_def) = program.enums.iter().find(|e| &e.name == name)
+            {
+                self.emit_generic_enum_instance(enum_def, args)?;
             }
         }
 
@@ -328,7 +346,12 @@ impl CBackend {
             .filter(|f| !f.generic_params.is_empty())
             .collect();
 
-        let mut collector = ast::GenericCallCollector::with_functions(&program.functions);
+        let mut collector = ast::GenericCallCollector::with_functions(
+            &all_generic_functions
+                .iter()
+                .map(|f| (*f).clone())
+                .collect::<Vec<_>>(),
+        );
         collector.visit_program(program);
 
         let mut new_functions = program
@@ -346,16 +369,88 @@ impl CBackend {
 
         let mut seen: HashSet<(String, Vec<Type>)> = HashSet::new();
 
-        for (func_name, type_args) in &collector.generic_calls {
-            if !seen.insert((func_name.clone(), type_args.clone())) {
-                continue;
+        // Helper to unify a generic pattern type against a concrete call-site type.
+        fn unify_types(
+            pattern: &Type,
+            concrete: &Type,
+            subst: &mut std::collections::HashMap<String, Type>,
+        ) -> bool {
+            match (pattern, concrete) {
+                // Bind generic to the concrete type (if not already bound) or ensure consistency
+                (Type::Generic(name), c) => {
+                    if let Some(existing) = subst.get(name) {
+                        existing == c
+                    } else {
+                        subst.insert(name.clone(), c.clone());
+                        true
+                    }
+                }
+                // Optional patterns: accept both Optional(X) vs Optional(Y) and Optional(X) vs Y
+                (Type::Optional(p), Type::Optional(c)) => unify_types(p, c, subst),
+                (Type::Optional(p), c) => unify_types(p, c, subst),
+                // Structural recursion
+                (Type::Array(p), Type::Array(c)) => unify_types(p, c, subst),
+                (Type::Pointer(p), Type::Pointer(c)) => unify_types(p, c, subst),
+                (Type::SizedArray(p, n1), Type::SizedArray(c, n2)) => {
+                    n1 == n2 && unify_types(p, c, subst)
+                }
+                (Type::GenericInstance(n1, a1), Type::GenericInstance(n2, a2)) => {
+                    if n1 != n2 || a1.len() != a2.len() {
+                        return false;
+                    }
+                    for (pp, cc) in a1.iter().zip(a2.iter()) {
+                        if !unify_types(pp, cc, subst) {
+                            return false;
+                        }
+                    }
+                    true
+                }
+                // Allow exact concrete matches to pass
+                (p, c) if p == c => true,
+                // Permit some numeric/compat conversions to still infer the generic (e.g., i32 vs u32)
+                // For inference we keep it simple: only identical shapes or generic binds
+                _ => false,
             }
+        }
 
+        for (func_name, call_arg_types) in &collector.generic_calls {
             if let Some(gen_func) = generic_func_map.get(func_name) {
-                let mono_func = self.instantiate_generic_function(gen_func, type_args)?;
+                // Infer generic args by unifying each declared param type against the call arg type.
+                let mut subst: std::collections::HashMap<String, Type> =
+                    std::collections::HashMap::new();
+                let mut ok = true;
+                for ((_, param_ty), arg_ty) in gen_func.params.iter().zip(call_arg_types.iter()) {
+                    if !unify_types(param_ty, arg_ty, &mut subst) {
+                        ok = false;
+                        break;
+                    }
+                }
+                if !ok {
+                    continue;
+                }
+
+                // Produce ordered type args according to the function's generic parameter list.
+                let mut inferred: Vec<Type> = Vec::new();
+                for gp in &gen_func.generic_params {
+                    if let Some(t) = subst.get(gp) {
+                        inferred.push(t.clone());
+                    } else {
+                        ok = false;
+                        break;
+                    }
+                }
+                if !ok {
+                    continue;
+                }
+
+                if !seen.insert((func_name.clone(), inferred.clone())) {
+                    continue;
+                }
+
+                let mono_func = self.instantiate_generic_function(gen_func, &inferred)?;
                 let mono_name = mono_func.name.clone();
 
-                transformer.add_mapping(func_name.clone(), type_args.clone(), mono_name);
+                transformer.add_mapping(func_name.clone(), call_arg_types.clone(), mono_name);
                 new_functions.push(mono_func);
             }
         }
@@ -365,15 +460,20 @@ impl CBackend {
             ..program.clone()
         });
 
-
         let mut concrete_array_inners: std::collections::HashSet<String> =
             std::collections::HashSet::new();
 
-        fn collect_types_in_expr(expr: &ast::Expr, out: &mut std::collections::HashSet<String>, c: &CBackend) {
+        fn collect_types_in_expr(
+            expr: &ast::Expr,
+            out: &mut std::collections::HashSet<String>,
+            c: &CBackend,
+        ) {
             use ast::Expr;
             match expr {
                 Expr::ArrayInit(elems, _) => {
-                    for e in elems { collect_types_in_expr(e, out, c); }
+                    for e in elems {
+                        collect_types_in_expr(e, out, c);
+                    }
                 }
                 Expr::ArrayAccess(a, _, _) => {
                     collect_types_in_expr(a, out, c);
@@ -382,19 +482,34 @@ impl CBackend {
                     if let ast::Type::Array(inner) = &info.ty {
                         out.insert(c.type_to_c_name(inner));
                     }
-                    for a in args { collect_types_in_expr(a, out, c); }
+                    for a in args {
+                        collect_types_in_expr(a, out, c);
+                    }
                 }
-                Expr::New(_, args, _) => { for a in args { collect_types_in_expr(a, out, c); } }
-                Expr::BinOp(l, _, r, _) => { collect_types_in_expr(l, out, c); collect_types_in_expr(r, out, c); }
+                Expr::New(_, args, _) => {
+                    for a in args {
+                        collect_types_in_expr(a, out, c);
+                    }
+                }
+                Expr::BinOp(l, _, r, _) => {
+                    collect_types_in_expr(l, out, c);
+                    collect_types_in_expr(r, out, c);
+                }
                 Expr::UnaryOp(_, e, _) => collect_types_in_expr(e, out, c),
-                Expr::StructInit(_, fields, _) => { for (_, e) in fields { collect_types_in_expr(e, out, c); } }
+                Expr::StructInit(_, fields, _) => {
+                    for (_, e) in fields {
+                        collect_types_in_expr(e, out, c);
+                    }
+                }
                 Expr::FieldAccess(e, _, _) => collect_types_in_expr(e, out, c),
                 Expr::Match(_, arms, _) => {
                     for arm in arms {
                         match &arm.body {
                             ast::MatchArmBody::Expr(e) => collect_types_in_expr(e, out, c),
                             ast::MatchArmBody::Block(stmts) => {
-                                for s in stmts { collect_types_in_stmt(s, out, c); }
+                                for s in stmts {
+                                    collect_types_in_stmt(s, out, c);
+                                }
                             }
                         }
                     }
@@ -405,11 +520,17 @@ impl CBackend {
             }
         }
 
-        fn collect_types_in_stmt(stmt: &ast::Stmt, out: &mut std::collections::HashSet<String>, c: &CBackend) {
+        fn collect_types_in_stmt(
+            stmt: &ast::Stmt,
+            out: &mut std::collections::HashSet<String>,
+            c: &CBackend,
+        ) {
             match stmt {
                 ast::Stmt::Let(_, ty_opt, expr, _, _) => {
-                    if let Some(ty) = ty_opt {
-                        if let ast::Type::Array(inner) = ty { out.insert(c.type_to_c_name(inner)); }
+                    if let Some(ty) = ty_opt
+                        && let ast::Type::Array(inner) = ty
+                    {
+                        out.insert(c.type_to_c_name(inner));
                     }
                     collect_types_in_expr(expr, out, c);
                 }
@@ -417,14 +538,45 @@ impl CBackend {
                 ast::Stmt::Return(expr, _) => collect_types_in_expr(expr, out, c),
                 ast::Stmt::If(cond, then_branch, else_branch, _) => {
                     collect_types_in_expr(cond, out, c);
-                    for s in then_branch { collect_types_in_stmt(s, out, c); }
-                    if let Some(else_b) = else_branch { for s in else_b { collect_types_in_stmt(s, out, c); } }
+                    for s in then_branch {
+                        collect_types_in_stmt(s, out, c);
+                    }
+                    if let Some(else_b) = else_branch {
+                        for s in else_b {
+                            collect_types_in_stmt(s, out, c);
+                        }
+                    }
                 }
-                ast::Stmt::Block(stmts, _) => for s in stmts { collect_types_in_stmt(s, out, c); },
-                ast::Stmt::While(cond, body, _) => { collect_types_in_expr(cond, out, c); for s in body { collect_types_in_stmt(s, out, c); } }
-                ast::Stmt::Loop(body, _) => for s in body { collect_types_in_stmt(s, out, c); },
-                ast::Stmt::For(_, _, range, step, body, _) => { collect_types_in_expr(range, out, c); if let Some(st) = step { collect_types_in_expr(st, out, c); } for s in body { collect_types_in_stmt(s, out, c); } }
-                ast::Stmt::Break(expr_opt, _) => if let Some(e) = expr_opt { collect_types_in_expr(e, out, c); },
+                ast::Stmt::Block(stmts, _) => {
+                    for s in stmts {
+                        collect_types_in_stmt(s, out, c);
+                    }
+                }
+                ast::Stmt::While(cond, body, _) => {
+                    collect_types_in_expr(cond, out, c);
+                    for s in body {
+                        collect_types_in_stmt(s, out, c);
+                    }
+                }
+                ast::Stmt::Loop(body, _) => {
+                    for s in body {
+                        collect_types_in_stmt(s, out, c);
+                    }
+                }
+                ast::Stmt::For(_, _, range, step, body, _) => {
+                    collect_types_in_expr(range, out, c);
+                    if let Some(st) = step {
+                        collect_types_in_expr(st, out, c);
+                    }
+                    for s in body {
+                        collect_types_in_stmt(s, out, c);
+                    }
+                }
+                ast::Stmt::Break(expr_opt, _) => {
+                    if let Some(e) = expr_opt {
+                        collect_types_in_expr(e, out, c);
+                    }
+                }
                 _ => {}
             }
         }
@@ -434,12 +586,18 @@ impl CBackend {
                 concrete_array_inners.insert(self.type_to_c_name(inner));
             }
             for (_, p) in &func.params {
-                if let ast::Type::Array(inner) = p { concrete_array_inners.insert(self.type_to_c_name(inner)); }
+                if let ast::Type::Array(inner) = p {
+                    concrete_array_inners.insert(self.type_to_c_name(inner));
+                }
             }
-            for stmt in &func.body { collect_types_in_stmt(stmt, &mut concrete_array_inners, self); }
+            for stmt in &func.body {
+                collect_types_in_stmt(stmt, &mut concrete_array_inners, self);
+            }
         }
 
-        for stmt in &program.stmts { collect_types_in_stmt(stmt, &mut concrete_array_inners, self); }
+        for stmt in &program.stmts {
+            collect_types_in_stmt(stmt, &mut concrete_array_inners, self);
+        }
 
         for struct_def in &program.structs {
             for field in &struct_def.fields {
@@ -448,7 +606,16 @@ impl CBackend {
                 }
             }
         }
+        // Also consider imported struct fields for array element monomorphization
+        for struct_def in &self.imported_structs {
+            for field in &struct_def.fields {
+                if let ast::Type::Array(inner) = &field.ty {
+                    concrete_array_inners.insert(self.type_to_c_name(inner));
+                }
+            }
+        }
 
+        // 1) Specialize array impls with generic T to concrete element types discovered
         let mut new_impls: Vec<ast::ImplBlock> = Vec::new();
         let existing_impl_targets: std::collections::HashSet<String> = program
             .impls
@@ -490,16 +657,325 @@ impl CBackend {
 
                     new_impls.push(ast::ImplBlock {
                         target_type: format!("[]{}", inner),
+                        target_type_parsed: Some(ast::Type::Array(Box::new(concrete_type))),
                         methods: new_methods,
-                        span: impl_block.span.clone(),
+                        span: impl_block.span,
                     });
                 }
-            } else {
+                // Do not push the original generic array impl
+            } else if !impl_block.target_type.contains('<') {
+                // Keep non-generic impls as-is; generic struct impls will be specialized below
                 new_impls.push(impl_block.clone());
             }
         }
 
+        // 2) Collect generic struct definitions in this program and imports (parametric)
+        let mut generic_structs: std::collections::HashMap<String, ast::StructDef> = program
+            .structs
+            .iter()
+            .filter(|s| !s.generic_params.is_empty())
+            .map(|s| (s.name.clone(), s.clone()))
+            .collect();
+        // Extend with imported generic structs (avoid overriding local defs)
+        for s in &self.imported_structs {
+            if !s.generic_params.is_empty() && !generic_structs.contains_key(&s.name) {
+                generic_structs.insert(s.name.clone(), s.clone());
+            }
+        }
+
+        // 3) Discover concrete generic struct instances used in signatures AND expressions
+        let mut struct_instances: std::collections::HashSet<ast::Type> =
+            std::collections::HashSet::new();
+
+        let mut add_if_struct_instance = |ty: &ast::Type| {
+            if let ast::Type::GenericInstance(name, _args) = ty {
+                if generic_structs.contains_key(name) {
+                    struct_instances.insert(ty.clone());
+                }
+            }
+        };
+
+        // From function/impl signatures
+        for f in &transformed_program.functions {
+            add_if_struct_instance(&f.return_type);
+            for (_, p) in &f.params {
+                add_if_struct_instance(p);
+            }
+        }
+        for ib in &new_impls {
+            for m in &ib.methods {
+                add_if_struct_instance(&m.return_type);
+                for (_, p) in &m.params {
+                    add_if_struct_instance(p);
+                }
+            }
+        }
+
+        // Helper to traverse expressions/statements and collect GenericInstance struct usages
+        fn collect_struct_instances_in_expr(
+            expr: &ast::Expr,
+            out: &mut std::collections::HashSet<ast::Type>,
+            generic_structs: &std::collections::HashMap<String, ast::StructDef>,
+        ) {
+            let ty = expr.get_type();
+            if let ast::Type::GenericInstance(name, _) = &ty {
+                if generic_structs.contains_key(name) {
+                    out.insert(ty);
+                }
+            }
+
+            use ast::Expr;
+            match expr {
+                Expr::Call(_, args, _) => {
+                    for a in args {
+                        collect_struct_instances_in_expr(a, out, generic_structs);
+                    }
+                }
+                Expr::BinOp(l, _, r, _) => {
+                    collect_struct_instances_in_expr(l, out, generic_structs);
+                    collect_struct_instances_in_expr(r, out, generic_structs);
+                }
+                Expr::UnaryOp(_, e, _) => collect_struct_instances_in_expr(e, out, generic_structs),
+                Expr::StructInit(_, fields, _) => {
+                    for (_, e) in fields {
+                        collect_struct_instances_in_expr(e, out, generic_structs);
+                    }
+                }
+                Expr::ArrayInit(elems, _) => {
+                    for e in elems {
+                        collect_struct_instances_in_expr(e, out, generic_structs);
+                    }
+                }
+                Expr::ArrayAccess(a, b, _) => {
+                    collect_struct_instances_in_expr(a, out, generic_structs);
+                    collect_struct_instances_in_expr(b, out, generic_structs);
+                }
+                Expr::Cast(e, _, _) => collect_struct_instances_in_expr(e, out, generic_structs),
+                Expr::Assign(a, b, _) => {
+                    collect_struct_instances_in_expr(a, out, generic_structs);
+                    collect_struct_instances_in_expr(b, out, generic_structs);
+                }
+                Expr::Deref(e, _) => collect_struct_instances_in_expr(e, out, generic_structs),
+                Expr::Range(a, b, _, _) => {
+                    collect_struct_instances_in_expr(a, out, generic_structs);
+                    collect_struct_instances_in_expr(b, out, generic_structs);
+                }
+                Expr::FieldAccess(e, _, _) => {
+                    collect_struct_instances_in_expr(e, out, generic_structs)
+                }
+                Expr::TemplateStr(parts, _) => {
+                    for part in parts {
+                        if let ast::TemplateStrPart::Expression(e) = part {
+                            collect_struct_instances_in_expr(e, out, generic_structs);
+                        }
+                    }
+                }
+                Expr::Match(e, arms, _) => {
+                    collect_struct_instances_in_expr(e, out, generic_structs);
+                    for arm in arms {
+                        match &arm.body {
+                            ast::MatchArmBody::Expr(e) => {
+                                collect_struct_instances_in_expr(e, out, generic_structs)
+                            }
+                            ast::MatchArmBody::Block(stmts) => {
+                                for s in stmts {
+                                    collect_struct_instances_in_stmt(s, out, generic_structs);
+                                }
+                            }
+                        }
+                    }
+                }
+                Expr::SafeBlock(stmts, _) | Expr::Loop(stmts, _) => {
+                    for s in stmts {
+                        collect_struct_instances_in_stmt(s, out, generic_structs);
+                    }
+                }
+                Expr::If(cond, then_b, else_b, _) => {
+                    collect_struct_instances_in_expr(cond, out, generic_structs);
+                    for s in then_b {
+                        collect_struct_instances_in_stmt(s, out, generic_structs);
+                    }
+                    if let Some(stmts) = else_b {
+                        for s in stmts {
+                            collect_struct_instances_in_stmt(s, out, generic_structs);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        fn collect_struct_instances_in_stmt(
+            stmt: &ast::Stmt,
+            out: &mut std::collections::HashSet<ast::Type>,
+            generic_structs: &std::collections::HashMap<String, ast::StructDef>,
+        ) {
+            match stmt {
+                ast::Stmt::Let(_, ty_opt, expr, _, _) => {
+                    if let Some(ty) = ty_opt {
+                        if let ast::Type::GenericInstance(name, _) = ty {
+                            if generic_structs.contains_key(name) {
+                                out.insert(ty.clone());
+                            }
+                        }
+                    }
+                    collect_struct_instances_in_expr(expr, out, generic_structs);
+                }
+                ast::Stmt::Expr(expr, _) | ast::Stmt::Return(expr, _) => {
+                    collect_struct_instances_in_expr(expr, out, generic_structs);
+                }
+                ast::Stmt::If(cond, then_b, else_b, _) => {
+                    collect_struct_instances_in_expr(cond, out, generic_structs);
+                    for s in then_b {
+                        collect_struct_instances_in_stmt(s, out, generic_structs);
+                    }
+                    if let Some(stmts) = else_b {
+                        for s in stmts {
+                            collect_struct_instances_in_stmt(s, out, generic_structs);
+                        }
+                    }
+                }
+                ast::Stmt::Block(stmts, _) | ast::Stmt::Loop(stmts, _) => {
+                    for s in stmts {
+                        collect_struct_instances_in_stmt(s, out, generic_structs);
+                    }
+                }
+                ast::Stmt::While(cond, body, _) => {
+                    collect_struct_instances_in_expr(cond, out, generic_structs);
+                    for s in body {
+                        collect_struct_instances_in_stmt(s, out, generic_structs);
+                    }
+                }
+                ast::Stmt::For(_, _, range, step, body, _) => {
+                    collect_struct_instances_in_expr(range, out, generic_structs);
+                    if let Some(st) = step {
+                        collect_struct_instances_in_expr(st, out, generic_structs);
+                    }
+                    for s in body {
+                        collect_struct_instances_in_stmt(s, out, generic_structs);
+                    }
+                }
+                ast::Stmt::Break(expr_opt, _) => {
+                    if let Some(e) = expr_opt {
+                        collect_struct_instances_in_expr(e, out, generic_structs);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // From function bodies and top-level statements
+        for f in &transformed_program.functions {
+            for stmt in &f.body {
+                collect_struct_instances_in_stmt(stmt, &mut struct_instances, &generic_structs);
+            }
+        }
+        for stmt in &program.stmts {
+            collect_struct_instances_in_stmt(stmt, &mut struct_instances, &generic_structs);
+        }
+        // Also collect from test bodies (since tests drive most examples)
+        for test in &program.tests {
+            for stmt in &test.stmts {
+                collect_struct_instances_in_stmt(stmt, &mut struct_instances, &generic_structs);
+            }
+        }
+
+        // 4) Instantiate concrete struct definitions from generic ones
+        let mut extra_structs: Vec<ast::StructDef> = Vec::new();
+        let mut seen_struct_names = std::collections::HashSet::new();
+
+        for ty in &struct_instances {
+            if let ast::Type::GenericInstance(name, args) = ty {
+                if let Some(def) = generic_structs.get(name) {
+                    let mut new_fields = Vec::new();
+                    for f in &def.fields {
+                        let new_ty =
+                            self.substitute_type_using_struct_generics(&f.ty, def, args)?;
+                        new_fields.push(ast::StructField {
+                            name: f.name.clone(),
+                            ty: new_ty,
+                            span: f.span,
+                        });
+                    }
+                    let concrete_name = self.type_to_c_name(ty);
+                    if seen_struct_names.insert(concrete_name.clone()) {
+                        extra_structs.push(ast::StructDef {
+                            name: concrete_name,
+                            generic_params: vec![],
+                            fields: new_fields,
+                            span: def.span,
+                            visibility: def.visibility.clone(),
+                            repr: def.repr.clone(),
+                        });
+                    }
+                }
+            }
+        }
+
+        // 5) Specialize generic struct impl blocks (e.g., impl ArrayIter<T> { ... }) to concrete instances
+        for impl_block in &program.impls {
+            if impl_block.target_type.contains('<') && impl_block.target_type.ends_with('>') {
+                let s = impl_block.target_type.as_str();
+                if let Some(lt) = s.find('<') {
+                    let base = s[..lt].trim();
+                    let params_src = &s[lt + 1..s.len() - 1];
+                    let _param_names: Vec<String> = params_src
+                        .split(',')
+                        .map(|p| p.trim().to_string())
+                        .collect();
+
+                    for ty in &struct_instances {
+                        if let ast::Type::GenericInstance(inst_base, inst_args) = ty {
+                            if inst_base == base {
+                                if let Some(def) = generic_structs.get(base) {
+                                    let mut new_methods = Vec::new();
+                                    for m in &impl_block.methods {
+                                        let mut new_m = m.clone();
+                                        new_m.return_type = self
+                                            .substitute_type_using_struct_generics(
+                                                &m.return_type,
+                                                def,
+                                                inst_args,
+                                            )?;
+                                        let mut new_params = Vec::new();
+                                        for (n, t) in &m.params {
+                                            new_params.push((
+                                                n.clone(),
+                                                self.substitute_type_using_struct_generics(
+                                                    t, def, inst_args,
+                                                )?,
+                                            ));
+                                        }
+                                        new_m.params = new_params;
+                                        new_methods.push(new_m);
+                                    }
+
+                                    new_impls.push(ast::ImplBlock {
+                                        target_type: self.type_to_c_name(ty),
+                                        target_type_parsed: Some(ty.clone()),
+                                        methods: new_methods,
+                                        span: impl_block.span,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         let mut final_program = transformed_program.clone();
+        // Append specialized concrete structs
+        if !extra_structs.is_empty() {
+            let mut combined_structs = final_program.structs.clone();
+            for s in extra_structs {
+                if !combined_structs.iter().any(|e| e.name == s.name) {
+                    combined_structs.push(s);
+                }
+            }
+            final_program.structs = combined_structs;
+        }
+        // Use specialized impls (arrays + generic struct impls)
         final_program.impls = new_impls;
 
         Ok(final_program)
@@ -551,7 +1027,7 @@ impl CBackend {
             params: substituted_params,
             return_type: substituted_return_type,
             body: substituted_body,
-            span: generic_func.span.clone(),
+            span: generic_func.span,
             visibility: generic_func.visibility.clone(),
         })
     }
@@ -586,6 +1062,12 @@ impl CBackend {
                 }
                 Ok(ast::Type::GenericInstance(name.clone(), substituted_args))
             }
+            ast::Type::Optional(inner) => Ok(ast::Type::Optional(Box::new(
+                self.substitute_type(inner, type_map)?,
+            ))),
+            ast::Type::Pointer(inner) => Ok(ast::Type::Pointer(Box::new(
+                self.substitute_type(inner, type_map)?,
+            ))),
             _ => Ok(ty.clone()),
         }
     }
@@ -607,17 +1089,17 @@ impl CBackend {
                     name.clone(),
                     new_ty,
                     new_expr,
-                    span.clone(),
+                    *span,
                     visibility.clone(),
                 ))
             }
             ast::Stmt::Expr(expr, span) => Ok(ast::Stmt::Expr(
                 self.substitute_expr(expr, type_map)?,
-                span.clone(),
+                *span,
             )),
             ast::Stmt::Return(expr, span) => {
                 let new_expr = self.substitute_expr(expr, type_map)?;
-                Ok(ast::Stmt::Return(new_expr, span.clone()))
+                Ok(ast::Stmt::Return(new_expr, *span))
             }
             _ => Ok(stmt.clone()),
         }
@@ -685,6 +1167,16 @@ impl CBackend {
                 };
                 Ok(ast::Expr::TemplateStr(new_parts, new_info))
             }
+            ast::Expr::Cast(inner, ty, info) => {
+                let new_inner = self.substitute_expr(inner, type_map)?;
+                let new_ty = self.substitute_type(ty, type_map)?;
+                let new_info = ast::ExprInfo {
+                    span: info.span,
+                    ty: new_ty.clone(),
+                    is_tail: info.is_tail,
+                };
+                Ok(ast::Expr::Cast(Box::new(new_inner), new_ty, new_info))
+            }
             _ => {
                 let new_info = ast::ExprInfo {
                     span: expr.get_info().span,
@@ -697,6 +1189,7 @@ impl CBackend {
                     ast::Expr::Bool(value, _) => Ok(ast::Expr::Bool(*value, new_info)),
                     ast::Expr::Str(value, _) => Ok(ast::Expr::Str(value.clone(), new_info)),
                     ast::Expr::F32(value, _) => Ok(ast::Expr::F32(*value, new_info)),
+                    ast::Expr::F64(value, _) => Ok(ast::Expr::F64(*value, new_info)),
                     ast::Expr::Void(_) => Ok(ast::Expr::Void(new_info)),
                     _ => Ok(expr.clone()),
                 }
@@ -766,10 +1259,10 @@ impl CBackend {
                     .push_str(&format!("#pragma comment(lib, \"{}\")\n", link));
             }
 
-            if let Some(no_emit_decl) = ffi.metadata.as_ref().and_then(|m| m.get("no_emit_decl")) {
-                if no_emit_decl == "true" {
-                    continue;
-                }
+            if let Some(no_emit_decl) = ffi.metadata.as_ref().and_then(|m| m.get("no_emit_decl"))
+                && no_emit_decl == "true"
+            {
+                continue;
             }
 
             ffi_decls.push_str(&format!("extern {} {}({});\n", ret, ffi.name, param_str));
@@ -777,7 +1270,7 @@ impl CBackend {
 
         if !ffi_decls.is_empty() {
             self.header.push_str(&ffi_decls);
-            self.header.push_str("\n");
+            self.header.push('\n');
         }
 
         Ok(())
@@ -1083,6 +1576,7 @@ impl CBackend {
             ("u16", "ve_u16", "%u", "8"),
             ("u32", "ve_u32", "%u", "16"),
             ("u64", "ve_u64", "%llu", "24"),
+            ("size_t", "ve_size_t", "%zu", "24"),
         ];
 
         for (name, c_type, fmt, size) in &to_str_functions {
@@ -1232,29 +1726,36 @@ impl CBackend {
         self.header.push_str("    return result;\n");
         self.header.push_str("}\n\n");
 
-        self.header.push_str("static i32 ve_string_at(const char* s, i32 index) {\n");
+        self.header
+            .push_str("static i32 ve_string_at(const char* s, i32 index) {\n");
         self.header.push_str("    if (!s) return -1;\n");
         self.header.push_str("    size_t len = strlen(s);\n");
-        self.header.push_str("    if (index < 0 || (size_t)index >= len) return -1;\n");
-        self.header.push_str("    return (i32)(unsigned char)s[index];\n");
+        self.header
+            .push_str("    if (index < 0 || (size_t)index >= len) return -1;\n");
+        self.header
+            .push_str("    return (i32)(unsigned char)s[index];\n");
         self.header.push_str("}\n\n");
 
-        self.header.push_str("static char* ve_string_slice(const char* s, i32 start, i32 end) {\n");
+        self.header
+            .push_str("static char* ve_string_slice(const char* s, i32 start, i32 end) {\n");
         self.header.push_str("    if (!s) return \"\";\n");
         self.header.push_str("    size_t len = strlen(s);\n");
         self.header.push_str("    if (start < 0) start = 0;\n");
-        self.header.push_str("    if (end > (i32)len) end = (i32)len;\n");
+        self.header
+            .push_str("    if (end > (i32)len) end = (i32)len;\n");
         self.header.push_str("    if (start >= end) return \"\";\n");
         self.header.push_str("    \n");
-        self.header.push_str("    size_t slice_len = end - start;\n");
-        self.header.push_str("    char* result = ve_arena_alloc(slice_len + 1);\n");
+        self.header
+            .push_str("    size_t slice_len = end - start;\n");
+        self.header
+            .push_str("    char* result = ve_arena_alloc(slice_len + 1);\n");
         self.header.push_str("    if (result) {\n");
-        self.header.push_str("        memcpy(result, s + start, slice_len);\n");
+        self.header
+            .push_str("        memcpy(result, s + start, slice_len);\n");
         self.header.push_str("        result[slice_len] = '\\0';\n");
         self.header.push_str("    }\n");
         self.header.push_str("    return result ? result : \"\";\n");
         self.header.push_str("}\n\n");
-
 
         #[cfg(debug_assertions)]
         {
@@ -1299,9 +1800,6 @@ impl CBackend {
             self.header.push_str("static void ve_arena_stats() {}\n");
             self.header.push_str("#endif\n\n");
         }
-
-
-
     }
 
     fn ensure_optional_type(&mut self, inner_type: &Type) {
@@ -1356,7 +1854,10 @@ impl CBackend {
                         .push_str(&format!("{} {} = {};\n", c_ty, name, value));
                 } else {
                     return Err(CompileError::CodegenError {
-                        message: format!("Non-constant initializer for global '{}'", name),
+                        message: format!(
+                            "Non-constant initializer for global '{}'. Globals must have constant initializers. Move this declaration into a function (e.g., initialize in main) or make the initializer compile-time constant.",
+                            name
+                        ),
                         span: Some(expr.span()),
                         file_id: self.file_id,
                     });
@@ -1369,7 +1870,11 @@ impl CBackend {
     fn is_constant_expr(&self, expr: &ast::Expr) -> bool {
         matches!(
             expr,
-            ast::Expr::Int(..) | ast::Expr::Str(..) | ast::Expr::Bool(..) | ast::Expr::F32(..)
+            ast::Expr::Int(..)
+                | ast::Expr::Str(..)
+                | ast::Expr::Bool(..)
+                | ast::Expr::F32(..)
+                | ast::Expr::F64(..)
         )
     }
 
@@ -1439,10 +1944,7 @@ impl CBackend {
                 (
                     name.clone(),
                     true,
-                    format!(
-                        "ve_{}",
-                        self.type_to_c_name(&matched_type.as_ref().unwrap())
-                    ),
+                    format!("ve_{}", self.type_to_c_name(matched_type.as_ref().unwrap())),
                 )
             } else {
                 ("".to_string(), false, "".to_string())
@@ -1450,7 +1952,7 @@ impl CBackend {
 
         let switch_expr = match &matched_type {
             Some(Type::Enum(enum_name)) => {
-                if self.is_simple_enum(&enum_name) {
+                if self.is_simple_enum(enum_name) {
                     matched_var.to_string()
                 } else {
                     format!("{}.tag", matched_var)
@@ -1467,14 +1969,11 @@ impl CBackend {
             let mut variants_map: HashMap<String, Vec<&ast::MatchArm>> = HashMap::new();
 
             for arm in arms {
-                match &arm.pattern {
-                    ast::Pattern::EnumVariant(_, variant_name, _, _) => {
-                        variants_map
-                            .entry(variant_name.clone())
-                            .or_insert_with(Vec::new)
-                            .push(arm);
-                    }
-                    _ => {}
+                if let ast::Pattern::EnumVariant(_, variant_name, _, _) = &arm.pattern {
+                    variants_map
+                        .entry(variant_name.clone())
+                        .or_default()
+                        .push(arm);
                 }
             }
 
@@ -1507,54 +2006,57 @@ impl CBackend {
                                     let mut field_type = "int".to_string();
                                     if let Some(Type::GenericInstance(enum_name, args)) =
                                         &matched_type
+                                        && let Some(enum_def) = self.enum_defs.get(enum_name)
                                     {
-                                        if let Some(enum_def) = self.enum_defs.get(enum_name) {
-                                            enum_def
-                                                .variants
-                                                .iter()
-                                                .find(|v| v.name == *variant_name)
-                                                .map(|variant| {
-                                                    if let Some(data_types) = &variant.data {
-                                                        match data_types {
-                                                            crate::ast::EnumVariantData::Tuple(types) => {
-                                                                if let Some(ty) = types.get(i) {
-                                                                    field_type = self.type_to_c(
-                                                                        if let Some(idx) = enum_def
-                                                                            .generic_params
-                                                                            .iter()
-                                                                            .position(|gp| {
-                                                                                gp == &ty.to_string()
-                                                                            })
-                                                                        {
-                                                                            &args[idx]
-                                                                        } else {
-                                                                            ty
-                                                                        },
-                                                                    );
-                                                                }
+                                        enum_def
+                                            .variants
+                                            .iter()
+                                            .find(|v| v.name == *variant_name)
+                                            .map(|variant| {
+                                                if let Some(data_types) = &variant.data {
+                                                    match data_types {
+                                                        crate::ast::EnumVariantData::Tuple(
+                                                            types,
+                                                        ) => {
+                                                            if let Some(ty) = types.get(i) {
+                                                                field_type = self.type_to_c(
+                                                                    if let Some(idx) = enum_def
+                                                                        .generic_params
+                                                                        .iter()
+                                                                        .position(|gp| {
+                                                                            gp == &ty.to_string()
+                                                                        })
+                                                                    {
+                                                                        &args[idx]
+                                                                    } else {
+                                                                        ty
+                                                                    },
+                                                                );
                                                             }
-                                                            crate::ast::EnumVariantData::Struct(fields) => {
-                                                                if let Some(f) = fields.get(i) {
-                                                                    let ty = &f.ty;
-                                                                    field_type = self.type_to_c(
-                                                                        if let Some(idx) = enum_def
-                                                                            .generic_params
-                                                                            .iter()
-                                                                            .position(|gp| {
-                                                                                gp == &ty.to_string()
-                                                                            })
-                                                                        {
-                                                                            &args[idx]
-                                                                        } else {
-                                                                            ty
-                                                                        },
-                                                                    );
-                                                                }
+                                                        }
+                                                        crate::ast::EnumVariantData::Struct(
+                                                            fields,
+                                                        ) => {
+                                                            if let Some(f) = fields.get(i) {
+                                                                let ty = &f.ty;
+                                                                field_type = self.type_to_c(
+                                                                    if let Some(idx) = enum_def
+                                                                        .generic_params
+                                                                        .iter()
+                                                                        .position(|gp| {
+                                                                            gp == &ty.to_string()
+                                                                        })
+                                                                    {
+                                                                        &args[idx]
+                                                                    } else {
+                                                                        ty
+                                                                    },
+                                                                );
                                                             }
                                                         }
                                                     }
-                                                });
-                                        }
+                                                }
+                                            });
                                     }
                                     code.push_str(&format!(
                                         "        {} {} = {}.data.{}.field{};\n",
@@ -1664,54 +2166,53 @@ impl CBackend {
                             if let ast::Pattern::Variable(var_name, _) = pattern {
                                 let mut field_type = "int".to_string();
                                 if let Some(Type::GenericInstance(enum_name, args)) = &matched_type
+                                    && let Some(enum_def) = self.enum_defs.get(enum_name)
                                 {
-                                    if let Some(enum_def) = self.enum_defs.get(enum_name) {
-                                        enum_def
-                                            .variants
-                                            .iter()
-                                            .find(|v| v.name == *variant_name)
-                                            .map(|variant| {
-                                                if let Some(data_types) = &variant.data {
-                                                    match data_types {
-                                                        crate::ast::EnumVariantData::Tuple(types) => {
-                                                            if let Some(ty) = types.get(i) {
-                                                                field_type = self.type_to_c(
-                                                                    if let Some(idx) = enum_def
-                                                                        .generic_params
-                                                                        .iter()
-                                                                        .position(|gp| {
-                                                                            gp == &ty.to_string()
-                                                                        })
-                                                                    {
-                                                                        &args[idx]
-                                                                    } else {
-                                                                        ty
-                                                                    },
-                                                                );
-                                                            }
+                                    enum_def
+                                        .variants
+                                        .iter()
+                                        .find(|v| v.name == *variant_name)
+                                        .map(|variant| {
+                                            if let Some(data_types) = &variant.data {
+                                                match data_types {
+                                                    crate::ast::EnumVariantData::Tuple(types) => {
+                                                        if let Some(ty) = types.get(i) {
+                                                            field_type = self.type_to_c(
+                                                                if let Some(idx) = enum_def
+                                                                    .generic_params
+                                                                    .iter()
+                                                                    .position(|gp| {
+                                                                        gp == &ty.to_string()
+                                                                    })
+                                                                {
+                                                                    &args[idx]
+                                                                } else {
+                                                                    ty
+                                                                },
+                                                            );
                                                         }
-                                                        crate::ast::EnumVariantData::Struct(fields) => {
-                                                            if let Some(f) = fields.get(i) {
-                                                                let ty = &f.ty;
-                                                                field_type = self.type_to_c(
-                                                                    if let Some(idx) = enum_def
-                                                                        .generic_params
-                                                                        .iter()
-                                                                        .position(|gp| {
-                                                                            gp == &ty.to_string()
-                                                                        })
-                                                                    {
-                                                                        &args[idx]
-                                                                    } else {
-                                                                        ty
-                                                                    },
-                                                                );
-                                                            }
+                                                    }
+                                                    crate::ast::EnumVariantData::Struct(fields) => {
+                                                        if let Some(f) = fields.get(i) {
+                                                            let ty = &f.ty;
+                                                            field_type = self.type_to_c(
+                                                                if let Some(idx) = enum_def
+                                                                    .generic_params
+                                                                    .iter()
+                                                                    .position(|gp| {
+                                                                        gp == &ty.to_string()
+                                                                    })
+                                                                {
+                                                                    &args[idx]
+                                                                } else {
+                                                                    ty
+                                                                },
+                                                            );
                                                         }
                                                     }
                                                 }
-                                            });
-                                    }
+                                            }
+                                        });
                                 }
                                 code.push_str(&format!(
                                     "    {} {} = {}.data.{}.field{};\n",

@@ -1,0 +1,91 @@
+fn assert_true(cond: bool) -> void {
+    if !cond {
+        println("assert_true failed");
+        panic("assert failed");
+    }
+}
+
+fn assert_eq_i32(a: i32, b: i32) -> void {
+    if a != b {
+        println(`assert_eq_i32 failed: ${a} != ${b}`);
+        panic("assert failed");
+    }
+}
+
+fn assert_eq_string(a: string, b: string) -> void {
+    if a != b {
+        println(`assert_eq_string failed: "${a}" != "${b}"`);
+        panic("assert failed");
+    }
+}
+
+test defer_lifo_order_in_safe_block {
+    let acc: string[] = [];
+
+    safe {
+        defer acc = acc.append("f");
+        defer acc = acc.append("g");
+        // body is empty; defers will run when leaving safe block
+    }
+
+    // LIFO: last defer runs first => "g", then "f"
+    assert_eq_i32(acc.length(), 2 as i32);
+    assert_eq_string(acc[0], "g");
+    assert_eq_string(acc[1], "f");
+}
+
+test nested_safe_blocks_execute_inner_defers_first {
+    let acc: string[] = [];
+
+    safe {
+        defer acc = acc.append("outer1");
+        safe {
+            defer acc = acc.append("inner1");
+            defer acc = acc.append("inner2");
+        }
+        defer acc = acc.append("outer2");
+    }
+
+    // Execution order when leaving inner then outer:
+    // inner2, inner1, outer2, outer1
+    assert_eq_i32(acc.length(), 4 as i32);
+    assert_eq_string(acc[0], "inner2");
+    assert_eq_string(acc[1], "inner1");
+    assert_eq_string(acc[2], "outer2");
+    assert_eq_string(acc[3], "outer1");
+}
+
+
+
+test defer_must_be_void_returning {
+    // Use a void-returning statement in defer (assignment is void)
+    let acc: i32[] = [];
+    safe {
+        defer acc = acc.append(1 as i32);
+        defer acc = acc.append(2 as i32);
+    }
+
+    assert_eq_i32(acc.length(), 2 as i32);
+    // LIFO -> 2 then 1
+    assert_true(acc[0] == 2 as i32 && acc[1] == 1 as i32);
+}
+
+test safe_block_allows_regular_statements_and_defers {
+    let acc: string[] = [];
+
+    safe {
+        let a = 1 as i32;
+        let b = 2 as i32;
+        assert_eq_i32(a + b, 3 as i32);
+
+        defer acc = acc.append("d1");
+        defer acc = acc.append("d2");
+        // A normal statement after defers
+        let c = a + b + 4 as i32;
+        assert_eq_i32(c, 7 as i32);
+    }
+
+    assert_eq_i32(acc.length(), 2 as i32);
+    assert_eq_string(acc[0], "d2");
+    assert_eq_string(acc[1], "d1");
+}

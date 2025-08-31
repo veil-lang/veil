@@ -111,11 +111,11 @@ pub fn run_benchmark(input: PathBuf, iterations: usize, verbose: bool) -> anyhow
             let config = term::Config::default();
 
             for error in &errors {
-                term::emit(&mut writer.lock(), &config, &files, &error)?;
+                term::emit(&mut writer.lock(), &config, &files, error)?;
 
-                let file_id = error.labels.get(0).map(|l| l.file_id);
+                let file_id = error.labels.first().map(|l| l.file_id);
                 let file_path = file_id
-                    .and_then(|fid| Some(files.name(fid)))
+                    .map(|fid| files.name(fid))
                     .map(|n| n.to_string_lossy().to_string());
                 let module_info = file_path.as_ref().and_then(|path: &String| {
                     if let Some(_idx) = path.find("lib/std") {
@@ -152,7 +152,7 @@ pub fn run_benchmark(input: PathBuf, iterations: usize, verbose: bool) -> anyhow
 
                 eprintln!("\nType checker error {}: {}", location, error.message);
 
-                if let Some(label) = error.labels.get(0) {
+                if let Some(label) = error.labels.first() {
                     eprintln!("  --> at {}..{}", label.range.start, label.range.end);
                     eprintln!("  = detail: {}", label.message);
                 }

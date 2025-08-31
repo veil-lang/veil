@@ -94,7 +94,7 @@ impl<'a> super::Parser<'a> {
             }))
         } else {
             let span = self.peek_span();
-            return self.error("Expected 'fn' or 'var' in foreign block", span);
+            self.error("Expected 'fn' or 'var' in foreign block", span)
         }
     }
 }

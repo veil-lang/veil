@@ -63,9 +63,13 @@ impl<'a> Parser<'a> {
         while let Some((token, _)) = self.tokens.get(i) {
             match token {
                 Token::KwLet
+                | Token::KwVar
                 | Token::KwReturn
                 | Token::KwWhile
                 | Token::KwFor
+                | Token::KwLoop
+                | Token::KwIf
+                | Token::KwDefer
                 | Token::KwBreak
                 | Token::KwContinue => {
                     return false;
@@ -121,6 +125,7 @@ impl<'a> Parser<'a> {
             ast::Expr::ArrayAccess(_, _, info) => info.is_tail = true,
             ast::Expr::TemplateStr(_, info) => info.is_tail = true,
             ast::Expr::F32(_, info) => info.is_tail = true,
+            ast::Expr::F64(_, info) => info.is_tail = true,
             ast::Expr::FfiCall(_, _, info) => info.is_tail = true,
             ast::Expr::EnumConstruct(_, _, _, info) => info.is_tail = true,
             ast::Expr::Match(_, _, info) => info.is_tail = true,
