@@ -121,6 +121,7 @@ impl<'a> Parser<'a> {
             ast::Expr::ArrayAccess(_, _, info) => info.is_tail = true,
             ast::Expr::TemplateStr(_, info) => info.is_tail = true,
             ast::Expr::F32(_, info) => info.is_tail = true,
+            ast::Expr::F64(_, info) => info.is_tail = true,
             ast::Expr::FfiCall(_, _, info) => info.is_tail = true,
             ast::Expr::EnumConstruct(_, _, _, info) => info.is_tail = true,
             ast::Expr::Match(_, _, info) => info.is_tail = true,

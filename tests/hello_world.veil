@@ -1,4 +1,9 @@
 
+import std/io;
+
+test hello_world {
+    println("Hello, World!");
+}
 
 fn main() {
     println("Hello, World!");

@@ -193,19 +193,21 @@ impl TypeChecker {
         for stmt in &mut func.body {
             self.check_stmt(stmt)?;
 
-            if !explicit_return_type && self.context.inferred_return_type.is_some()
-                && inferred_return_type.is_none() {
-                    inferred_return_type = self.context.inferred_return_type.clone();
-                    self.context.current_return_type = inferred_return_type.clone().unwrap();
-                    func.return_type = inferred_return_type.clone().unwrap();
+            if !explicit_return_type
+                && self.context.inferred_return_type.is_some()
+                && inferred_return_type.is_none()
+            {
+                inferred_return_type = self.context.inferred_return_type.clone();
+                self.context.current_return_type = inferred_return_type.clone().unwrap();
+                func.return_type = inferred_return_type.clone().unwrap();
 
-                    if let Some((params, _)) = self.functions.get(&func.name).cloned() {
-                        self.functions.insert(
-                            func.name.clone(),
-                            (params, inferred_return_type.clone().unwrap()),
-                        );
-                    }
+                if let Some((params, _)) = self.functions.get(&func.name).cloned() {
+                    self.functions.insert(
+                        func.name.clone(),
+                        (params, inferred_return_type.clone().unwrap()),
+                    );
                 }
+            }
         }
 
         self.context = original_ctx;

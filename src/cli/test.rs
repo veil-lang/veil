@@ -57,12 +57,13 @@ fn parse_test_names(content: &str) -> Vec<String> {
     for line in content.lines() {
         let trimmed = line.trim();
         if let Some(after_test) = trimmed.strip_prefix("test ")
-            && let Some(name_end) = after_test.find(' ').or_else(|| after_test.find('{')) {
-                let test_name = after_test[..name_end].trim().to_string();
-                if !test_name.is_empty() {
-                    tests.push(test_name);
-                }
+            && let Some(name_end) = after_test.find(' ').or_else(|| after_test.find('{'))
+        {
+            let test_name = after_test[..name_end].trim().to_string();
+            if !test_name.is_empty() {
+                tests.push(test_name);
             }
+        }
     }
 
     tests

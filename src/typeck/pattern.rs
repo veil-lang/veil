@@ -25,32 +25,31 @@ impl TypeChecker {
                     if let Some(enum_def) = self.enums.iter().find(|e| &e.name == enum_name)
                         && let Some(variant) =
                             enum_def.variants.iter().find(|v| &v.name == variant_name)
-                        {
-                            let mut subst = std::collections::HashMap::new();
-                            for (gp, arg) in enum_def.generic_params.iter().zip(generic_args.iter())
-                            {
-                                subst.insert(gp, arg);
-                            }
-                            let data_types = if let Some(data) = &variant.data {
-                                match data {
-                                    crate::ast::EnumVariantData::Tuple(types) => types
-                                        .iter()
-                                        .map(|t| substitute_generics(t, &subst))
-                                        .collect::<Vec<_>>(),
-                                    crate::ast::EnumVariantData::Struct(fields) => fields
-                                        .iter()
-                                        .map(|f| substitute_generics(&f.ty, &subst))
-                                        .collect::<Vec<_>>(),
-                                }
-                            } else {
-                                vec![]
-                            };
-                            for (i, subpat) in patterns.iter().enumerate() {
-                                let ty = data_types.get(i).cloned().unwrap_or(Type::Unknown);
-                                self.check_pattern(subpat, &ty)?;
-                            }
-                            return Ok(());
+                    {
+                        let mut subst = std::collections::HashMap::new();
+                        for (gp, arg) in enum_def.generic_params.iter().zip(generic_args.iter()) {
+                            subst.insert(gp, arg);
                         }
+                        let data_types = if let Some(data) = &variant.data {
+                            match data {
+                                crate::ast::EnumVariantData::Tuple(types) => types
+                                    .iter()
+                                    .map(|t| substitute_generics(t, &subst))
+                                    .collect::<Vec<_>>(),
+                                crate::ast::EnumVariantData::Struct(fields) => fields
+                                    .iter()
+                                    .map(|f| substitute_generics(&f.ty, &subst))
+                                    .collect::<Vec<_>>(),
+                            }
+                        } else {
+                            vec![]
+                        };
+                        for (i, subpat) in patterns.iter().enumerate() {
+                            let ty = data_types.get(i).cloned().unwrap_or(Type::Unknown);
+                            self.check_pattern(subpat, &ty)?;
+                        }
+                        return Ok(());
+                    }
                     for (i, subpat) in patterns.iter().enumerate() {
                         let ty = generic_args.get(i).cloned().unwrap_or(Type::Unknown);
                         self.check_pattern(subpat, &ty)?;
@@ -61,23 +60,23 @@ impl TypeChecker {
                     if let Some(enum_def) = self.enums.iter().find(|e| &e.name == enum_name)
                         && let Some(variant) =
                             enum_def.variants.iter().find(|v| &v.name == variant_name)
-                        {
-                            let data_types: Vec<Type> = if let Some(data) = &variant.data {
-                                match data {
-                                    crate::ast::EnumVariantData::Tuple(types) => types.clone(),
-                                    crate::ast::EnumVariantData::Struct(fields) => {
-                                        fields.iter().map(|f| f.ty.clone()).collect()
-                                    }
+                    {
+                        let data_types: Vec<Type> = if let Some(data) = &variant.data {
+                            match data {
+                                crate::ast::EnumVariantData::Tuple(types) => types.clone(),
+                                crate::ast::EnumVariantData::Struct(fields) => {
+                                    fields.iter().map(|f| f.ty.clone()).collect()
                                 }
-                            } else {
-                                vec![]
-                            };
-                            for (i, subpat) in patterns.iter().enumerate() {
-                                let ty = data_types.get(i).cloned().unwrap_or(Type::Unknown);
-                                self.check_pattern(subpat, &ty)?;
                             }
-                            return Ok(());
+                        } else {
+                            vec![]
+                        };
+                        for (i, subpat) in patterns.iter().enumerate() {
+                            let ty = data_types.get(i).cloned().unwrap_or(Type::Unknown);
+                            self.check_pattern(subpat, &ty)?;
                         }
+                        return Ok(());
+                    }
                     for subpat in patterns {
                         self.check_pattern(subpat, &Type::Unknown)?;
                     }
@@ -98,9 +97,10 @@ impl TypeChecker {
                 let literal_ty = expr.get_type();
                 let mut expected = expected_ty;
                 if let Type::Unknown = expected_ty
-                    && let Some(var_ty) = self.context.variables.values().last() {
-                        expected = var_ty;
-                    }
+                    && let Some(var_ty) = self.context.variables.values().last()
+                {
+                    expected = var_ty;
+                }
                 if Self::is_convertible(&literal_ty, expected) {
                     Ok(())
                 } else {
@@ -221,7 +221,9 @@ impl TypeChecker {
             (Type::I32, Type::Pointer(_)) => true,
             (Type::I32, Type::Bool) => true,
             (Type::F32, Type::I32) => true,
+            (Type::F64, Type::I32) => true,
             (Type::I32, Type::F32) => true,
+            (Type::I32, Type::F64) => true,
             (Type::I32, Type::U32) => true,
             (Type::U32, Type::I32) => true,
             (Type::U8, Type::I32) => true,

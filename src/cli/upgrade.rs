@@ -9,8 +9,7 @@ const REPO_URL: &str = "https://github.com/veil-lang/veil.git";
 const GITHUB_API_URL: &str = "https://api.github.com/repos/veil-lang/veil/releases/latest";
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[derive(Debug, Clone, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum Channel {
     #[default]
     Stable,
@@ -32,7 +31,6 @@ impl Channel {
         }
     }
 }
-
 
 #[derive(Serialize, Deserialize)]
 struct UpdateConfig {
@@ -142,13 +140,14 @@ fn check_for_updates(channel: &Channel) -> Result<Option<String>> {
 
     for line in cargo_content.lines() {
         if line.trim().starts_with("version = ")
-            && let Some(version_str) = line.split('"').nth(1) {
-                if version_str != CURRENT_VERSION {
-                    return Ok(Some(version_str.to_string()));
-                } else {
-                    return Ok(None);
-                }
+            && let Some(version_str) = line.split('"').nth(1)
+        {
+            if version_str != CURRENT_VERSION {
+                return Ok(Some(version_str.to_string()));
+            } else {
+                return Ok(None);
             }
+        }
     }
 
     Ok(None)
@@ -402,9 +401,10 @@ fn upgrade_veil_binary(verbose: bool) -> Result<()> {
         }
 
         if let Err(e) = fs::rename(&target_exe, &backup_exe)
-            && verbose {
-                println!("   Warning: Could not backup current executable: {}", e);
-            }
+            && verbose
+        {
+            println!("   Warning: Could not backup current executable: {}", e);
+        }
     }
 
     // Skopiuj nowy plik wykonywalny
@@ -617,12 +617,10 @@ fn upgrade_veil_source(verbose: bool, channel: &Channel) -> Result<()> {
                         let _ = stop_other_veil_processes_unix(false);
                     }
 
-                    if retry_count == 5
-                        && target_exe.exists() {
-                            let temp_name =
-                                install_dir.join(format!("ve_temp_{}", std::process::id()));
-                            let _ = fs::rename(&target_exe, &temp_name);
-                        }
+                    if retry_count == 5 && target_exe.exists() {
+                        let temp_name = install_dir.join(format!("ve_temp_{}", std::process::id()));
+                        let _ = fs::rename(&target_exe, &temp_name);
+                    }
                 }
             }
             Err(e) => {
@@ -838,9 +836,10 @@ fn stop_other_veil_processes_unix(verbose: bool) -> Result<()> {
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 if let Some(pid_str) = parts.first()
                     && let Ok(pid) = pid_str.parse::<u32>()
-                        && pid != current_pid {
-                            return Some(pid);
-                        }
+                    && pid != current_pid
+                {
+                    return Some(pid);
+                }
                 None
             })
             .collect();

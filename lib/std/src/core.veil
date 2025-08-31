@@ -36,9 +36,9 @@ export fn is_none<T>(opt: T?) -> bool {
     return opt == none;
 }
 
-export fn unwrap_or<T>(opt: T?, default: T) -> T {
+export fn unwrap_or<T>(opt: T?, fallback: T) -> T {
     if opt == none {
-        return default;
+        return fallback;
     }
     return opt as T;
 }

@@ -290,6 +290,7 @@ pub enum Expr {
     Spread(Box<Expr>, ExprInfo),
     TemplateStr(Vec<TemplateStrPart>, ExprInfo),
     F32(f32, ExprInfo),
+    F64(f64, ExprInfo),
     FfiCall(String, Vec<Expr>, ExprInfo),
     EnumConstruct(String, String, Vec<Expr>, ExprInfo),
     Match(Box<Expr>, Vec<MatchArm>, ExprInfo),
@@ -376,6 +377,7 @@ impl Expr {
             Expr::Spread(_, info) => info.span,
             Expr::TemplateStr(_, info) => info.span,
             Expr::F32(_, info) => info.span,
+            Expr::F64(_, info) => info.span,
             Expr::FfiCall(_, _, info) => info.span,
             Expr::EnumConstruct(_, _, _, info) => info.span,
             Expr::Match(_, _, info) => info.span,
@@ -410,6 +412,7 @@ impl Expr {
             Expr::Spread(_, info) => info.ty.clone(),
             Expr::TemplateStr(_, info) => info.ty.clone(),
             Expr::F32(_, info) => info.ty.clone(),
+            Expr::F64(_, info) => info.ty.clone(),
             Expr::FfiCall(_, _, info) => info.ty.clone(),
             Expr::EnumConstruct(_, _, _, info) => info.ty.clone(),
             Expr::Match(_, _, info) => info.ty.clone(),
@@ -444,6 +447,7 @@ impl Expr {
             Expr::Spread(_, info) => info,
             Expr::TemplateStr(_, info) => info,
             Expr::F32(_, info) => info,
+            Expr::F64(_, info) => info,
             Expr::FfiCall(_, _, info) => info,
             Expr::EnumConstruct(_, _, _, info) => info,
             Expr::Match(_, _, info) => info,
@@ -458,7 +462,12 @@ impl Expr {
     pub fn is_constant(&self) -> bool {
         matches!(
             self,
-            Expr::Int(_, _) | Expr::Str(_, _) | Expr::Bool(_, _) | Expr::F32(_, _) | Expr::None(_)
+            Expr::Int(_, _)
+                | Expr::Str(_, _)
+                | Expr::Bool(_, _)
+                | Expr::F32(_, _)
+                | Expr::F64(_, _)
+                | Expr::None(_)
         )
     }
 
@@ -824,6 +833,7 @@ pub trait AstVisitor {
             | Expr::Str(_, _)
             | Expr::Var(_, _)
             | Expr::F32(_, _)
+            | Expr::F64(_, _)
             | Expr::Void(_)
             | Expr::None(_)
             | Expr::InfiniteRange(_, _)
@@ -1016,9 +1026,11 @@ impl AstVisitor for GenericCallCollector {
                     self.generic_instances.insert(info.ty.clone());
                 }
             }
-            _ => if let Type::GenericInstance(_, _) = &expr.get_type() {
-                self.generic_instances.insert(expr.get_type());
-            },
+            _ => {
+                if let Type::GenericInstance(_, _) = &expr.get_type() {
+                    self.generic_instances.insert(expr.get_type());
+                }
+            }
         }
 
         match expr {
@@ -1029,6 +1041,7 @@ impl AstVisitor for GenericCallCollector {
             | Expr::Var(_, _)
             | Expr::Spread(_, _)
             | Expr::F32(_, _)
+            | Expr::F64(_, _)
             | Expr::Void(_)
             | Expr::None(_)
             | Expr::InfiniteRange(_, _) => {}
@@ -1314,6 +1327,7 @@ pub trait AstTransformer {
             Expr::Str(s, info) => Expr::Str(s, info),
             Expr::Var(name, info) => Expr::Var(name, info),
             Expr::F32(f, info) => Expr::F32(f, info),
+            Expr::F64(f, info) => Expr::F64(f, info),
             Expr::Void(info) => Expr::Void(info),
             Expr::None(info) => Expr::None(info),
             Expr::InfiniteRange(range_type, info) => Expr::InfiniteRange(range_type, info),

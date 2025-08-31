@@ -109,13 +109,14 @@ impl SymbolDependencyGraph {
 
         while let Some(symbol) = to_check.pop() {
             if affected.insert(symbol.clone())
-                && let Some(dependents) = self.symbol_dependents.get(&symbol) {
-                    for dependent in dependents {
-                        if !affected.contains(dependent) {
-                            to_check.push(dependent.clone());
-                        }
+                && let Some(dependents) = self.symbol_dependents.get(&symbol)
+            {
+                for dependent in dependents {
+                    if !affected.contains(dependent) {
+                        to_check.push(dependent.clone());
                     }
                 }
+            }
         }
 
         affected

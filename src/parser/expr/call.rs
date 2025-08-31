@@ -39,18 +39,19 @@ impl<'a> super::super::Parser<'a> {
         let rparen_span = self.expect(Token::RParen)?;
 
         if let Some((enum_name, variant_name)) = Self::split_enum_ctor(&name)
-            && self.is_enum_variant(enum_name, variant_name) {
-                return Ok(ast::Expr::EnumConstruct(
-                    enum_name.to_string(),
-                    variant_name.to_string(),
-                    args,
-                    ast::ExprInfo {
-                        span: Span::new(span.start(), rparen_span.end()),
-                        ty: ast::Type::Unknown,
-                        is_tail: false,
-                    },
-                ));
-            }
+            && self.is_enum_variant(enum_name, variant_name)
+        {
+            return Ok(ast::Expr::EnumConstruct(
+                enum_name.to_string(),
+                variant_name.to_string(),
+                args,
+                ast::ExprInfo {
+                    span: Span::new(span.start(), rparen_span.end()),
+                    ty: ast::Type::Unknown,
+                    is_tail: false,
+                },
+            ));
+        }
 
         Ok(ast::Expr::Call(
             name,

@@ -183,12 +183,13 @@ impl<'a> Parser<'a> {
             Ok(span)
         } else {
             if matches!(token, Token::Semi)
-                && let Some((_, prev_span)) = self.previous() {
-                    use codespan::ByteIndex;
-                    let end_pos = prev_span.end().0;
-                    let error_span = Span::new(prev_span.end(), ByteIndex::from(end_pos + 1));
-                    return self.error(&format!("Expected {:?}", token), error_span);
-                }
+                && let Some((_, prev_span)) = self.previous()
+            {
+                use codespan::ByteIndex;
+                let end_pos = prev_span.end().0;
+                let error_span = Span::new(prev_span.end(), ByteIndex::from(end_pos + 1));
+                return self.error(&format!("Expected {:?}", token), error_span);
+            }
             let span = self.peek().map(|(_, s)| *s).unwrap_or(Span::new(0, 0));
             self.error(&format!("Expected {:?}", token), span)
         }

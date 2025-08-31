@@ -285,9 +285,10 @@ pub fn get_bundled_clang_path() -> Result<PathBuf> {
         }
     }
     if std::env::var("VEIL_USE_SYSTEM_CLANG").ok().as_deref() == Some("1")
-        && let Ok(p) = which::which("clang") {
-            return Ok(p);
-        }
+        && let Ok(p) = which::which("clang")
+    {
+        return Ok(p);
+    }
 
     let exe_dir = std::env::current_exe()?.parent().unwrap().to_path_buf();
 

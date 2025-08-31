@@ -31,9 +31,7 @@ impl ModuleGraph {
     pub fn add_module(&mut self, module_info: ModuleInfo) {
         let path = module_info.file_path.clone();
         self.modules.insert(path.clone(), module_info);
-        self.dependencies
-            .entry(path.clone())
-            .or_default();
+        self.dependencies.entry(path.clone()).or_default();
         self.dependents.entry(path).or_default();
     }
     pub fn add_dependency(&mut self, from: &Path, to: &Path) -> Result<()> {
@@ -158,9 +156,10 @@ impl ModuleGraph {
         let mut affected_modules = HashSet::new();
         for symbol_id in &affected_symbols {
             if let Some(module_path) = symbol_id.split("::").next()
-                && let Ok(path) = PathBuf::from(module_path).canonicalize() {
-                    affected_modules.insert(path);
-                }
+                && let Ok(path) = PathBuf::from(module_path).canonicalize()
+            {
+                affected_modules.insert(path);
+            }
         }
 
         for module_path in affected_modules {
@@ -260,10 +259,11 @@ impl ModuleGraph {
                 if !visited.contains(dep) {
                     self.dfs_cycle_detection(dep, visited, rec_stack, path, cycles);
                 } else if rec_stack.contains(dep)
-                    && let Some(cycle_start) = path.iter().position(|p| p == dep) {
-                        let cycle = path[cycle_start..].to_vec();
-                        cycles.push(cycle);
-                    }
+                    && let Some(cycle_start) = path.iter().position(|p| p == dep)
+                {
+                    let cycle = path[cycle_start..].to_vec();
+                    cycles.push(cycle);
+                }
             }
         }
 
@@ -295,19 +295,20 @@ impl ModuleGraph {
 
                 for dependent_path in cycle {
                     if dependent_path != &stable_module_path
-                        && let Some(dependent_module) = self.modules.get_mut(dependent_path) {
-                            let depends_on_changed_interface = dependent_module
-                                .imported_symbols
-                                .iter()
-                                .any(|(symbol, source)| {
-                                    source == &stable_module_path.to_string_lossy().to_string()
-                                        && symbol_changes.contains(symbol)
-                                });
+                        && let Some(dependent_module) = self.modules.get_mut(dependent_path)
+                    {
+                        let depends_on_changed_interface = dependent_module
+                            .imported_symbols
+                            .iter()
+                            .any(|(symbol, source)| {
+                                source == &stable_module_path.to_string_lossy().to_string()
+                                    && symbol_changes.contains(symbol)
+                            });
 
-                            if !depends_on_changed_interface {
-                                dependent_module.is_dirty = false;
-                            }
+                        if !depends_on_changed_interface {
+                            dependent_module.is_dirty = false;
                         }
+                    }
                 }
             }
         }
@@ -594,9 +595,9 @@ impl IncrementalCompiler {
                     && !self
                         .build_cache
                         .is_symbol_cache_valid(&symbol_id, &symbol_info.signature_hash)
-                    {
-                        return Ok(true);
-                    }
+                {
+                    return Ok(true);
+                }
             }
         }
 

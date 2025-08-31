@@ -71,11 +71,11 @@ impl<'a> super::super::Parser<'a> {
                     is_tail: false,
                 },
             )),
-            Some((Token::F32(val), span)) => Ok(ast::Expr::F32(
+            Some((Token::F64(val), span)) => Ok(ast::Expr::F64(
                 val,
                 ast::ExprInfo {
                     span,
-                    ty: ast::Type::F32,
+                    ty: ast::Type::F64,
                     is_tail: false,
                 },
             )),

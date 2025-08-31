@@ -9,6 +9,7 @@ impl CBackend {
             ast::Expr::Int(n, _) => Ok(n.to_string()),
             ast::Expr::Int64(n, _) => Ok(n.to_string()),
             ast::Expr::F32(f, _) => Ok(f.to_string()),
+            ast::Expr::F64(f, _) => Ok(f.to_string()),
             ast::Expr::Bool(b, _) => {
                 self.includes.borrow_mut().insert("<stdbool.h>".to_string());
                 Ok(if *b { "true" } else { "false" }.to_string())
@@ -166,13 +167,11 @@ impl CBackend {
                             let right_conv = self.convert_to_c_str(&right_code, &right.get_type());
                             Ok(format!("ve_concat({}, {})", left_conv, right_conv))
                         }
-                        _ => {
-                            Err(CompileError::CodegenError {
-                                message: format!("Unsupported string operation: {:?}", op),
-                                span: None,
-                                file_id: self.file_id,
-                            })
-                        }
+                        _ => Err(CompileError::CodegenError {
+                            message: format!("Unsupported string operation: {:?}", op),
+                            span: None,
+                            file_id: self.file_id,
+                        }),
                     },
                     _ => {
                         let c_op = match op {
@@ -241,6 +240,9 @@ impl CBackend {
                     | Type::U16
                     | Type::U32
                     | Type::U64
+                    | Type::CSize
+                    | Type::CInt
+                    | Type::CChar
                     | Type::Unknown
                     | Type::Generic(_)
                     | Type::Optional(_) => Ok(name.clone()),
@@ -257,77 +259,80 @@ impl CBackend {
             }
             ast::Expr::Call(name, args, _expr_info) => {
                 if let Some(method_name) = name.strip_prefix("<method>.")
-                    && let Some(obj_expr) = args.first() {
-                        let obj_type = &obj_expr.get_type();
-                        let type_name = self.type_to_c_name(obj_type);
+                    && let Some(obj_expr) = args.first()
+                {
+                    let obj_type = &obj_expr.get_type();
+                    let type_name = self.type_to_c_name(obj_type);
 
-                        let sanitized_type_name = type_name
-                            .replace("[]", "_array")
-                            .replace("[", "_")
-                            .replace("]", "_");
-                        let is_static_method = matches!(obj_expr, ast::Expr::Var(var_name, _) if self.struct_defs.contains_key(var_name.as_str()) || self.enum_defs.contains_key(var_name.as_str()) || matches!(var_name.as_str(), "Command" | "Array" | "Option"));
+                    let sanitized_type_name = type_name
+                        .replace("[]", "_array")
+                        .replace("[", "_")
+                        .replace("]", "_");
+                    let is_static_method = matches!(obj_expr, ast::Expr::Var(var_name, _) if self.struct_defs.contains_key(var_name.as_str()) || self.enum_defs.contains_key(var_name.as_str()) || matches!(var_name.as_str(), "Command" | "Array" | "Option"));
 
-                        if method_name == "length"
-                            && let ast::Type::Array(_) = obj_type {
-                                let obj_code = self.emit_expr(obj_expr)?;
-                                return Ok(format!("(int)ve_array_length({})", obj_code));
-                            }
-
-                        if method_name == "append"
-                            && let ast::Type::Array(inner_ty) = obj_type {
-                                let arg_code = if args.len() > 1 {
-                                    self.emit_expr(&args[1])?
-                                } else {
-                                    "".to_string()
-                                };
-                                let obj_code = self.emit_expr(obj_expr)?;
-                                match inner_ty.as_ref() {
-                                    ast::Type::I32 => {
-                                        return Ok(format!(
-                                            "ve_array_append_i32({}, {})",
-                                            obj_code, arg_code
-                                        ));
-                                    }
-                                    ast::Type::String => {
-                                        return Ok(format!(
-                                            "ve_array_append_string({}, {})",
-                                            obj_code, arg_code
-                                        ));
-                                    }
-                                    ast::Type::Bool => {
-                                        return Ok(format!(
-                                            "ve_array_append_bool({}, {})",
-                                            obj_code, arg_code
-                                        ));
-                                    }
-                                    _ => {
-                                        let c_type = self.type_to_c(inner_ty);
-                                        return Ok(format!(
-                                            "(ve_Array*)ve_array_append_element({}, &({}), sizeof({}))",
-                                            obj_code, arg_code, c_type
-                                        ));
-                                    }
-                                }
-                            }
-
-                        let method_func_name =
-                            format!("ve_method_{}_{}", sanitized_type_name, method_name);
-
-                        let mut args_code = Vec::new();
-
-                        let is_static_method = matches!(obj_expr, ast::Expr::Var(var_name, _) if self.struct_defs.contains_key(var_name.as_str()) || self.enum_defs.contains_key(var_name.as_str()) || matches!(var_name.as_str(), "Command" | "Array" | "Option"));
-
-                        if !is_static_method {
-                            let obj_code = self.emit_expr(obj_expr)?;
-                            args_code.push(obj_code);
-                        }
-
-                        for arg in args.iter().skip(1) {
-                            args_code.push(self.emit_expr(arg)?);
-                        }
-
-                        return Ok(format!("{}({})", method_func_name, args_code.join(", ")));
+                    if method_name == "length"
+                        && let ast::Type::Array(_) = obj_type
+                    {
+                        let obj_code = self.emit_expr(obj_expr)?;
+                        return Ok(format!("(int)ve_array_length({})", obj_code));
                     }
+
+                    if method_name == "append"
+                        && let ast::Type::Array(inner_ty) = obj_type
+                    {
+                        let arg_code = if args.len() > 1 {
+                            self.emit_expr(&args[1])?
+                        } else {
+                            "".to_string()
+                        };
+                        let obj_code = self.emit_expr(obj_expr)?;
+                        match inner_ty.as_ref() {
+                            ast::Type::I32 => {
+                                return Ok(format!(
+                                    "ve_array_append_i32({}, {})",
+                                    obj_code, arg_code
+                                ));
+                            }
+                            ast::Type::String => {
+                                return Ok(format!(
+                                    "ve_array_append_string({}, {})",
+                                    obj_code, arg_code
+                                ));
+                            }
+                            ast::Type::Bool => {
+                                return Ok(format!(
+                                    "ve_array_append_bool({}, {})",
+                                    obj_code, arg_code
+                                ));
+                            }
+                            _ => {
+                                let c_type = self.type_to_c(inner_ty);
+                                return Ok(format!(
+                                    "(ve_Array*)ve_array_append_element({}, &({}), sizeof({}))",
+                                    obj_code, arg_code, c_type
+                                ));
+                            }
+                        }
+                    }
+
+                    let method_func_name =
+                        format!("ve_method_{}_{}", sanitized_type_name, method_name);
+
+                    let mut args_code = Vec::new();
+
+                    let is_static_method = matches!(obj_expr, ast::Expr::Var(var_name, _) if self.struct_defs.contains_key(var_name.as_str()) || self.enum_defs.contains_key(var_name.as_str()) || matches!(var_name.as_str(), "Command" | "Array" | "Option"));
+
+                    if !is_static_method {
+                        let obj_code = self.emit_expr(obj_expr)?;
+                        args_code.push(obj_code);
+                    }
+
+                    for arg in args.iter().skip(1) {
+                        args_code.push(self.emit_expr(arg)?);
+                    }
+
+                    return Ok(format!("{}({})", method_func_name, args_code.join(", ")));
+                }
 
                 let final_name = if self.ffi_functions.contains(name) {
                     name.clone()
@@ -675,9 +680,8 @@ impl CBackend {
                                                     format!("ve_bool_to_str({})", expr_code)
                                                 }
                                                 Type::String => expr_code,
-                                                _ => {
-                                                    "\"[unsupported array element type]\"".to_string()
-                                                }
+                                                _ => "\"[unsupported array element type]\""
+                                                    .to_string(),
                                             }
                                         }
                                         _ => "\"[not an array]\"".to_string(),
@@ -956,19 +960,20 @@ impl CBackend {
                 let condition_code = self.emit_expr(condition)?;
 
                 if let Some(else_stmts) = else_branch.as_ref()
-                    && then_branch.len() == 1 && else_stmts.len() == 1
-                        && let (ast::Stmt::Expr(then_expr, _), ast::Stmt::Expr(else_expr, _)) =
-                            (&then_branch[0], &else_stmts[0])
-                            && !matches!(then_expr, ast::Expr::If(_, _, _, _))
-                                && !matches!(else_expr, ast::Expr::If(_, _, _, _))
-                            {
-                                let then_code = self.emit_expr(then_expr)?;
-                                let else_code = self.emit_expr(else_expr)?;
-                                return Ok(format!(
-                                    "({} ? {} : {})",
-                                    condition_code, then_code, else_code
-                                ));
-                            }
+                    && then_branch.len() == 1
+                    && else_stmts.len() == 1
+                    && let (ast::Stmt::Expr(then_expr, _), ast::Stmt::Expr(else_expr, _)) =
+                        (&then_branch[0], &else_stmts[0])
+                    && !matches!(then_expr, ast::Expr::If(_, _, _, _))
+                    && !matches!(else_expr, ast::Expr::If(_, _, _, _))
+                {
+                    let then_code = self.emit_expr(then_expr)?;
+                    let else_code = self.emit_expr(else_expr)?;
+                    return Ok(format!(
+                        "({} ? {} : {})",
+                        condition_code, then_code, else_code
+                    ));
+                }
 
                 let mut code = String::new();
                 code.push_str(&format!("if ({}) {{\n", condition_code));
@@ -994,10 +999,8 @@ impl CBackend {
 
                 let result_type = self.type_to_c(&info.ty);
 
-                let old_loop_result =
-                    self.current_loop_result.replace(result_var.clone());
-                let old_loop_break =
-                    self.current_loop_break.replace(loop_break.clone());
+                let old_loop_result = self.current_loop_result.replace(result_var.clone());
+                let old_loop_break = self.current_loop_break.replace(loop_break.clone());
 
                 let mut code = String::new();
                 code.push_str("({ ");
@@ -1079,6 +1082,9 @@ impl CBackend {
             Type::U16 => format!("ve_u16_to_str({})", code),
             Type::U32 => format!("ve_u32_to_str({})", code),
             Type::U64 => format!("ve_u64_to_str({})", code),
+            Type::CSize => format!("ve_size_t_to_str({})", code),
+            Type::CInt => format!("ve_int_to_str({})", code),
+            Type::CChar => format!("ve_i8_to_str({})", code),
             Type::Optional(inner_type) => {
                 format!(
                     "({}.has_value ? {} : \"None\")",

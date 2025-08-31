@@ -114,7 +114,8 @@ pub fn run_benchmark(input: PathBuf, iterations: usize, verbose: bool) -> anyhow
                 term::emit(&mut writer.lock(), &config, &files, error)?;
 
                 let file_id = error.labels.first().map(|l| l.file_id);
-                let file_path = file_id.map(|fid| files.name(fid))
+                let file_path = file_id
+                    .map(|fid| files.name(fid))
                     .map(|n| n.to_string_lossy().to_string());
                 let module_info = file_path.as_ref().and_then(|path: &String| {
                     if let Some(_idx) = path.find("lib/std") {

@@ -118,19 +118,19 @@ impl CBackend {
             let is_last = stmts.peek().is_none();
             if is_last
                 && let ast::Stmt::Expr(expr, _) = stmt
-                    && expr.get_info().is_tail {
-                        let expr_code = self.emit_expr(expr)?;
-                        if func.name == "main" {
-                            self.body.push_str("ve_arena_exit();\n");
-                            self.body.push_str(
-                                "#ifdef VE_DEBUG_MEMORY\n    ve_arena_stats();\n#endif\n",
-                            );
-                            self.body.push_str("    ve_arena_cleanup();\n");
-                        }
-                        self.body.push_str(&format!("return {};\n", expr_code));
-                        has_tail_return = true;
-                        continue;
-                    }
+                && expr.get_info().is_tail
+            {
+                let expr_code = self.emit_expr(expr)?;
+                if func.name == "main" {
+                    self.body.push_str("ve_arena_exit();\n");
+                    self.body
+                        .push_str("#ifdef VE_DEBUG_MEMORY\n    ve_arena_stats();\n#endif\n");
+                    self.body.push_str("    ve_arena_cleanup();\n");
+                }
+                self.body.push_str(&format!("return {};\n", expr_code));
+                has_tail_return = true;
+                continue;
+            }
             self.emit_stmt(stmt)?;
         }
 
