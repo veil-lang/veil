@@ -47,6 +47,8 @@ pub struct TypeChecker {
     file_id: FileId,
     enums: Vec<ast::EnumDef>,
     impls: Vec<ast::ImplBlock>,
+    // Full struct definitions (keeps generics) for generic-aware lookups
+    struct_def_map: HashMap<String, ast::StructDef>,
 }
 
 impl TypeChecker {
@@ -63,6 +65,7 @@ impl TypeChecker {
             functions: imported_functions,
             enums: Vec::new(),
             impls: Vec::new(),
+            struct_def_map: HashMap::new(),
         };
 
         for struct_def in imported_structs {
@@ -75,6 +78,10 @@ impl TypeChecker {
                 .context
                 .struct_defs
                 .insert(struct_def.name.clone(), fields);
+            // Preserve full struct definition (including generic params)
+            checker
+                .struct_def_map
+                .insert(struct_def.name.clone(), struct_def.clone());
         }
 
         for ffi_var in imported_ffi_vars {
@@ -110,6 +117,9 @@ impl TypeChecker {
             self.context
                 .struct_defs
                 .insert(struct_def.name.clone(), fields);
+            // Track full struct definitions for generic-aware operations
+            self.struct_def_map
+                .insert(struct_def.name.clone(), struct_def.clone());
         }
 
         for enum_def in &program.enums {
@@ -128,7 +138,10 @@ impl TypeChecker {
         }
 
         for impl_block in &program.impls {
-            let _target_type = self.parse_type_name(&impl_block.target_type);
+            let _target_type = impl_block
+                .target_type_parsed
+                .clone()
+                .unwrap_or_else(|| self.parse_type_name(&impl_block.target_type));
 
             for method in &impl_block.methods {
                 if method.name == "constructor" {
@@ -216,17 +229,74 @@ impl TypeChecker {
     }
 
     fn parse_type_name(&self, type_name: &str) -> Type {
-        if let Some(inner_type_name) = type_name.strip_prefix("[]") {
-            let inner_type = self.parse_type_name(inner_type_name);
+        let s = type_name.trim();
+
+        // Handle array prefix '[]T' and suffix 'T[]'
+        if let Some(inner) = s.strip_prefix("[]") {
+            let inner_type = self.parse_type_name(inner);
             return Type::Array(Box::new(inner_type));
         }
 
-        if let Some(inner_type_name) = type_name.strip_suffix("[]") {
-            let inner_type = self.parse_type_name(inner_type_name);
+        if let Some(inner) = s.strip_suffix("[]") {
+            let inner_type = self.parse_type_name(inner);
             return Type::Array(Box::new(inner_type));
         }
 
-        match type_name {
+        // Handle generic instance like Foo<Bar, Baz[]>
+        if let Some(lt_idx) = s.find('<') {
+            if s.ends_with('>') {
+                let base = s[..lt_idx].trim();
+                let args_src = &s[lt_idx + 1..s.len() - 1];
+
+                // Split args by commas, respecting nested angle brackets
+                let mut depth = 0;
+                let mut buf = String::new();
+                let mut parts: Vec<String> = Vec::new();
+                for ch in args_src.chars() {
+                    match ch {
+                        '<' => {
+                            depth += 1;
+                            buf.push(ch);
+                        }
+                        '>' => {
+                            if depth > 0 {
+                                depth -= 1;
+                            }
+                            buf.push(ch);
+                        }
+                        ',' if depth == 0 => {
+                            parts.push(buf.trim().to_string());
+                            buf.clear();
+                        }
+                        _ => buf.push(ch),
+                    }
+                }
+                if !buf.trim().is_empty() {
+                    parts.push(buf.trim().to_string());
+                }
+
+                let args: Vec<Type> = parts
+                    .into_iter()
+                    .map(|p| self.parse_type_name(&p))
+                    .collect();
+
+                if self.context.struct_defs.contains_key(base)
+                    || self.context.enum_defs.contains_key(base)
+                {
+                    return Type::GenericInstance(base.to_string(), args);
+                } else if base
+                    .chars()
+                    .next()
+                    .map(|c| c.is_uppercase())
+                    .unwrap_or(false)
+                {
+                    // Fallback to generic instance with unknown base if it looks like a type name
+                    return Type::GenericInstance(base.to_string(), args);
+                }
+            }
+        }
+
+        match s {
             "string" => Type::String,
             "i32" => Type::I32,
             "i64" => Type::I64,
@@ -241,17 +311,12 @@ impl TypeChecker {
             "bool" => Type::Bool,
             "void" => Type::Void,
             _ => {
-                if self.context.struct_defs.contains_key(type_name) {
-                    Type::Struct(type_name.to_string())
-                } else if self.context.enum_defs.contains_key(type_name) {
-                    Type::Enum(type_name.to_string())
-                } else if type_name
-                    .chars()
-                    .next()
-                    .map(|c| c.is_uppercase())
-                    .unwrap_or(false)
-                {
-                    Type::Generic(type_name.to_string())
+                if self.context.struct_defs.contains_key(s) {
+                    Type::Struct(s.to_string())
+                } else if self.context.enum_defs.contains_key(s) {
+                    Type::Enum(s.to_string())
+                } else if s.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                    Type::Generic(s.to_string())
                 } else {
                     Type::Unknown
                 }

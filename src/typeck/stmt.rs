@@ -162,7 +162,10 @@ impl TypeChecker {
         &mut self,
         impl_block: &mut ast::ImplBlock,
     ) -> Result<(), Vec<Diagnostic<FileId>>> {
-        let target_type = self.parse_type_name(&impl_block.target_type);
+        let target_type = impl_block
+            .target_type_parsed
+            .clone()
+            .unwrap_or_else(|| self.parse_type_name(&impl_block.target_type));
 
         for method in &mut impl_block.methods {
             for (param_name, param_type) in &mut method.params {

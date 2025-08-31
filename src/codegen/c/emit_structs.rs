@@ -5,6 +5,10 @@ use crate::codegen::c::CBackend;
 
 impl CBackend {
     pub fn emit_struct(&mut self, struct_def: &ast::StructDef) -> Result<(), CompileError> {
+        // Skip generic/parametric structs; only emit concrete ones
+        if !struct_def.generic_params.is_empty() {
+            return Ok(());
+        }
         let struct_name = format!("ve_{}", struct_def.name);
         let mut struct_code = format!("typedef struct {} {{\n", struct_name);
 

@@ -152,6 +152,8 @@ pub struct Program {
 #[derive(Debug, Clone)]
 pub struct ImplBlock {
     pub target_type: String,
+    // Optional parsed representation of the target type to avoid reparsing downstream
+    pub target_type_parsed: Option<Type>,
     pub methods: Vec<Function>,
     pub span: Span,
 }
@@ -171,6 +173,8 @@ pub fn merge_impl_blocks(program: &mut Program) -> Result<(), String> {
     use std::collections::HashMap;
 
     let mut map: HashMap<String, Vec<Function>> = HashMap::new();
+    // Preserve any parsed target types discovered earlier (prefer Some over None)
+    let mut parsed_map: HashMap<String, Option<Type>> = HashMap::new();
 
     for ib in &program.impls {
         let key = if ib.target_type.ends_with("[]") {
@@ -181,10 +185,19 @@ pub fn merge_impl_blocks(program: &mut Program) -> Result<(), String> {
             ib.target_type.clone()
         };
 
-        let entry = map.entry(key).or_default();
+        let entry = map.entry(key.clone()).or_default();
         for m in &ib.methods {
             entry.push(m.clone());
         }
+
+        parsed_map
+            .entry(key)
+            .and_modify(|slot| {
+                if slot.is_none() && ib.target_type_parsed.is_some() {
+                    *slot = ib.target_type_parsed.clone();
+                }
+            })
+            .or_insert_with(|| ib.target_type_parsed.clone());
     }
 
     let mut merged: Vec<ImplBlock> = Vec::new();
@@ -208,8 +221,10 @@ pub fn merge_impl_blocks(program: &mut Program) -> Result<(), String> {
         }
 
         let merged_methods = seen.into_values().collect();
+        let parsed = parsed_map.get(&target).cloned().unwrap_or(None);
         merged.push(ImplBlock {
             target_type: target,
+            target_type_parsed: parsed,
             methods: merged_methods,
             span: Span::new(0, 0),
         });
@@ -1250,6 +1265,7 @@ pub trait AstTransformer {
     fn transform_impl_block(&mut self, impl_block: ImplBlock) -> ImplBlock {
         ImplBlock {
             target_type: impl_block.target_type,
+            target_type_parsed: impl_block.target_type_parsed,
             methods: impl_block
                 .methods
                 .into_iter()

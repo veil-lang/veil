@@ -61,10 +61,15 @@ impl TypeChecker {
 
     fn try_match_impl_target(
         &self,
-        impl_target: &str,
+        impl_target_parsed: Option<&crate::ast::Type>,
+        impl_target_str: &str,
         obj_type: &crate::ast::Type,
     ) -> Option<std::collections::HashMap<String, crate::ast::Type>> {
-        let pattern = self.parse_type_name(impl_target);
+        let pattern: crate::ast::Type = if let Some(parsed) = impl_target_parsed {
+            parsed.clone()
+        } else {
+            self.parse_type_name(impl_target_str)
+        };
         let mut subst: std::collections::HashMap<String, crate::ast::Type> =
             std::collections::HashMap::new();
         if self.unify_types(&pattern, obj_type, &mut subst) {
@@ -552,9 +557,11 @@ impl TypeChecker {
                     let mut method_param_types = Vec::new();
 
                     for impl_block in &impls {
-                        if let Some(subst) =
-                            self.try_match_impl_target(&impl_block.target_type, &obj_type)
-                        {
+                        if let Some(subst) = self.try_match_impl_target(
+                            impl_block.target_type_parsed.as_ref(),
+                            &impl_block.target_type,
+                            &obj_type,
+                        ) {
                             for method in &impl_block.methods {
                                 if method.name == method_name {
                                     method_found = true;
@@ -605,6 +612,69 @@ impl TypeChecker {
                                 method_return_type = ret;
                             }
                         }
+
+                        // Fallback: static generic method resolution via parameter-driven inference
+                        if !method_found && is_static_call {
+                            for impl_block in &impls {
+                                let target_ty =
+                                    impl_block.target_type_parsed.clone().unwrap_or_else(|| {
+                                        self.parse_type_name(&impl_block.target_type)
+                                    });
+                                if let Type::GenericInstance(name, _params) = target_ty {
+                                    if &name == simple_name {
+                                        if let Some(method) = impl_block
+                                            .methods
+                                            .iter()
+                                            .find(|m| m.name == method_name)
+                                        {
+                                            // Infer generic args from provided arguments (skip the first which is the type name)
+                                            let mut inferred: std::collections::HashMap<
+                                                String,
+                                                crate::ast::Type,
+                                            > = std::collections::HashMap::new();
+
+                                            for (i, (_pname, pty)) in
+                                                method.params.iter().enumerate()
+                                            {
+                                                if let Some(arg) = args.get_mut(1 + i) {
+                                                    let arg_ty = self.check_expr(arg)?;
+                                                    // Populate inference map (best-effort)
+                                                    let _ = self.unify_types(
+                                                        pty,
+                                                        &arg_ty,
+                                                        &mut inferred,
+                                                    );
+                                                }
+                                            }
+
+                                            // Apply substitutions to method signature
+                                            let subst_ref: std::collections::HashMap<
+                                                &String,
+                                                &crate::ast::Type,
+                                            > = inferred.iter().collect();
+
+                                            method_return_type =
+                                                crate::typeck::pattern::substitute_generics(
+                                                    &method.return_type,
+                                                    &subst_ref,
+                                                );
+                                            method_param_types = method
+                                                .params
+                                                .iter()
+                                                .map(|(_, ty)| {
+                                                    crate::typeck::pattern::substitute_generics(
+                                                        ty, &subst_ref,
+                                                    )
+                                                })
+                                                .collect();
+
+                                            method_found = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     if !method_found {
@@ -636,7 +706,7 @@ impl TypeChecker {
                         );
                     }
 
-                    let start_idx = if is_static_call { 1 } else { 1 };
+                    let start_idx = if is_static_call { 1 } else { 0 };
                     for (i, param_type) in method_param_types.iter().enumerate() {
                         if let Some(arg) = args.get_mut(start_idx + i) {
                             self.check_expr_with_expected(arg, param_type)?;
@@ -883,7 +953,26 @@ impl TypeChecker {
                     }
                 }
 
-                let ty = Type::Struct(name.clone());
+                let ty = if let Some(def) = self.struct_def_map.get(name)
+                    && !def.generic_params.is_empty()
+                {
+                    if let Type::GenericInstance(n, params) = &self.context.current_return_type
+                        && n == name
+                        && params.len() == def.generic_params.len()
+                    {
+                        Type::GenericInstance(n.clone(), params.clone())
+                    } else if let Some(last_var_ty) = self.context.variables.values().last()
+                        && let Type::GenericInstance(n, params) = last_var_ty
+                        && n == name
+                        && params.len() == def.generic_params.len()
+                    {
+                        Type::GenericInstance(n.clone(), params.clone())
+                    } else {
+                        Type::Struct(name.clone())
+                    }
+                } else {
+                    Type::Struct(name.clone())
+                };
                 *expr_type = ty.clone();
                 Ok(ty)
             }
@@ -920,6 +1009,52 @@ impl TypeChecker {
                             Ok(Type::Unknown)
                         }
                     },
+                    Type::GenericInstance(struct_name, args) => {
+                        // Prefer full struct definition to substitute generics accurately
+                        if let Some(def) = self.struct_def_map.get(&struct_name) {
+                            // Build substitution map: generic param -> concrete type
+                            let mut subst: std::collections::HashMap<&String, &ast::Type> =
+                                std::collections::HashMap::new();
+                            for (gp, arg_ty) in def.generic_params.iter().zip(args.iter()) {
+                                subst.insert(gp, arg_ty);
+                            }
+
+                            if let Some(f) = def.fields.iter().find(|f| &f.name == field_name) {
+                                let ty = crate::typeck::pattern::substitute_generics(&f.ty, &subst);
+                                *expr_type = ty.clone();
+                                Ok(ty)
+                            } else {
+                                self.report_error(
+                                    &format!(
+                                        "No field '{}' in struct '{}'",
+                                        field_name, struct_name
+                                    ),
+                                    *span,
+                                );
+                                Ok(Type::Unknown)
+                            }
+                        } else if let Some(fields) = self.context.struct_defs.get(&struct_name) {
+                            // Fallback: use recorded field list (may still contain generics)
+                            if let Some((_, field_ty)) =
+                                fields.iter().find(|(n, _)| n == field_name)
+                            {
+                                *expr_type = field_ty.clone();
+                                Ok(field_ty.clone())
+                            } else {
+                                self.report_error(
+                                    &format!(
+                                        "No field '{}' in struct '{}'",
+                                        field_name, struct_name
+                                    ),
+                                    *span,
+                                );
+                                Ok(Type::Unknown)
+                            }
+                        } else {
+                            self.report_error(&format!("Unknown struct '{}'", struct_name), *span);
+                            Ok(Type::Unknown)
+                        }
+                    }
                     _ => {
                         self.report_error(
                             &format!("Cannot access field '{}' on type {}", field_name, obj_ty),

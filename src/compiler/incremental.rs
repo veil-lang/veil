@@ -707,7 +707,12 @@ impl IncrementalCompiler {
 
                     let target_is_exported = is_builtin_type
                         || module_program.structs.iter().any(|s| {
-                            s.name == impl_block.target_type
+                            let target_name: &str = match impl_block.target_type_parsed.as_ref() {
+                                Some(crate::ast::Type::Struct(n)) => n.as_str(),
+                                Some(crate::ast::Type::GenericInstance(n, _)) => n.as_str(),
+                                _ => impl_block.target_type.as_str(),
+                            };
+                            s.name == target_name
                                 && matches!(s.visibility, crate::ast::Visibility::Public)
                         });
 

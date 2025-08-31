@@ -49,6 +49,19 @@ struct MemoryAnalysis {
 }
 
 impl CBackend {
+    fn substitute_type_using_struct_generics(
+        &self,
+        ty: &ast::Type,
+        def: &ast::StructDef,
+        args: &[ast::Type],
+    ) -> Result<ast::Type, CompileError> {
+        let mut type_map = std::collections::HashMap::new();
+        for (gp, arg) in def.generic_params.iter().zip(args.iter()) {
+            type_map.insert(gp.clone(), arg.clone());
+        }
+        self.substitute_type(ty, &type_map)
+    }
+
     pub fn new(
         config: CodegenConfig,
         file_id: FileId,
@@ -593,7 +606,16 @@ impl CBackend {
                 }
             }
         }
+        // Also consider imported struct fields for array element monomorphization
+        for struct_def in &self.imported_structs {
+            for field in &struct_def.fields {
+                if let ast::Type::Array(inner) = &field.ty {
+                    concrete_array_inners.insert(self.type_to_c_name(inner));
+                }
+            }
+        }
 
+        // 1) Specialize array impls with generic T to concrete element types discovered
         let mut new_impls: Vec<ast::ImplBlock> = Vec::new();
         let existing_impl_targets: std::collections::HashSet<String> = program
             .impls
@@ -635,16 +657,325 @@ impl CBackend {
 
                     new_impls.push(ast::ImplBlock {
                         target_type: format!("[]{}", inner),
+                        target_type_parsed: Some(ast::Type::Array(Box::new(concrete_type))),
                         methods: new_methods,
                         span: impl_block.span,
                     });
                 }
-            } else {
+                // Do not push the original generic array impl
+            } else if !impl_block.target_type.contains('<') {
+                // Keep non-generic impls as-is; generic struct impls will be specialized below
                 new_impls.push(impl_block.clone());
             }
         }
 
+        // 2) Collect generic struct definitions in this program and imports (parametric)
+        let mut generic_structs: std::collections::HashMap<String, ast::StructDef> = program
+            .structs
+            .iter()
+            .filter(|s| !s.generic_params.is_empty())
+            .map(|s| (s.name.clone(), s.clone()))
+            .collect();
+        // Extend with imported generic structs (avoid overriding local defs)
+        for s in &self.imported_structs {
+            if !s.generic_params.is_empty() && !generic_structs.contains_key(&s.name) {
+                generic_structs.insert(s.name.clone(), s.clone());
+            }
+        }
+
+        // 3) Discover concrete generic struct instances used in signatures AND expressions
+        let mut struct_instances: std::collections::HashSet<ast::Type> =
+            std::collections::HashSet::new();
+
+        let mut add_if_struct_instance = |ty: &ast::Type| {
+            if let ast::Type::GenericInstance(name, _args) = ty {
+                if generic_structs.contains_key(name) {
+                    struct_instances.insert(ty.clone());
+                }
+            }
+        };
+
+        // From function/impl signatures
+        for f in &transformed_program.functions {
+            add_if_struct_instance(&f.return_type);
+            for (_, p) in &f.params {
+                add_if_struct_instance(p);
+            }
+        }
+        for ib in &new_impls {
+            for m in &ib.methods {
+                add_if_struct_instance(&m.return_type);
+                for (_, p) in &m.params {
+                    add_if_struct_instance(p);
+                }
+            }
+        }
+
+        // Helper to traverse expressions/statements and collect GenericInstance struct usages
+        fn collect_struct_instances_in_expr(
+            expr: &ast::Expr,
+            out: &mut std::collections::HashSet<ast::Type>,
+            generic_structs: &std::collections::HashMap<String, ast::StructDef>,
+        ) {
+            let ty = expr.get_type();
+            if let ast::Type::GenericInstance(name, _) = &ty {
+                if generic_structs.contains_key(name) {
+                    out.insert(ty);
+                }
+            }
+
+            use ast::Expr;
+            match expr {
+                Expr::Call(_, args, _) => {
+                    for a in args {
+                        collect_struct_instances_in_expr(a, out, generic_structs);
+                    }
+                }
+                Expr::BinOp(l, _, r, _) => {
+                    collect_struct_instances_in_expr(l, out, generic_structs);
+                    collect_struct_instances_in_expr(r, out, generic_structs);
+                }
+                Expr::UnaryOp(_, e, _) => collect_struct_instances_in_expr(e, out, generic_structs),
+                Expr::StructInit(_, fields, _) => {
+                    for (_, e) in fields {
+                        collect_struct_instances_in_expr(e, out, generic_structs);
+                    }
+                }
+                Expr::ArrayInit(elems, _) => {
+                    for e in elems {
+                        collect_struct_instances_in_expr(e, out, generic_structs);
+                    }
+                }
+                Expr::ArrayAccess(a, b, _) => {
+                    collect_struct_instances_in_expr(a, out, generic_structs);
+                    collect_struct_instances_in_expr(b, out, generic_structs);
+                }
+                Expr::Cast(e, _, _) => collect_struct_instances_in_expr(e, out, generic_structs),
+                Expr::Assign(a, b, _) => {
+                    collect_struct_instances_in_expr(a, out, generic_structs);
+                    collect_struct_instances_in_expr(b, out, generic_structs);
+                }
+                Expr::Deref(e, _) => collect_struct_instances_in_expr(e, out, generic_structs),
+                Expr::Range(a, b, _, _) => {
+                    collect_struct_instances_in_expr(a, out, generic_structs);
+                    collect_struct_instances_in_expr(b, out, generic_structs);
+                }
+                Expr::FieldAccess(e, _, _) => {
+                    collect_struct_instances_in_expr(e, out, generic_structs)
+                }
+                Expr::TemplateStr(parts, _) => {
+                    for part in parts {
+                        if let ast::TemplateStrPart::Expression(e) = part {
+                            collect_struct_instances_in_expr(e, out, generic_structs);
+                        }
+                    }
+                }
+                Expr::Match(e, arms, _) => {
+                    collect_struct_instances_in_expr(e, out, generic_structs);
+                    for arm in arms {
+                        match &arm.body {
+                            ast::MatchArmBody::Expr(e) => {
+                                collect_struct_instances_in_expr(e, out, generic_structs)
+                            }
+                            ast::MatchArmBody::Block(stmts) => {
+                                for s in stmts {
+                                    collect_struct_instances_in_stmt(s, out, generic_structs);
+                                }
+                            }
+                        }
+                    }
+                }
+                Expr::SafeBlock(stmts, _) | Expr::Loop(stmts, _) => {
+                    for s in stmts {
+                        collect_struct_instances_in_stmt(s, out, generic_structs);
+                    }
+                }
+                Expr::If(cond, then_b, else_b, _) => {
+                    collect_struct_instances_in_expr(cond, out, generic_structs);
+                    for s in then_b {
+                        collect_struct_instances_in_stmt(s, out, generic_structs);
+                    }
+                    if let Some(stmts) = else_b {
+                        for s in stmts {
+                            collect_struct_instances_in_stmt(s, out, generic_structs);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        fn collect_struct_instances_in_stmt(
+            stmt: &ast::Stmt,
+            out: &mut std::collections::HashSet<ast::Type>,
+            generic_structs: &std::collections::HashMap<String, ast::StructDef>,
+        ) {
+            match stmt {
+                ast::Stmt::Let(_, ty_opt, expr, _, _) => {
+                    if let Some(ty) = ty_opt {
+                        if let ast::Type::GenericInstance(name, _) = ty {
+                            if generic_structs.contains_key(name) {
+                                out.insert(ty.clone());
+                            }
+                        }
+                    }
+                    collect_struct_instances_in_expr(expr, out, generic_structs);
+                }
+                ast::Stmt::Expr(expr, _) | ast::Stmt::Return(expr, _) => {
+                    collect_struct_instances_in_expr(expr, out, generic_structs);
+                }
+                ast::Stmt::If(cond, then_b, else_b, _) => {
+                    collect_struct_instances_in_expr(cond, out, generic_structs);
+                    for s in then_b {
+                        collect_struct_instances_in_stmt(s, out, generic_structs);
+                    }
+                    if let Some(stmts) = else_b {
+                        for s in stmts {
+                            collect_struct_instances_in_stmt(s, out, generic_structs);
+                        }
+                    }
+                }
+                ast::Stmt::Block(stmts, _) | ast::Stmt::Loop(stmts, _) => {
+                    for s in stmts {
+                        collect_struct_instances_in_stmt(s, out, generic_structs);
+                    }
+                }
+                ast::Stmt::While(cond, body, _) => {
+                    collect_struct_instances_in_expr(cond, out, generic_structs);
+                    for s in body {
+                        collect_struct_instances_in_stmt(s, out, generic_structs);
+                    }
+                }
+                ast::Stmt::For(_, _, range, step, body, _) => {
+                    collect_struct_instances_in_expr(range, out, generic_structs);
+                    if let Some(st) = step {
+                        collect_struct_instances_in_expr(st, out, generic_structs);
+                    }
+                    for s in body {
+                        collect_struct_instances_in_stmt(s, out, generic_structs);
+                    }
+                }
+                ast::Stmt::Break(expr_opt, _) => {
+                    if let Some(e) = expr_opt {
+                        collect_struct_instances_in_expr(e, out, generic_structs);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // From function bodies and top-level statements
+        for f in &transformed_program.functions {
+            for stmt in &f.body {
+                collect_struct_instances_in_stmt(stmt, &mut struct_instances, &generic_structs);
+            }
+        }
+        for stmt in &program.stmts {
+            collect_struct_instances_in_stmt(stmt, &mut struct_instances, &generic_structs);
+        }
+        // Also collect from test bodies (since tests drive most examples)
+        for test in &program.tests {
+            for stmt in &test.stmts {
+                collect_struct_instances_in_stmt(stmt, &mut struct_instances, &generic_structs);
+            }
+        }
+
+        // 4) Instantiate concrete struct definitions from generic ones
+        let mut extra_structs: Vec<ast::StructDef> = Vec::new();
+        let mut seen_struct_names = std::collections::HashSet::new();
+
+        for ty in &struct_instances {
+            if let ast::Type::GenericInstance(name, args) = ty {
+                if let Some(def) = generic_structs.get(name) {
+                    let mut new_fields = Vec::new();
+                    for f in &def.fields {
+                        let new_ty =
+                            self.substitute_type_using_struct_generics(&f.ty, def, args)?;
+                        new_fields.push(ast::StructField {
+                            name: f.name.clone(),
+                            ty: new_ty,
+                            span: f.span,
+                        });
+                    }
+                    let concrete_name = self.type_to_c_name(ty);
+                    if seen_struct_names.insert(concrete_name.clone()) {
+                        extra_structs.push(ast::StructDef {
+                            name: concrete_name,
+                            generic_params: vec![],
+                            fields: new_fields,
+                            span: def.span,
+                            visibility: def.visibility.clone(),
+                            repr: def.repr.clone(),
+                        });
+                    }
+                }
+            }
+        }
+
+        // 5) Specialize generic struct impl blocks (e.g., impl ArrayIter<T> { ... }) to concrete instances
+        for impl_block in &program.impls {
+            if impl_block.target_type.contains('<') && impl_block.target_type.ends_with('>') {
+                let s = impl_block.target_type.as_str();
+                if let Some(lt) = s.find('<') {
+                    let base = s[..lt].trim();
+                    let params_src = &s[lt + 1..s.len() - 1];
+                    let _param_names: Vec<String> = params_src
+                        .split(',')
+                        .map(|p| p.trim().to_string())
+                        .collect();
+
+                    for ty in &struct_instances {
+                        if let ast::Type::GenericInstance(inst_base, inst_args) = ty {
+                            if inst_base == base {
+                                if let Some(def) = generic_structs.get(base) {
+                                    let mut new_methods = Vec::new();
+                                    for m in &impl_block.methods {
+                                        let mut new_m = m.clone();
+                                        new_m.return_type = self
+                                            .substitute_type_using_struct_generics(
+                                                &m.return_type,
+                                                def,
+                                                inst_args,
+                                            )?;
+                                        let mut new_params = Vec::new();
+                                        for (n, t) in &m.params {
+                                            new_params.push((
+                                                n.clone(),
+                                                self.substitute_type_using_struct_generics(
+                                                    t, def, inst_args,
+                                                )?,
+                                            ));
+                                        }
+                                        new_m.params = new_params;
+                                        new_methods.push(new_m);
+                                    }
+
+                                    new_impls.push(ast::ImplBlock {
+                                        target_type: self.type_to_c_name(ty),
+                                        target_type_parsed: Some(ty.clone()),
+                                        methods: new_methods,
+                                        span: impl_block.span,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         let mut final_program = transformed_program.clone();
+        // Append specialized concrete structs
+        if !extra_structs.is_empty() {
+            let mut combined_structs = final_program.structs.clone();
+            for s in extra_structs {
+                if !combined_structs.iter().any(|e| e.name == s.name) {
+                    combined_structs.push(s);
+                }
+            }
+            final_program.structs = combined_structs;
+        }
+        // Use specialized impls (arrays + generic struct impls)
         final_program.impls = new_impls;
 
         Ok(final_program)
@@ -835,6 +1166,16 @@ impl CBackend {
                     is_tail: info.is_tail,
                 };
                 Ok(ast::Expr::TemplateStr(new_parts, new_info))
+            }
+            ast::Expr::Cast(inner, ty, info) => {
+                let new_inner = self.substitute_expr(inner, type_map)?;
+                let new_ty = self.substitute_type(ty, type_map)?;
+                let new_info = ast::ExprInfo {
+                    span: info.span,
+                    ty: new_ty.clone(),
+                    is_tail: info.is_tail,
+                };
+                Ok(ast::Expr::Cast(Box::new(new_inner), new_ty, new_info))
             }
             _ => {
                 let new_info = ast::ExprInfo {

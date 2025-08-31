@@ -21,6 +21,93 @@ impl CBackend {
                 let left_type = left.get_type();
                 let right_type = right.get_type();
 
+                // Optionals/none: only == and != supported (enforced by type checker)
+                let is_optional_cmp = matches!(left_type, Type::Optional(_) | Type::NoneType)
+                    || matches!(right_type, Type::Optional(_) | Type::NoneType);
+                if is_optional_cmp {
+                    match op {
+                        ast::BinOp::Eq | ast::BinOp::NotEq => {
+                            // none vs none
+                            if matches!(left_type, Type::NoneType)
+                                && matches!(right_type, Type::NoneType)
+                            {
+                                return Ok(if matches!(op, ast::BinOp::Eq) {
+                                    "true".to_string()
+                                } else {
+                                    "false".to_string()
+                                });
+                            }
+                            // optional vs none
+                            if let Type::Optional(_) = left_type {
+                                if matches!(right_type, Type::NoneType) {
+                                    return Ok(if matches!(op, ast::BinOp::Eq) {
+                                        format!("(!{}.has_value)", left_code)
+                                    } else {
+                                        format!("({}.has_value)", left_code)
+                                    });
+                                }
+                            }
+                            // none vs optional
+                            if matches!(left_type, Type::NoneType) {
+                                if let Type::Optional(_) = right_type {
+                                    return Ok(if matches!(op, ast::BinOp::Eq) {
+                                        format!("(!{}.has_value)", right_code)
+                                    } else {
+                                        format!("({}.has_value)", right_code)
+                                    });
+                                }
+                            }
+                            // optional vs optional
+                            if let (Type::Optional(inner_l), Type::Optional(inner_r)) =
+                                (&left_type, &right_type)
+                            {
+                                let value_cmp = match (&**inner_l, &**inner_r) {
+                                    (Type::String, Type::String) => {
+                                        self.includes.borrow_mut().insert("<string.h>".to_string());
+                                        format!(
+                                            "(strcmp({}.value, {}.value) == 0)",
+                                            left_code, right_code
+                                        )
+                                    }
+                                    _ => format!("({}.value == {}.value)", left_code, right_code),
+                                };
+                                let eq_expr = format!(
+                                    "((!{l}.has_value && !{r}.has_value) || ({l}.has_value && {r}.has_value && {vc}))",
+                                    l = left_code,
+                                    r = right_code,
+                                    vc = value_cmp
+                                );
+                                return Ok(if matches!(op, ast::BinOp::Eq) {
+                                    eq_expr
+                                } else {
+                                    format!("!{}", eq_expr)
+                                });
+                            }
+                            // Fallback (shouldn't happen due to typeck): compare has_value
+                            let eq_expr = format!(
+                                "({l}.has_value == {r}.has_value)",
+                                l = left_code,
+                                r = right_code
+                            );
+                            return Ok(if matches!(op, ast::BinOp::Eq) {
+                                eq_expr
+                            } else {
+                                format!("!{}", eq_expr)
+                            });
+                        }
+                        _ => {
+                            return Err(CompileError::CodegenError {
+                                message: format!(
+                                    "Unsupported operation {:?} for optionals/none (only == and !=)",
+                                    op
+                                ),
+                                span: None,
+                                file_id: self.file_id,
+                            });
+                        }
+                    }
+                }
+
                 // Handle enum comparisons
                 let is_enum_cmp = matches!(left_type, Type::Enum(_) | Type::GenericInstance(_, _))
                     || matches!(right_type, Type::Enum(_) | Type::GenericInstance(_, _));
@@ -334,6 +421,38 @@ impl CBackend {
                     return Ok(format!("{}({})", method_func_name, args_code.join(", ")));
                 }
 
+                // Inline common stdlib optional helpers to avoid invalid C casts
+                if name == "unwrap_or_i32" && args.len() == 3 {
+                    // unwrap_or<T>(opt, fallback) monomorphized to unwrap_or_i32(opt: i32?, fallback: i32)
+                    let opt = self.emit_expr(&args[1])?;
+                    let fallback = self.emit_expr(&args[2])?;
+                    return Ok(format!(
+                        "({}.has_value ? {}.value : {})",
+                        opt, opt, fallback
+                    ));
+                }
+                if name == "unwrap_or_string" && args.len() == 3 {
+                    // unwrap_or<string>(opt, fallback)
+                    let opt = self.emit_expr(&args[1])?;
+                    let fallback = self.emit_expr(&args[2])?;
+                    return Ok(format!(
+                        "({}.has_value ? {}.value : {})",
+                        opt, opt, fallback
+                    ));
+                }
+                if name == "is_none_i32" && args.len() == 2 {
+                    let opt = self.emit_expr(&args[1])?;
+                    return Ok(format!("(!{}.has_value)", opt));
+                }
+                if name == "is_none_string" && args.len() == 2 {
+                    let opt = self.emit_expr(&args[1])?;
+                    return Ok(format!("(!{}.has_value)", opt));
+                }
+                if name == "is_some_i32" && args.len() == 2 {
+                    let opt = self.emit_expr(&args[1])?;
+                    return Ok(format!("({}.has_value)", opt));
+                }
+
                 let final_name = if self.ffi_functions.contains(name) {
                     name.clone()
                 } else {
@@ -381,6 +500,15 @@ impl CBackend {
                 let expr_code = self.emit_expr(expr)?;
                 let expr_type = expr.get_type();
                 match (&expr_type, target_ty) {
+                    // Optional<T> -> T: extract .value (cast if needed)
+                    (Type::Optional(inner), to) if self.is_type_convertible(inner, to) => {
+                        let inner_val = format!("({}).value", expr_code);
+                        if **inner == *to {
+                            Ok(inner_val)
+                        } else {
+                            Ok(format!("({})({})", self.type_to_c(to), inner_val))
+                        }
+                    }
                     (Type::I32, Type::String) => Ok(format!("ve_int_to_str({})", expr_code)),
                     (Type::I64, Type::String) => Ok(format!("ve_i64_to_str({})", expr_code)),
                     (Type::F32, Type::String) => Ok(format!("ve_float_to_str({})", expr_code)),
