@@ -1,0 +1,116 @@
+import std/io;
+
+fn assert_true(cond: bool) -> void {
+    if !cond {
+        println("assert_true failed");
+        panic("assert failed");
+    }
+}
+
+fn assert_eq_i32(a: i32, b: i32) -> void {
+    if a != b {
+        println(`assert_eq_i32 failed: ${a} != ${b}`);
+        panic("assert failed");
+    }
+}
+
+fn assert_eq_string(a: string, b: string) -> void {
+    if a != b {
+        println(`assert_eq_string failed: "${a}" != "${b}"`);
+        panic("assert failed");
+    }
+}
+
+fn assert_eq_size_t(n: size_t, expected: i32) -> void {
+    if !(n == expected) {
+        println(`assert_eq_size_t failed: ${n as i32} != ${expected}`);
+        panic("assert failed");
+    }
+}
+
+// ---------- Optional helpers ----------
+
+test optionals_helpers_basics {
+    let a: i32? = none;
+    assert_true(is_none(a));
+    assert_true(!is_some(a));
+    assert_eq_i32(unwrap_or(a, 42 as i32), 42 as i32);
+
+    let b: i32? = 5 as i32;
+    assert_true(is_some(b));
+    assert_true(!(b == none));
+    assert_eq_i32(unwrap_or(b, 0 as i32), 5 as i32);
+}
+
+test optionals_string_helpers {
+    let s: string? = none;
+    assert_eq_string(unwrap_or(s, "default"), "default");
+
+    let t: string? = "hi";
+    assert_eq_string(unwrap_or(t, "default"), "hi");
+}
+
+test optionals_equality_inequality {
+    let x: i32? = none;
+    let y: i32? = none;
+    assert_true(x == y);
+
+    let z: i32? = 1 as i32;
+    assert_true(z != none);
+    assert_true(!(z == none));
+}
+
+// ---------- size_t interop ----------
+
+test size_t_strlen_basic {
+    let n = strlen("hello");
+    assert_eq_size_t(n, 5 as i32);
+}
+
+test size_t_arithmetic_and_comparisons {
+    let n = strlen("abc");          // 3
+    let m = n + 2 as i32;           // should be 5 as size_t-compatible
+    assert_eq_size_t(m, 5 as i32);
+
+    assert_true(n < 10 as i32);
+    assert_true(n >= 3 as i32);
+    assert_true(n == 3 as i32);
+}
+
+test size_t_as_array_index {
+    let arr: i32[] = [];
+    arr = arr.append(9 as i32);
+    arr = arr.append(8 as i32);
+    arr = arr.append(7 as i32);
+    arr = arr.append(6 as i32);
+
+    let idx: size_t = strlen("ab"); // 2
+    let v = arr[idx];
+    assert_eq_i32(v, 7 as i32);
+}
+
+test size_t_equality_and_identity {
+    let n = strlen("xy"); // 2
+    assert_true(n == 2 as i32);
+
+    let n2: size_t = n + 0 as i32;
+    assert_true(n2 == n);
+}
+
+test size_t_with_arrays_length_and_mixed_ops {
+    let arr: string[] = [];
+    arr = arr.append("a");
+    arr = arr.append("bb");
+    arr = arr.append("ccc");
+
+    // length() returns i32; ensure comparison with size_t works both ways via mixed ops.
+    let total_len = strlen("a") + strlen("bb") + strlen("ccc"); // 1+2+3 = 6 (size_t-compatible)
+    assert_eq_size_t(total_len, 6 as i32);
+
+    let iter_count = 0 as i32;
+    // Iterate for 0..arr.length()
+    for _, i in 0..arr.length() {
+        let iter_count = iter_count + 1 as i32;
+    }
+    assert_eq_i32(iter_count, 3 as i32);
+}

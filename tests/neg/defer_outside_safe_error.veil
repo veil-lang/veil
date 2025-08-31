@@ -1,0 +1,28 @@
+import std/io;
+
+test defer_outside_safe_should_error {
+    let x: i32 = 0 as i32;
+    // ERROR: defer must be inside a safe { } block
+    defer x = x + 1 as i32;
+}
+
+test string_comparison_ops_should_error {
+    let a = "a";
+    let b = "b";
+    // ERROR: Only == and != supported for strings
+    let bad1 = a < b;
+    let bad2 = a > b;
+    let bad3 = a <= b;
+    let bad4 = a >= b;
+}
+
+test string_multiplication_should_error {
+    // ERROR: Unsupported string operation
+    let bad = "a" * "b";
+}
+
+test float_logical_and_should_error {
+    let f = 1.5; // f64 by default
+    // ERROR: Logical && requires bool operands
+    let bad = f && true;
+}

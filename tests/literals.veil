@@ -1,0 +1,86 @@
+import std/io;
+
+fn assert_true(cond: bool) -> void {
+    if !cond {
+        println("assert_true failed");
+        panic("assert failed");
+    }
+}
+
+fn assert_eq_i32(a: i32, b: i32) -> void {
+    if a != b {
+        println(`assert_eq_i32 failed: ${a} != ${b}`);
+        panic("assert failed");
+    }
+}
+
+fn assert_eq_i64(a: i64, b: i64) -> void {
+    if a != b {
+        println(`assert_eq_i64 failed: ${a} != ${b}`);
+        panic("assert failed");
+    }
+}
+
+fn assert_eq_string(a: string, b: string) -> void {
+    if a != b {
+        println(`assert_eq_string failed: "${a}" != "${b}"`);
+        panic("assert failed");
+    }
+}
+
+test hex_and_binary_literals {
+    let a: i32 = 0xFF;
+    assert_eq_i32(a, 255);
+
+    let b: i32 = 0b101010;
+    assert_eq_i32(b, 42);
+
+    let c: i32 = 0x10 + 0b10;
+    assert_eq_i32(c, 18);
+
+    // Large hex beyond i32 fits i64
+    let d: i64 = 0x80000000;
+    assert_eq_i64(d, 2147483648);
+}
+
+test float_literals_and_arithmetic {
+    let f = 3.5;
+    let g = 1.5;
+    let sum = f + g;
+
+    // Casting sum to i32 should yield 5
+    assert_eq_i32(sum as i32, 5);
+
+    // Mixed literal arithmetic
+    let h = 2.25 + 0.75;
+    assert_eq_i32(h as i32, 3);
+}
+
+test none_literal_in_optionals {
+    let x: i32? = none;
+    assert_true(is_none(x));
+
+    let y = unwrap_or(x, 7);
+    assert_eq_i32(y, 7);
+
+    let s: string? = none;
+    assert_true(is_none(s));
+    let s2 = unwrap_or(s, "hi");
+    assert_eq_string(s2, "hi");
+
+    let z: i32? = 5;
+    assert_true(is_some(z));
+    let z2 = unwrap_or(z, 99);
+    assert_eq_i32(z2, 5);
+}
+
+test string_operations {
+    assert_true("a" == "a");
+    assert_true("a" != "b");
+
+    let h = "foo" + "bar";
+    assert_eq_string(h, "foobar");
+
+    let x = "num: " + (42 as string);
+    assert_eq_string(x, "num: 42");
+}

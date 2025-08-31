@@ -97,6 +97,7 @@ impl CBackend {
         output_path: &Path,
     ) -> Result<(), CompileError> {
         let mut program = program.clone();
+        program = self.monomorphize_generics(&program)?;
         if let Err(e) = crate::ast::merge_impl_blocks(&mut program) {
             return Err(CompileError::CodegenError {
                 message: e,
@@ -332,7 +333,12 @@ impl CBackend {
             .filter(|f| !f.generic_params.is_empty())
             .collect();
 
-        let mut collector = ast::GenericCallCollector::with_functions(&program.functions);
+        let mut collector = ast::GenericCallCollector::with_functions(
+            &all_generic_functions
+                .iter()
+                .map(|f| (*f).clone())
+                .collect::<Vec<_>>(),
+        );
         collector.visit_program(program);
 
         let mut new_functions = program
@@ -431,7 +437,7 @@ impl CBackend {
                 let mono_func = self.instantiate_generic_function(gen_func, &inferred)?;
                 let mono_name = mono_func.name.clone();
 
-                transformer.add_mapping(func_name.clone(), inferred, mono_name);
+                transformer.add_mapping(func_name.clone(), call_arg_types.clone(), mono_name);
                 new_functions.push(mono_func);
             }
         }
