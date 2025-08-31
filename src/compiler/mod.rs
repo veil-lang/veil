@@ -6,18 +6,24 @@ use anyhow::{Result, anyhow};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
+#[cfg_attr(test, allow(dead_code))]
 pub struct ResolvedImport {
     pub path: PathBuf,
+    #[allow(dead_code)]
     pub import_type: ImportType,
+    #[allow(dead_code)]
     pub module_path: String,
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(test, allow(dead_code))]
 pub enum ImportType {
     All {
+        #[allow(dead_code)]
         alias: Option<String>,
     },
     Specifiers {
+        #[allow(dead_code)]
         specifiers: Vec<ast::ImportSpecifier>,
     },
 }
@@ -48,8 +54,7 @@ pub fn resolve_standard_library_path(module_path: &str) -> Result<PathBuf> {
             .unwrap_or_else(|| PathBuf::from("lib"))
     };
 
-    let full_path = if module_path.starts_with("std/") {
-        let module_name = &module_path[4..];
+    let full_path = if let Some(module_name) = module_path.strip_prefix("std/") {
         base_path
             .join("std")
             .join("src")
@@ -192,3 +197,4 @@ pub fn resolve_imports_only(
 
     Ok(resolved)
 }
+

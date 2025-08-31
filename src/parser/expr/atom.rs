@@ -71,11 +71,11 @@ impl<'a> super::super::Parser<'a> {
                     is_tail: false,
                 },
             )),
-            Some((Token::F32(val), span)) => Ok(ast::Expr::F32(
+            Some((Token::F64(val), span)) => Ok(ast::Expr::F64(
                 val,
                 ast::ExprInfo {
                     span,
-                    ty: ast::Type::F32,
+                    ty: ast::Type::F64,
                     is_tail: false,
                 },
             )),
@@ -156,8 +156,15 @@ impl<'a> super::super::Parser<'a> {
                     let look3 = self.tokens.get(self.pos + 2).cloned();
                     let look4 = self.tokens.get(self.pos + 3).cloned();
                     let look5 = self.tokens.get(self.pos + 4).cloned();
-                    
-                    if let (Some((Token::Dot, _)), Some((Token::Ident(variant_name), _)), Some((Token::LBrace, _)), Some((Token::Ident(_), _)), Some((Token::Colon, _))) = (look1, look2, look3, look4, look5) {
+
+                    if let (
+                        Some((Token::Dot, _)),
+                        Some((Token::Ident(variant_name), _)),
+                        Some((Token::LBrace, _)),
+                        Some((Token::Ident(_), _)),
+                        Some((Token::Colon, _)),
+                    ) = (look1, look2, look3, look4, look5)
+                    {
                         self.advance();
                         let variant = variant_name.clone();
                         self.advance();
@@ -252,6 +259,19 @@ impl<'a> super::super::Parser<'a> {
                     is_tail: false,
                 },
             )),
+            Some((Token::KwSafe, span)) => {
+                let start = span.start();
+                let stmts = self.parse_block()?;
+                let end = self.previous().map(|(_, s)| s.end()).unwrap_or(span.end());
+                Ok(ast::Expr::SafeBlock(
+                    stmts,
+                    ast::ExprInfo {
+                        span: Span::new(start, end),
+                        ty: ast::Type::Void,
+                        is_tail: false,
+                    },
+                ))
+            }
             Some((Token::KwMatch, span)) => self.parse_match(span),
             Some((Token::KwIf, span)) => self.parse_if_expr(span),
             Some((Token::KwLoop, span)) => self.parse_loop_expr(span),

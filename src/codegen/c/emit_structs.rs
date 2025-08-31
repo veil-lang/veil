@@ -5,6 +5,10 @@ use crate::codegen::c::CBackend;
 
 impl CBackend {
     pub fn emit_struct(&mut self, struct_def: &ast::StructDef) -> Result<(), CompileError> {
+        // Skip generic/parametric structs; only emit concrete ones
+        if !struct_def.generic_params.is_empty() {
+            return Ok(());
+        }
         let struct_name = format!("ve_{}", struct_def.name);
         let mut struct_code = format!("typedef struct {} {{\n", struct_name);
 
@@ -66,7 +70,7 @@ impl CBackend {
         let is_simple_enum = enum_def.variants.iter().all(|v| v.data.is_none());
 
         if is_simple_enum {
-            self.header.push_str(&format!("typedef enum {{\n"));
+            self.header.push_str("typedef enum {\n");
             for variant in &enum_def.variants {
                 if let Some(value) = variant.value {
                     self.header.push_str(&format!(
@@ -82,7 +86,7 @@ impl CBackend {
             return Ok(());
         }
 
-        self.header.push_str(&format!("typedef enum {{\n"));
+        self.header.push_str("typedef enum {\n");
         for (i, variant) in enum_def.variants.iter().enumerate() {
             self.header
                 .push_str(&format!("    {}_{} = {},\n", enum_name, variant.name, i));
@@ -141,8 +145,10 @@ impl CBackend {
                         self.header
                             .push_str(&format!("            {} {};\n", c_type, name));
                     }
-                    self.header
-                        .push_str(&format!("        }} {};\n", self.sanitize_member_name(&variant.name)));
+                    self.header.push_str(&format!(
+                        "        }} {};\n",
+                        self.sanitize_member_name(&variant.name)
+                    ));
                 }
             }
         }
@@ -208,12 +214,12 @@ impl CBackend {
                     for (field_member, param_name) in assignments.iter() {
                         // Check if we need to handle field assignment differently
                         let field_info = match data {
-                            crate::ast::EnumVariantData::Struct(struct_fields) => {
-                                struct_fields.iter().find(|f| self.sanitize_member_name(&f.name) == *field_member)
-                            }
+                            crate::ast::EnumVariantData::Struct(struct_fields) => struct_fields
+                                .iter()
+                                .find(|f| self.sanitize_member_name(&f.name) == *field_member),
                             _ => None,
                         };
-                        
+
                         if let Some(field) = field_info {
                             if self.is_recursive_type(&field.ty, &enum_def.name) {
                                 // For recursive types, allocate memory and assign pointer

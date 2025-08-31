@@ -24,7 +24,9 @@ impl TypeChecker {
             }
             (Type::Array(p), Type::Array(c)) => self.unify_types(p, c, subst),
             (Type::Pointer(p), Type::Pointer(c)) => self.unify_types(p, c, subst),
-            (Type::SizedArray(p, n1), Type::SizedArray(c, n2)) => n1 == n2 && self.unify_types(p, c, subst),
+            (Type::SizedArray(p, n1), Type::SizedArray(c, n2)) => {
+                n1 == n2 && self.unify_types(p, c, subst)
+            }
             (Type::GenericInstance(name_p, args_p), Type::GenericInstance(name_c, args_c)) => {
                 if name_p != name_c || args_p.len() != args_c.len() {
                     return false;
@@ -59,11 +61,17 @@ impl TypeChecker {
 
     fn try_match_impl_target(
         &self,
-        impl_target: &str,
+        impl_target_parsed: Option<&crate::ast::Type>,
+        impl_target_str: &str,
         obj_type: &crate::ast::Type,
     ) -> Option<std::collections::HashMap<String, crate::ast::Type>> {
-        let pattern = self.parse_type_name(impl_target);
-        let mut subst: std::collections::HashMap<String, crate::ast::Type> = std::collections::HashMap::new();
+        let pattern: crate::ast::Type = if let Some(parsed) = impl_target_parsed {
+            parsed.clone()
+        } else {
+            self.parse_type_name(impl_target_str)
+        };
+        let mut subst: std::collections::HashMap<String, crate::ast::Type> =
+            std::collections::HashMap::new();
         if self.unify_types(&pattern, obj_type, &mut subst) {
             Some(subst)
         } else {
@@ -71,27 +79,14 @@ impl TypeChecker {
         }
     }
     pub fn check_expr(&mut self, expr: &mut Expr) -> Result<Type, Vec<Diagnostic<FileId>>> {
-        if let Expr::FieldAccess(obj, field_name, span_info) = expr {
-            if let Expr::Var(name, _) = obj.as_ref() {
-                if let Some(var_type) = self.context.variables.get(name) {
-                    if let Type::Enum(enum_name) = var_type {
-                        let enum_type = Type::Enum(enum_name.clone());
-                        *expr = Expr::EnumConstruct(
-                            enum_name.clone(),
-                            field_name.clone(),
-                            vec![],
-                            ast::ExprInfo {
-                                span: span_info.span,
-                                ty: enum_type.clone(),
-                                is_tail: span_info.is_tail,
-                            },
-                        );
-                        return Ok(enum_type);
-                    }
-                } else if self.context.enum_defs.contains_key(name) {
-                    let enum_type = Type::Enum(name.clone());
+        if let Expr::FieldAccess(obj, field_name, span_info) = expr
+            && let Expr::Var(name, _) = obj.as_ref()
+        {
+            if let Some(var_type) = self.context.variables.get(name) {
+                if let Type::Enum(enum_name) = var_type {
+                    let enum_type = Type::Enum(enum_name.clone());
                     *expr = Expr::EnumConstruct(
-                        name.clone(),
+                        enum_name.clone(),
                         field_name.clone(),
                         vec![],
                         ast::ExprInfo {
@@ -102,6 +97,19 @@ impl TypeChecker {
                     );
                     return Ok(enum_type);
                 }
+            } else if self.context.enum_defs.contains_key(name) {
+                let enum_type = Type::Enum(name.clone());
+                *expr = Expr::EnumConstruct(
+                    name.clone(),
+                    field_name.clone(),
+                    vec![],
+                    ast::ExprInfo {
+                        span: span_info.span,
+                        ty: enum_type.clone(),
+                        is_tail: span_info.is_tail,
+                    },
+                );
+                return Ok(enum_type);
             }
         }
 
@@ -232,6 +240,7 @@ impl TypeChecker {
             Expr::Bool(_, _) => Ok(Type::Bool),
             Expr::Str(_, _) => Ok(Type::String),
             Expr::Int64(_, _) => Ok(Type::I64),
+            Expr::F64(_, _) => Ok(Type::F64),
             Expr::F32(_, _) => Ok(Type::F32),
             Expr::Void(_) => Ok(Type::Void),
             Expr::Var(
@@ -295,10 +304,10 @@ impl TypeChecker {
                             || (left_ty == Type::I32 && right_ty == Type::CSize)
                             || (left_ty == Type::CSize && right_ty == Type::CSize)
                         {
-                            if left_ty == Type::F32 || right_ty == Type::F32 {
-                                Type::F32
-                            } else if left_ty == Type::F64 || right_ty == Type::F64 {
+                            if left_ty == Type::F64 || right_ty == Type::F64 {
                                 Type::F64
+                            } else if left_ty == Type::F32 || right_ty == Type::F32 {
+                                Type::F32
                             } else if left_ty == Type::I64 || right_ty == Type::I64 {
                                 Type::I64
                             } else if left_ty == Type::U64 || right_ty == Type::U64 {
@@ -325,8 +334,7 @@ impl TypeChecker {
                                 left_ty
                             }
                         } else if matches!(op, BinOp::Add)
-                            && (left_ty == Type::String
-                                || right_ty == Type::String)
+                            && (left_ty == Type::String || right_ty == Type::String)
                         {
                             if left_ty == Type::String && right_ty == Type::String {
                                 Type::String
@@ -362,7 +370,34 @@ impl TypeChecker {
                     | BinOp::NotEq
                     | BinOp::GtEq
                     | BinOp::LtEq => {
-                        if Self::is_convertible(&left_ty, &right_ty) {
+                        // Strings: only == and != supported
+                        if left_ty == Type::String || right_ty == Type::String {
+                            match op {
+                                BinOp::Eq | BinOp::NotEq => Type::Bool,
+                                _ => {
+                                    self.report_error(
+                                        "Only == and != are supported for string comparisons",
+                                        *span,
+                                    );
+                                    Type::Unknown
+                                }
+                            }
+                        // Optionals/none: only == and != supported
+                        } else if matches!(left_ty, Type::Optional(_) | Type::NoneType)
+                            || matches!(right_ty, Type::Optional(_) | Type::NoneType)
+                        {
+                            match op {
+                                BinOp::Eq | BinOp::NotEq => Type::Bool,
+                                _ => {
+                                    self.report_error(
+                                        "Only == and != are supported when comparing optionals/none",
+                                        *span,
+                                    );
+                                    Type::Unknown
+                                }
+                            }
+                        } else if Self::is_convertible(&left_ty, &right_ty) {
+                            // Numeric and interoperable comparisons (includes size_t/CSize)
                             Type::Bool
                         } else {
                             self.report_error(
@@ -499,115 +534,187 @@ impl TypeChecker {
                     is_tail: _,
                 },
             ) => {
-                if name.starts_with("<method>.") {
-                    let method_name = &name[9..];
-                    if let Some(obj_expr) = args.first_mut() {
-                        let (obj_type, is_static_call) = match obj_expr {
-                            Expr::Var(var_name, var_info) => {
-                                if self.context.struct_defs.contains_key(var_name) {
-                                    var_info.ty = Type::Struct(var_name.clone());
-                                    (Type::Struct(var_name.clone()), true)
-                                } else {
-                                    (self.check_expr(obj_expr)?, false)
-                                }
+                if let Some(method_name) = name.strip_prefix("<method>.")
+                    && let Some(obj_expr) = args.first_mut()
+                {
+                    let (obj_type, is_static_call) = match obj_expr {
+                        Expr::Var(var_name, var_info) => {
+                            if self.context.struct_defs.contains_key(var_name) {
+                                var_info.ty = Type::Struct(var_name.clone());
+                                (Type::Struct(var_name.clone()), true)
+                            } else {
+                                (self.check_expr(obj_expr)?, false)
                             }
-                            _ => (self.check_expr(obj_expr)?, false),
-                        };
+                        }
+                        _ => (self.check_expr(obj_expr)?, false),
+                    };
 
-                        let type_name = obj_type.to_string();
+                    let type_name = obj_type.to_string();
 
-                        let impls = self.impls.clone();
-                        let mut method_found = false;
-                        let mut method_return_type = Type::Unknown;
-                        let mut method_param_types = Vec::new();
+                    let impls = self.impls.clone();
+                    let mut method_found = false;
+                    let mut method_return_type = Type::Unknown;
+                    let mut method_param_types = Vec::new();
 
-                        for impl_block in &impls {
-                            if let Some(subst) = self.try_match_impl_target(&impl_block.target_type, &obj_type) {
-                                for method in &impl_block.methods {
-                                    if method.name == method_name {
-                                        method_found = true;
-                                        // substitute generics in return type and param types
-                                        method_return_type = crate::typeck::pattern::substitute_generics(&method.return_type, &subst.iter().map(|(k,v)| (k, v)).collect());
-                                        method_param_types = method
-                                            .params
-                                            .iter()
-                                            .map(|(_, ty)| crate::typeck::pattern::substitute_generics(ty, &subst.iter().map(|(k,v)| (k, v)).collect()))
-                                            .collect();
-                                        break;
-                                    }
-                                }
-                                if method_found {
+                    for impl_block in &impls {
+                        if let Some(subst) = self.try_match_impl_target(
+                            impl_block.target_type_parsed.as_ref(),
+                            &impl_block.target_type,
+                            &obj_type,
+                        ) {
+                            for method in &impl_block.methods {
+                                if method.name == method_name {
+                                    method_found = true;
+                                    // substitute generics in return type and param types
+                                    method_return_type =
+                                        crate::typeck::pattern::substitute_generics(
+                                            &method.return_type,
+                                            &subst.iter().collect(),
+                                        );
+                                    method_param_types = method
+                                        .params
+                                        .iter()
+                                        .map(|(_, ty)| {
+                                            crate::typeck::pattern::substitute_generics(
+                                                ty,
+                                                &subst.iter().collect(),
+                                            )
+                                        })
+                                        .collect();
                                     break;
                                 }
                             }
+                            if method_found {
+                                break;
+                            }
+                        }
+                    }
+
+                    if !method_found && let Type::Struct(ref simple_name) = obj_type {
+                        for impl_block in &impls {
+                            if impl_block.target_type == *simple_name
+                                && let Some(method) =
+                                    impl_block.methods.iter().find(|m| m.name == method_name)
+                            {
+                                method_found = true;
+                                method_return_type = method.return_type.clone();
+                                method_param_types =
+                                    method.params.iter().map(|(_, ty)| ty.clone()).collect();
+                                break;
+                            }
+                        }
+                        if !method_found {
+                            let synthetic_key = format!("{}.{}", simple_name, method_name);
+                            if let Some((params, ret)) = self.functions.get(&synthetic_key).cloned()
+                            {
+                                method_found = true;
+                                method_param_types = params;
+                                method_return_type = ret;
+                            }
                         }
 
-                        if !method_found {
-                            if let Type::Struct(ref simple_name) = obj_type {
-                                for impl_block in &impls {
-                                    if impl_block.target_type == *simple_name {
-                                        if let Some(method) = impl_block.methods.iter().find(|m| m.name == method_name) {
-                                            method_found = true;
-                                            method_return_type = method.return_type.clone();
+                        // Fallback: static generic method resolution via parameter-driven inference
+                        if !method_found && is_static_call {
+                            for impl_block in &impls {
+                                let target_ty =
+                                    impl_block.target_type_parsed.clone().unwrap_or_else(|| {
+                                        self.parse_type_name(&impl_block.target_type)
+                                    });
+                                if let Type::GenericInstance(name, _params) = target_ty {
+                                    if &name == simple_name {
+                                        if let Some(method) = impl_block
+                                            .methods
+                                            .iter()
+                                            .find(|m| m.name == method_name)
+                                        {
+                                            // Infer generic args from provided arguments (skip the first which is the type name)
+                                            let mut inferred: std::collections::HashMap<
+                                                String,
+                                                crate::ast::Type,
+                                            > = std::collections::HashMap::new();
+
+                                            for (i, (_pname, pty)) in
+                                                method.params.iter().enumerate()
+                                            {
+                                                if let Some(arg) = args.get_mut(1 + i) {
+                                                    let arg_ty = self.check_expr(arg)?;
+                                                    // Populate inference map (best-effort)
+                                                    let _ = self.unify_types(
+                                                        pty,
+                                                        &arg_ty,
+                                                        &mut inferred,
+                                                    );
+                                                }
+                                            }
+
+                                            // Apply substitutions to method signature
+                                            let subst_ref: std::collections::HashMap<
+                                                &String,
+                                                &crate::ast::Type,
+                                            > = inferred.iter().collect();
+
+                                            method_return_type =
+                                                crate::typeck::pattern::substitute_generics(
+                                                    &method.return_type,
+                                                    &subst_ref,
+                                                );
                                             method_param_types = method
                                                 .params
                                                 .iter()
-                                                .map(|(_, ty)| ty.clone())
+                                                .map(|(_, ty)| {
+                                                    crate::typeck::pattern::substitute_generics(
+                                                        ty, &subst_ref,
+                                                    )
+                                                })
                                                 .collect();
+
+                                            method_found = true;
                                             break;
                                         }
                                     }
                                 }
-                                if !method_found {
-                                    let synthetic_key = format!("{}.{}", simple_name, method_name);
-                                    if let Some((params, ret)) = self.functions.get(&synthetic_key).cloned() {
-                                        method_found = true;
-                                        method_param_types = params;
-                                        method_return_type = ret;
-                                    }
-                                }
                             }
                         }
-
-                        if !method_found {
-                            self.report_error(
-                                &format!(
-                                    "Method '{}' not found for type '{}'",
-                                    method_name, type_name
-                                ),
-                                *span,
-                            );
-                            *expr_type = Type::Unknown;
-                            return Ok(Type::Unknown);
-                        }
-
-                        let actual_args = if is_static_call {
-                            args.len() - 1
-                        } else {
-                            args.len()
-                        };
-                        let expected_args = method_param_types.len();
-
-                        if actual_args != expected_args {
-                            self.report_error(
-                                &format!(
-                                    "Method '{}' expects {} arguments, got {}",
-                                    method_name, expected_args, actual_args
-                                ),
-                                *span,
-                            );
-                        }
-
-                        let start_idx = if is_static_call { 1 } else { 1 };
-                        for (i, param_type) in method_param_types.iter().enumerate() {
-                            if let Some(arg) = args.get_mut(start_idx + i) {
-                                self.check_expr_with_expected(arg, param_type)?;
-                            }
-                        }
-
-                        *expr_type = method_return_type.clone();
-                        return Ok(method_return_type);
                     }
+
+                    if !method_found {
+                        self.report_error(
+                            &format!(
+                                "Method '{}' not found for type '{}'",
+                                method_name, type_name
+                            ),
+                            *span,
+                        );
+                        *expr_type = Type::Unknown;
+                        return Ok(Type::Unknown);
+                    }
+
+                    let actual_args = if is_static_call {
+                        args.len() - 1
+                    } else {
+                        args.len()
+                    };
+                    let expected_args = method_param_types.len();
+
+                    if actual_args != expected_args {
+                        self.report_error(
+                            &format!(
+                                "Method '{}' expects {} arguments, got {}",
+                                method_name, expected_args, actual_args
+                            ),
+                            *span,
+                        );
+                    }
+
+                    let start_idx = if is_static_call { 1 } else { 0 };
+                    for (i, param_type) in method_param_types.iter().enumerate() {
+                        if let Some(arg) = args.get_mut(start_idx + i) {
+                            self.check_expr_with_expected(arg, param_type)?;
+                        }
+                    }
+
+                    *expr_type = method_return_type.clone();
+                    return Ok(method_return_type);
                 }
 
                 let mut found = self.functions.get(name).cloned();
@@ -729,44 +836,41 @@ impl TypeChecker {
                 result?;
                 Ok(Type::Void)
             }
-            Expr::Cast(
-                expr,
-                target_ty,
-                ast::ExprInfo {
-                    span,
-                    ty: _expr_type,
-                    is_tail: _,
-                },
-            ) => {
+            Expr::Cast(expr, target_ty, info) => {
                 let source_ty = self.check_expr(expr)?;
-
-                match (&source_ty, &target_ty) {
-                    (Type::RawPtr, Type::Pointer(_)) => Ok(target_ty.clone()),
-                    (Type::Pointer(_), Type::RawPtr) => Ok(target_ty.clone()),
-                    (Type::Pointer(_), Type::I32) => Ok(target_ty.clone()),
-                    (Type::I32, Type::Pointer(_)) => Ok(target_ty.clone()),
-                    (Type::I32, Type::I32) => Ok(source_ty),
-                    (Type::I32, Type::Bool) => Ok(target_ty.clone()),
-                    (Type::F32, Type::F32) => Ok(source_ty),
-                    (Type::F32, Type::I32) => Ok(target_ty.clone()),
-                    (Type::I32, Type::F32) => Ok(target_ty.clone()),
-                    (Type::I32, Type::U32) => Ok(target_ty.clone()),
-                    (Type::U32, Type::I32) => Ok(target_ty.clone()),
-                    (Type::String, Type::I32) => Ok(target_ty.clone()),
-                    (Type::String, Type::RawPtr) => Ok(target_ty.clone()),
-                    (Type::F32, Type::String) => Ok(target_ty.clone()),
+                let result_ty = match (&source_ty, &target_ty) {
+                    (Type::RawPtr, Type::Pointer(_)) => target_ty.clone(),
+                    (Type::Pointer(_), Type::RawPtr) => target_ty.clone(),
+                    (Type::Pointer(_), Type::I32) => target_ty.clone(),
+                    (Type::I32, Type::Pointer(_)) => target_ty.clone(),
+                    (Type::I32, Type::I32) => source_ty,
+                    (Type::I32, Type::Bool) => target_ty.clone(),
+                    (Type::F32, Type::F32) => source_ty,
+                    (Type::F32, Type::I32) => target_ty.clone(),
+                    (Type::I32, Type::F32) => target_ty.clone(),
+                    (Type::F64, Type::F64) => source_ty,
+                    (Type::F64, Type::I32) => target_ty.clone(),
+                    (Type::I32, Type::F64) => target_ty.clone(),
+                    (Type::I32, Type::U32) => target_ty.clone(),
+                    (Type::U32, Type::I32) => target_ty.clone(),
+                    (Type::String, Type::I32) => target_ty.clone(),
+                    (Type::String, Type::RawPtr) => target_ty.clone(),
+                    (Type::F32, Type::String) => target_ty.clone(),
                     _ => {
                         if !self.is_cast_allowed(&source_ty, target_ty) {
                             self.report_error(
                                 &format!("Invalid cast from {} to {}", source_ty, target_ty),
-                                *span,
+                                info.span,
                             );
-                            Ok(Type::Unknown)
+                            Type::Unknown
                         } else {
-                            Ok(target_ty.clone())
+                            target_ty.clone()
                         }
                     }
-                }
+                };
+                // Update the expression's type info
+                info.ty = result_ty.clone();
+                Ok(result_ty)
             }
             Expr::Range(start, end, _, _) => {
                 let start_ty = self.check_expr(start)?;
@@ -849,14 +953,37 @@ impl TypeChecker {
                     }
                 }
 
-                let ty = Type::Struct(name.clone());
+                let ty = if let Some(def) = self.struct_def_map.get(name)
+                    && !def.generic_params.is_empty()
+                {
+                    if let Type::GenericInstance(n, params) = &self.context.current_return_type
+                        && n == name
+                        && params.len() == def.generic_params.len()
+                    {
+                        Type::GenericInstance(n.clone(), params.clone())
+                    } else if let Some(last_var_ty) = self.context.variables.values().last()
+                        && let Type::GenericInstance(n, params) = last_var_ty
+                        && n == name
+                        && params.len() == def.generic_params.len()
+                    {
+                        Type::GenericInstance(n.clone(), params.clone())
+                    } else {
+                        Type::Struct(name.clone())
+                    }
+                } else {
+                    Type::Struct(name.clone())
+                };
                 *expr_type = ty.clone();
                 Ok(ty)
             }
             Expr::FieldAccess(
                 obj,
                 field_name,
-                ast::ExprInfo { span, ty: expr_type, is_tail: _ },
+                ast::ExprInfo {
+                    span,
+                    ty: expr_type,
+                    is_tail: _,
+                },
             ) => {
                 let obj_ty = self.check_expr(obj)?;
                 match obj_ty {
@@ -882,6 +1009,52 @@ impl TypeChecker {
                             Ok(Type::Unknown)
                         }
                     },
+                    Type::GenericInstance(struct_name, args) => {
+                        // Prefer full struct definition to substitute generics accurately
+                        if let Some(def) = self.struct_def_map.get(&struct_name) {
+                            // Build substitution map: generic param -> concrete type
+                            let mut subst: std::collections::HashMap<&String, &ast::Type> =
+                                std::collections::HashMap::new();
+                            for (gp, arg_ty) in def.generic_params.iter().zip(args.iter()) {
+                                subst.insert(gp, arg_ty);
+                            }
+
+                            if let Some(f) = def.fields.iter().find(|f| &f.name == field_name) {
+                                let ty = crate::typeck::pattern::substitute_generics(&f.ty, &subst);
+                                *expr_type = ty.clone();
+                                Ok(ty)
+                            } else {
+                                self.report_error(
+                                    &format!(
+                                        "No field '{}' in struct '{}'",
+                                        field_name, struct_name
+                                    ),
+                                    *span,
+                                );
+                                Ok(Type::Unknown)
+                            }
+                        } else if let Some(fields) = self.context.struct_defs.get(&struct_name) {
+                            // Fallback: use recorded field list (may still contain generics)
+                            if let Some((_, field_ty)) =
+                                fields.iter().find(|(n, _)| n == field_name)
+                            {
+                                *expr_type = field_ty.clone();
+                                Ok(field_ty.clone())
+                            } else {
+                                self.report_error(
+                                    &format!(
+                                        "No field '{}' in struct '{}'",
+                                        field_name, struct_name
+                                    ),
+                                    *span,
+                                );
+                                Ok(Type::Unknown)
+                            }
+                        } else {
+                            self.report_error(&format!("Unknown struct '{}'", struct_name), *span);
+                            Ok(Type::Unknown)
+                        }
+                    }
                     _ => {
                         self.report_error(
                             &format!("Cannot access field '{}' on type {}", field_name, obj_ty),
@@ -893,7 +1066,11 @@ impl TypeChecker {
             }
             Expr::ArrayInit(
                 elements,
-                ast::ExprInfo { span, ty: expr_type, is_tail: _ },
+                ast::ExprInfo {
+                    span,
+                    ty: expr_type,
+                    is_tail: _,
+                },
             ) => {
                 if elements.is_empty() {
                     self.report_error("Cannot infer type of empty array", *span);
@@ -1167,35 +1344,36 @@ impl TypeChecker {
                     self.check_expr(arg)?;
                 }
 
-                if let Some(enum_def) = self.context.enum_def_map.get(enum_name).cloned() {
-                    if let Some(variant) = enum_def.variants.iter().find(|v| &v.name == variant_name) {
-                        let mut expected_types: Vec<Type> = vec![];
-                        if let Some(data) = &variant.data {
-                            match data {
-                                crate::ast::EnumVariantData::Tuple(types) => {
-                                    expected_types = types.clone();
-                                }
-                                crate::ast::EnumVariantData::Struct(fields) => {
-                                    expected_types = fields.iter().map(|f| f.ty.clone()).collect();
-                                }
+                if let Some(enum_def) = self.context.enum_def_map.get(enum_name).cloned()
+                    && let Some(variant) =
+                        enum_def.variants.iter().find(|v| &v.name == variant_name)
+                {
+                    let mut expected_types: Vec<Type> = vec![];
+                    if let Some(data) = &variant.data {
+                        match data {
+                            crate::ast::EnumVariantData::Tuple(types) => {
+                                expected_types = types.clone();
+                            }
+                            crate::ast::EnumVariantData::Struct(fields) => {
+                                expected_types = fields.iter().map(|f| f.ty.clone()).collect();
                             }
                         }
+                    }
 
-                        let enum_name_clone = enum_name.clone();
-                        let variant_name_clone = variant.name.clone();
+                    let enum_name_clone = enum_name.clone();
+                    let variant_name_clone = variant.name.clone();
 
-                        for (i, arg) in args.iter_mut().enumerate() {
-                            let arg_ty = arg.get_type();
-                            let expected_ty = expected_types.get(i).cloned().unwrap_or(Type::Unknown);
-                            if !Self::is_convertible(&arg_ty, &expected_ty) {
-                                self.report_error(
-                                    &format!(
-                                        "Enum variant '{}' of '{}' expects {}, got {}",
-                                        variant_name_clone, enum_name_clone, expected_ty, arg_ty
-                                    ),
-                                    arg.span(),
-                                );
-                            }
+                    for (i, arg) in args.iter_mut().enumerate() {
+                        let arg_ty = arg.get_type();
+                        let expected_ty = expected_types.get(i).cloned().unwrap_or(Type::Unknown);
+                        if !Self::is_convertible(&arg_ty, &expected_ty) {
+                            self.report_error(
+                                &format!(
+                                    "Enum variant '{}' of '{}' expects {}, got {}",
+                                    variant_name_clone, enum_name_clone, expected_ty, arg_ty
+                                ),
+                                arg.span(),
+                            );
                         }
                     }
                 }
@@ -1204,22 +1382,18 @@ impl TypeChecker {
                     if !enum_def.generic_params.is_empty() {
                         let mut context_ty = None;
                         if let Type::GenericInstance(n, params) = &self.context.current_return_type
+                            && n == enum_name
+                            && params.len() == enum_def.generic_params.len()
                         {
-                            if n == enum_name && params.len() == enum_def.generic_params.len() {
-                                context_ty = Some(Type::GenericInstance(n.clone(), params.clone()));
-                            }
+                            context_ty = Some(Type::GenericInstance(n.clone(), params.clone()));
                         }
-                        if context_ty.is_none() {
-                            if let Some(last_var_ty) = self.context.variables.values().last() {
-                                if let Type::GenericInstance(n, params) = last_var_ty {
-                                    if n == enum_name
-                                        && params.len() == enum_def.generic_params.len()
-                                    {
-                                        context_ty =
-                                            Some(Type::GenericInstance(n.clone(), params.clone()));
-                                    }
-                                }
-                            }
+                        if context_ty.is_none()
+                            && let Some(last_var_ty) = self.context.variables.values().last()
+                            && let Type::GenericInstance(n, params) = last_var_ty
+                            && n == enum_name
+                            && params.len() == enum_def.generic_params.len()
+                        {
+                            context_ty = Some(Type::GenericInstance(n.clone(), params.clone()));
                         }
                         if let Some(t) = context_ty {
                             t
@@ -1283,7 +1457,7 @@ impl TypeChecker {
                     arm_types.push(arm_ty);
                     self.context.variables = original_variables;
                 }
-                let result_ty = arm_types.get(0).cloned().unwrap_or(Type::Unknown);
+                let result_ty = arm_types.first().cloned().unwrap_or(Type::Unknown);
                 if !arm_types
                     .iter()
                     .all(|t| Self::is_convertible(t, &result_ty))
@@ -1365,18 +1539,17 @@ impl TypeChecker {
                     for break_type in &break_types[1..] {
                         if !Self::is_convertible(&common_type, break_type)
                             && !Self::is_convertible(break_type, &common_type)
+                            && common_type != *break_type
                         {
-                            if common_type != *break_type {
-                                self.report_error(
-                                    &format!(
-                                        "Inconsistent types in break statements: {:?} vs {:?}",
-                                        common_type, break_type
-                                    ),
-                                    info.span,
-                                );
-                                common_type = Type::Unknown;
-                                break;
-                            }
+                            self.report_error(
+                                &format!(
+                                    "Inconsistent types in break statements: {:?} vs {:?}",
+                                    common_type, break_type
+                                ),
+                                info.span,
+                            );
+                            common_type = Type::Unknown;
+                            break;
                         }
                     }
                     common_type
@@ -1402,13 +1575,12 @@ impl TypeChecker {
         expr: &mut Expr,
         expected_ty: &Type,
     ) -> Result<Type, Vec<Diagnostic<FileId>>> {
-        if let Expr::ArrayInit(elements, ast::ExprInfo { ty: expr_type, .. }) = expr {
-            if elements.is_empty() {
-                if let Type::Array(_element_ty) = expected_ty {
-                    *expr_type = expected_ty.clone();
-                    return Ok(expected_ty.clone());
-                }
-            }
+        if let Expr::ArrayInit(elements, ast::ExprInfo { ty: expr_type, .. }) = expr
+            && elements.is_empty()
+            && let Type::Array(_element_ty) = expected_ty
+        {
+            *expr_type = expected_ty.clone();
+            return Ok(expected_ty.clone());
         }
 
         self.check_expr(expr)

@@ -1,0 +1,136 @@
+fn assert_true(cond: bool) -> void {
+    if !cond {
+        println("assert_true failed");
+        panic("assert failed");
+    }
+}
+
+fn assert_eq_i32(a: i32, b: i32) -> void {
+    if a != b {
+        println(`assert_eq_i32 failed: ${a} != ${b}`);
+        panic("assert failed");
+    }
+}
+
+test inclusive_range_bounds {
+    let sum = 0 as i32;
+    // 0..=3 => 0,1,2,3
+    for v in 0..=3 {
+        sum = sum + v;
+    }
+    assert_eq_i32(sum, 6 as i32);
+}
+
+test exclusive_range_bounds {
+    let sum = 0 as i32;
+    // 0..3 => 0,1,2
+    for v in 0..3 {
+        sum = sum + v;
+    }
+    assert_eq_i32(sum, 3 as i32);
+}
+
+test reversed_ranges_inclusive_and_exclusive {
+    // 5..=2 => 5,4,3,2
+    let sum_dec_inc = 0 as i32;
+    for v in 5..=2 {
+        sum_dec_inc = sum_dec_inc + v;
+    }
+    // 5+4+3+2 = 14
+    assert_eq_i32(sum_dec_inc, 14 as i32);
+
+    // 5..2 => 5,4,3
+    let sum_dec_exc = 0 as i32;
+    for v in 5..2 {
+        sum_dec_exc = sum_dec_exc + v;
+    }
+    // 5+4+3 = 12
+    assert_eq_i32(sum_dec_exc, 12 as i32);
+}
+
+test step_on_ranges_inclusive_and_exclusive {
+    // inclusive with step: 0..=10 step 2 => 0,2,4,6,8,10
+    let sum_inc = 0 as i32;
+    for v in 0..=10 step 2 {
+        sum_inc = sum_inc + v;
+    }
+    assert_eq_i32(sum_inc, 30 as i32); // 0+2+4+6+8+10
+
+    // exclusive with step: 0..10 step 2 => 0,2,4,6,8
+    let sum_exc = 0 as i32;
+    for v in 0..10 step 2 {
+        sum_exc = sum_exc + v;
+    }
+    assert_eq_i32(sum_exc, 20 as i32); // 0+2+4+6+8
+}
+
+test index_variable_progression_on_range {
+    let count = 0 as i32;
+    let last_idx = -1 as i32;
+
+    for v, i in 2..=6 {
+        assert_true(i >= 0 as i32);
+        assert_true(v >= 2 as i32 && v <= 6 as i32);
+        assert_eq_i32(v, i + 2 as i32);
+        count = count + 1 as i32;
+        last_idx = i;
+    }
+
+    assert_eq_i32(count, 5 as i32);
+    assert_eq_i32(last_idx, 4 as i32);
+}
+
+test infinite_default_deterministic_first_n {
+    // .. should yield 0,1,2,... deterministically
+    let sum = 0 as i32;
+    let n = 0 as i32;
+
+    for v in .. {
+        sum = sum + v;
+        n = n + 1 as i32;
+        if n == 5 as i32 {
+            break;
+        }
+    }
+
+    // 0+1+2+3+4 = 10
+    assert_eq_i32(sum, 10 as i32);
+}
+
+test infinite_up_with_index_and_break {
+    // ..> should yield 0,1,2,... with index i matching v
+    let total = 0 as i32;
+
+    for v, i in ..> {
+        assert_eq_i32(v, i);
+        total = total + v;
+        if i == 9 as i32 {
+            break;
+        }
+    }
+
+    // sum 0..9 = 45
+    assert_eq_i32(total, 45 as i32);
+}
+
+test infinite_down_with_index_and_break {
+    // ..< should yield 0,-1,-2,...; index increases 0,1,2,... so v == -i
+    let matched = true;
+    let last_v = 0 as i32;
+    let last_i = -1 as i32;
+
+    for v, i in ..< {
+        if !(v == (0 as i32 - i)) {
+            matched = false;
+        }
+        last_v = v;
+        last_i = i;
+        if i == 7 as i32 {
+            break;
+        }
+    }
+
+    assert_true(matched);
+    assert_eq_i32(last_i, 7 as i32);
+    assert_eq_i32(last_v, -7 as i32);
+}

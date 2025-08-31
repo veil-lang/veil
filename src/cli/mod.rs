@@ -20,6 +20,7 @@ use colored::*;
 use std::path::PathBuf;
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct CliError(pub String);
 
 impl std::fmt::Display for CliError {
@@ -87,8 +88,8 @@ pub struct Args {
     #[arg(long, action = clap::ArgAction::SetFalse)]
     optimize: bool,
 
-    #[arg(long, default_value = "x86_64-pc-windows-msvc")]
-    target_triple: String,
+    #[arg(long)]
+    target_triple: Option<String>,
 
     #[arg(short, long)]
     verbose: bool,
@@ -109,8 +110,8 @@ enum Command {
         #[arg(long, action = clap::ArgAction::SetFalse)]
         optimize: bool,
 
-        #[arg(long, default_value = "x86_64-pc-windows-msvc")]
-        target_triple: String,
+        #[arg(long)]
+        target_triple: Option<String>,
 
         #[arg(short, long)]
         verbose: bool,
@@ -167,6 +168,23 @@ fn parse_channel(s: &str) -> Result<Channel, String> {
     }
 }
 
+fn default_target_triple() -> String {
+    let arch = std::env::consts::ARCH;
+    let os = std::env::consts::OS;
+    match os {
+        "windows" => "x86_64-pc-windows-msvc".to_string(),
+        "macos" => match arch {
+            "aarch64" => "aarch64-apple-darwin".to_string(),
+            _ => "x86_64-apple-darwin".to_string(),
+        },
+        "linux" => match arch {
+            "aarch64" => "aarch64-unknown-linux-gnu".to_string(),
+            _ => "x86_64-unknown-linux-gnu".to_string(),
+        },
+        _ => "x86_64-unknown-linux-gnu".to_string(),
+    }
+}
+
 pub fn parse() -> anyhow::Result<CliCommand> {
     let args = Args::parse();
 
@@ -181,7 +199,7 @@ pub fn parse() -> anyhow::Result<CliCommand> {
             input,
             output,
             optimize,
-            target_triple,
+            target_triple: target_triple.unwrap_or_else(default_target_triple),
             verbose,
         }),
         Some(Command::Init {
@@ -238,7 +256,7 @@ pub fn parse() -> anyhow::Result<CliCommand> {
                 input,
                 output: args.output,
                 optimize: args.optimize,
-                target_triple: args.target_triple,
+                target_triple: args.target_triple.unwrap_or_else(default_target_triple),
                 verbose: args.verbose,
             })
         }
@@ -355,7 +373,7 @@ pub fn process_build(
             for (i, error) in errors.iter().enumerate() {
                 println!("Error {}: {}", i + 1, error.message);
 
-                if let Some(label) = error.labels.get(0) {
+                if let Some(label) = error.labels.first() {
                     println!("  Location: {}..{}", label.range.start, label.range.end);
                     println!("  Detail: {}", label.message);
                 }
@@ -364,11 +382,11 @@ pub fn process_build(
                     println!("  Note: {}", note);
                 }
 
-                if let Err(emit_err) = term::emit(&mut writer.lock(), &config, &files, &error) {
+                if let Err(emit_err) = term::emit(&mut writer.lock(), &config, &files, error) {
                     println!("  (Failed to emit formatted error: {})", emit_err);
                 }
 
-                let file_id = error.labels.get(0).map(|l| l.file_id);
+                let file_id = error.labels.first().map(|l| l.file_id);
                 let file_path = file_id.map(|fid| files.name(fid).to_string_lossy().to_string());
                 let module_info = file_path.as_ref().and_then(|path: &String| {
                     if let Some(_idx) = path.find("lib/std") {
@@ -404,7 +422,7 @@ pub fn process_build(
 
                 eprintln!("\nType checker error {}: {}", location, error.message);
 
-                if let Some(label) = error.labels.get(0) {
+                if let Some(label) = error.labels.first() {
                     eprintln!("  --> at {}..{}", label.range.start, label.range.end);
                     eprintln!("  = detail: {}", label.message);
                 }
@@ -413,7 +431,7 @@ pub fn process_build(
                     eprintln!("  note: {}", note);
                 }
 
-                println!("");
+                println!();
             }
 
             return Err(anyhow!("Type check failed"));
@@ -441,15 +459,11 @@ pub fn process_build(
         );
     }
 
-    let mut clang_args: Vec<String>;
-
     #[cfg(target_os = "windows")]
-    {
-        clang_args = prepare_windows_clang_args(&output, optimize, &c_file)?;
-    }
+    let mut clang_args: Vec<String> = prepare_windows_clang_args(&output, optimize, &c_file)?;
 
     #[cfg(not(target_os = "windows"))]
-    let mut clang_args = vec![
+    let mut clang_args: Vec<String> = vec![
         if optimize { "-O3" } else { "-O0" }.to_string(),
         c_file.to_str().unwrap().into(),
         "-o".to_string(),

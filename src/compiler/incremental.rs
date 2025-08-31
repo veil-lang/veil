@@ -12,6 +12,12 @@ pub struct ModuleGraph {
     pub symbol_graph: SymbolDependencyGraph,
 }
 
+impl Default for ModuleGraph {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ModuleGraph {
     pub fn new() -> Self {
         Self {
@@ -25,10 +31,8 @@ impl ModuleGraph {
     pub fn add_module(&mut self, module_info: ModuleInfo) {
         let path = module_info.file_path.clone();
         self.modules.insert(path.clone(), module_info);
-        self.dependencies
-            .entry(path.clone())
-            .or_insert_with(HashSet::new);
-        self.dependents.entry(path).or_insert_with(HashSet::new);
+        self.dependencies.entry(path.clone()).or_default();
+        self.dependents.entry(path).or_default();
     }
     pub fn add_dependency(&mut self, from: &Path, to: &Path) -> Result<()> {
         let from_canonical = from
@@ -44,12 +48,12 @@ impl ModuleGraph {
 
         self.dependencies
             .entry(from_canonical.clone())
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(to_canonical.clone());
 
         self.dependents
             .entry(to_canonical)
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(from_canonical);
 
         Ok(())
@@ -151,10 +155,10 @@ impl ModuleGraph {
 
         let mut affected_modules = HashSet::new();
         for symbol_id in &affected_symbols {
-            if let Some(module_path) = symbol_id.split("::").next() {
-                if let Ok(path) = PathBuf::from(module_path).canonicalize() {
-                    affected_modules.insert(path);
-                }
+            if let Some(module_path) = symbol_id.split("::").next()
+                && let Ok(path) = PathBuf::from(module_path).canonicalize()
+            {
+                affected_modules.insert(path);
             }
         }
 
@@ -201,12 +205,9 @@ impl ModuleGraph {
     }
 
     fn extract_expr_dependencies(&mut self, symbol_id: &str, expr: &crate::ast::Expr) {
-        match expr {
-            crate::ast::Expr::Call(name, _, _) => {
-                let dependency_id = format!("external::{}", name);
-                self.symbol_graph.add_dependency(symbol_id, &dependency_id);
-            }
-            _ => {}
+        if let crate::ast::Expr::Call(name, _, _) = expr {
+            let dependency_id = format!("external::{}", name);
+            self.symbol_graph.add_dependency(symbol_id, &dependency_id);
         }
     }
 
@@ -257,11 +258,11 @@ impl ModuleGraph {
             for dep in deps {
                 if !visited.contains(dep) {
                     self.dfs_cycle_detection(dep, visited, rec_stack, path, cycles);
-                } else if rec_stack.contains(dep) {
-                    if let Some(cycle_start) = path.iter().position(|p| p == dep) {
-                        let cycle = path[cycle_start..].to_vec();
-                        cycles.push(cycle);
-                    }
+                } else if rec_stack.contains(dep)
+                    && let Some(cycle_start) = path.iter().position(|p| p == dep)
+                {
+                    let cycle = path[cycle_start..].to_vec();
+                    cycles.push(cycle);
                 }
             }
         }
@@ -293,19 +294,19 @@ impl ModuleGraph {
                 let symbol_changes = module_info.symbol_changes.clone();
 
                 for dependent_path in cycle {
-                    if dependent_path != &stable_module_path {
-                        if let Some(dependent_module) = self.modules.get_mut(dependent_path) {
-                            let depends_on_changed_interface = dependent_module
-                                .imported_symbols
-                                .iter()
-                                .any(|(symbol, source)| {
-                                    source == &stable_module_path.to_string_lossy().to_string()
-                                        && symbol_changes.contains(symbol)
-                                });
+                    if dependent_path != &stable_module_path
+                        && let Some(dependent_module) = self.modules.get_mut(dependent_path)
+                    {
+                        let depends_on_changed_interface = dependent_module
+                            .imported_symbols
+                            .iter()
+                            .any(|(symbol, source)| {
+                                source == &stable_module_path.to_string_lossy().to_string()
+                                    && symbol_changes.contains(symbol)
+                            });
 
-                            if !depends_on_changed_interface {
-                                dependent_module.is_dirty = false;
-                            }
+                        if !depends_on_changed_interface {
+                            dependent_module.is_dirty = false;
                         }
                     }
                 }
@@ -407,7 +408,9 @@ impl IncrementalCompiler {
                 let clean_path = normalized_current.to_string_lossy().replace("\\\\?\\", "");
                 anyhow::anyhow!("{}:{}: {}", clean_path, line_col, e.message)
             })?;
-            let is_prelude_module = normalized_current.to_string_lossy().ends_with("prelude.veil");
+            let is_prelude_module = normalized_current
+                .to_string_lossy()
+                .ends_with("prelude.veil");
             let has_prelude_import = program.imports.iter().any(|import| match import {
                 crate::ast::ImportDeclaration::ImportAll { module_path, .. } => {
                     module_path == "std/prelude"
@@ -481,7 +484,7 @@ impl IncrementalCompiler {
         let mut imported_structs = Vec::new();
         let mut imported_ffi_vars = Vec::new();
 
-        for (_, module_info) in &self.module_graph.modules {
+        for module_info in self.module_graph.modules.values() {
             if let Some(program) = &module_info.program {
                 for function in &program.functions {
                     if matches!(function.visibility, crate::ast::Visibility::Public) {
@@ -588,13 +591,12 @@ impl IncrementalCompiler {
 
             for symbol_name in module_info.exported_symbols.keys() {
                 let symbol_id = format!("{}::{}", module_path.display(), symbol_name);
-                if let Some(symbol_info) = module_info.exported_symbols.get(symbol_name) {
-                    if !self
+                if let Some(symbol_info) = module_info.exported_symbols.get(symbol_name)
+                    && !self
                         .build_cache
                         .is_symbol_cache_valid(&symbol_id, &symbol_info.signature_hash)
-                    {
-                        return Ok(true);
-                    }
+                {
+                    return Ok(true);
                 }
             }
         }
@@ -673,7 +675,7 @@ impl IncrementalCompiler {
             program.imports.insert(0, prelude_import);
         }
 
-        for (_, module_info) in &self.module_graph.modules {
+        for module_info in self.module_graph.modules.values() {
             if let Some(module_program) = &module_info.program {
                 for function in &module_program.functions {
                     if matches!(function.visibility, crate::ast::Visibility::Public) {
@@ -705,7 +707,12 @@ impl IncrementalCompiler {
 
                     let target_is_exported = is_builtin_type
                         || module_program.structs.iter().any(|s| {
-                            s.name == impl_block.target_type
+                            let target_name: &str = match impl_block.target_type_parsed.as_ref() {
+                                Some(crate::ast::Type::Struct(n)) => n.as_str(),
+                                Some(crate::ast::Type::GenericInstance(n, _)) => n.as_str(),
+                                _ => impl_block.target_type.as_str(),
+                            };
+                            s.name == target_name
                                 && matches!(s.visibility, crate::ast::Visibility::Public)
                         });
 

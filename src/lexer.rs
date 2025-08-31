@@ -23,6 +23,8 @@ pub enum Token {
     KwRawPtr,
     #[token("defer")]
     KwDefer,
+    #[token("safe")]
+    KwSafe,
     #[token("as")]
     KwAs,
     #[token("while")]
@@ -193,7 +195,7 @@ pub enum Token {
     Question,
 
     #[regex(r"[0-9]+\.[0-9]+", |lex| lex.slice().parse().ok())]
-    F32(f32),
+    F64(f64),
 
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().to_string())]
     Ident(String),
@@ -207,6 +209,20 @@ pub enum Token {
     #[regex(r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/", logos::skip)]
     MultiLineComment,
 
+    #[regex(r"0x[0-9a-fA-F]+", |lex| {
+        let s = lex.slice();
+        match i64::from_str_radix(&s[2..], 16) {
+            Ok(n) => n.to_string(),
+            Err(_) => "0".to_string()
+        }
+    })]
+    #[regex(r"0b[01]+", |lex| {
+        let s = lex.slice();
+        match i64::from_str_radix(&s[2..], 2) {
+            Ok(n) => n.to_string(),
+            Err(_) => "0".to_string()
+        }
+    })]
     #[regex(r"[0-9]+", |lex| lex.slice().to_string())]
     Int(String),
 

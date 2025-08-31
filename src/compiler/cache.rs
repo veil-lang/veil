@@ -77,6 +77,12 @@ pub struct SymbolDependencyGraph {
     pub symbol_dependents: HashMap<String, HashSet<String>>,
 }
 
+impl Default for SymbolDependencyGraph {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SymbolDependencyGraph {
     pub fn new() -> Self {
         Self {
@@ -88,12 +94,12 @@ impl SymbolDependencyGraph {
     pub fn add_dependency(&mut self, from_symbol: &str, to_symbol: &str) {
         self.symbol_dependencies
             .entry(from_symbol.to_string())
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(to_symbol.to_string());
 
         self.symbol_dependents
             .entry(to_symbol.to_string())
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(from_symbol.to_string());
     }
 
@@ -102,12 +108,12 @@ impl SymbolDependencyGraph {
         let mut to_check = vec![changed_symbol.to_string()];
 
         while let Some(symbol) = to_check.pop() {
-            if affected.insert(symbol.clone()) {
-                if let Some(dependents) = self.symbol_dependents.get(&symbol) {
-                    for dependent in dependents {
-                        if !affected.contains(dependent) {
-                            to_check.push(dependent.clone());
-                        }
+            if affected.insert(symbol.clone())
+                && let Some(dependents) = self.symbol_dependents.get(&symbol)
+            {
+                for dependent in dependents {
+                    if !affected.contains(dependent) {
+                        to_check.push(dependent.clone());
                     }
                 }
             }
