@@ -58,7 +58,6 @@ pub enum Token {
     #[token("false")]
     KwFalse,
     #[token("None")]
-    #[token("none")]
     KwNone,
     #[token(".")]
     Dot,
