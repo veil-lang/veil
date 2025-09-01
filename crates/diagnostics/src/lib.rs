@@ -192,10 +192,7 @@ mod tests {
         let fid = files.add("test.veil".to_string(), "test content".to_string());
         let span = Span::new(10, 20);
         let diag = error_with("VE0001", "Expected identifier", fid, span)
-            .with_labels(vec![
-                label_primary(fid, span, "here"),
-                label_secondary(fid, Span::new(0, 5), "context"),
-            ])
+            .with_labels(vec![label_secondary(fid, Span::new(0, 5), "context")])
             .with_notes(vec![help("declare a name: `var name = ...`")]);
 
         assert!(matches!(diag.severity, Severity::Error));
