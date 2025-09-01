@@ -1,8 +1,9 @@
 use crate::cli::process_build;
 use anyhow::{Context, anyhow};
 use colored::*;
+use std::fs;
 use std::io::{self, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
 
@@ -11,44 +12,166 @@ pub fn run_test(
     test_name: Option<String>,
     verbose: bool,
     list: bool,
+    recursive: bool,
 ) -> anyhow::Result<()> {
-    if list {
-        return list_tests(input);
-    }
+    if input.is_file() {
+        if list {
+            return list_tests_file(input);
+        }
 
-    let content = std::fs::read_to_string(&input)
-        .with_context(|| format!("Failed to read test file: {}", input.display()))?;
+        let content = fs::read_to_string(&input)
+            .with_context(|| format!("Failed to read test file: {}", input.display()))?;
 
-    let available_tests = parse_test_names(&content);
+        let available_tests = parse_test_names(&content);
 
-    if available_tests.is_empty() {
-        println!("{}", "No tests found in the file.".yellow());
+        if available_tests.is_empty() {
+            println!("{}", "No tests found in the file.".yellow());
+            return Ok(());
+        }
+
+        let tests_to_run = if let Some(ref specific_test) = test_name {
+            if available_tests.contains(specific_test) {
+                vec![specific_test.clone()]
+            } else {
+                return Err(anyhow!(
+                    "Test '{}' not found. Available tests: {}",
+                    specific_test,
+                    available_tests.join(", ")
+                ));
+            }
+        } else {
+            available_tests
+        };
+
+        let executable_path = process_build(
+            input.clone(),
+            "build/program.exe".into(),
+            false,
+            default_target_triple(),
+            verbose,
+            true,
+        )?;
+
+        let (_passed, _failed) =
+            run_tests_with_formatting(&executable_path, &tests_to_run, verbose, Some(&input))?;
         return Ok(());
     }
 
-    let tests_to_run = if let Some(ref specific_test) = test_name {
-        if available_tests.contains(specific_test) {
-            vec![specific_test.clone()]
-        } else {
-            return Err(anyhow!(
-                "Test '{}' not found. Available tests: {}",
-                specific_test,
-                available_tests.join(", ")
-            ));
+    if input.is_dir() {
+        let veil_files = collect_veil_files(&input, recursive)?;
+        if veil_files.is_empty() {
+            println!(
+                "{} {}",
+                "No .veil files found in directory".yellow(),
+                input.display()
+            );
+            return Ok(());
         }
-    } else {
-        available_tests
-    };
-    let executable_path = process_build(
-        input.clone(),
-        "build/program.exe".into(),
-        false,
-        "x86_64-pc-windows-msvc".into(),
-        verbose,
-        true,
-    )?;
 
-    run_tests_with_formatting(&executable_path, &tests_to_run, verbose)
+        if list {
+            println!("{}", "Available tests:".bold().blue());
+            let mut total = 0usize;
+            for file in &veil_files {
+                let content = fs::read_to_string(file)
+                    .with_context(|| format!("Failed to read test file: {}", file.display()))?;
+                let available_tests = parse_test_names(&content);
+                if available_tests.is_empty() {
+                    continue;
+                }
+                println!("\n{}:", file.display().to_string().cyan());
+                for (i, test_name) in available_tests.iter().enumerate() {
+                    println!("  {}. {}", i + 1, test_name.green());
+                }
+                total += available_tests.len();
+            }
+            println!(
+                "\nTotal: {} test{}",
+                total,
+                if total == 1 { "" } else { "s" }
+            );
+            return Ok(());
+        }
+
+        let mut grand_passed = 0usize;
+        let mut grand_failed = 0usize;
+
+        for file in veil_files {
+            if verbose {
+                println!(
+                    "{}",
+                    format!("Building tests for: {}", file.display()).yellow()
+                );
+            }
+
+            let content = fs::read_to_string(&file)
+                .with_context(|| format!("Failed to read test file: {}", file.display()))?;
+            let available_tests = parse_test_names(&content);
+
+            if available_tests.is_empty() {
+                if verbose {
+                    println!(
+                        "{}",
+                        format!("No tests found in: {}", file.display()).yellow()
+                    );
+                }
+                continue;
+            }
+
+            let tests_to_run = if let Some(ref specific_test) = test_name {
+                let mut matches = Vec::new();
+                for t in &available_tests {
+                    if t == specific_test {
+                        matches.push(t.clone());
+                    }
+                }
+                if matches.is_empty() {
+                    continue;
+                }
+                matches
+            } else {
+                available_tests.clone()
+            };
+
+            let executable_path = process_build(
+                file.clone(),
+                "build/program.exe".into(),
+                false,
+                default_target_triple(),
+                verbose,
+                true,
+            )?;
+
+            let (passed, failed) =
+                run_tests_with_formatting(&executable_path, &tests_to_run, verbose, Some(&file))?;
+
+            grand_passed += passed;
+            grand_failed += failed;
+        }
+
+        println!();
+        if grand_failed == 0 {
+            println!(
+                "{} {} test{} passed",
+                "✓".green().bold(),
+                grand_passed.to_string().bold(),
+                if grand_passed == 1 { "" } else { "s" }
+            );
+        } else {
+            println!(
+                "{} {} passed, {} failed",
+                if grand_passed > 0 { "⚠" } else { "✗" }.yellow().bold(),
+                grand_passed.to_string().green().bold(),
+                grand_failed.to_string().red().bold()
+            );
+        }
+
+        return Ok(());
+    }
+
+    Err(anyhow!(
+        "Input path is neither a file nor a directory: {}",
+        input.display()
+    ))
 }
 
 fn parse_test_names(content: &str) -> Vec<String> {
@@ -73,12 +196,21 @@ fn run_tests_with_formatting(
     executable_path: &PathBuf,
     tests: &[String],
     verbose: bool,
-) -> anyhow::Result<()> {
+    context_file: Option<&Path>,
+) -> anyhow::Result<(usize, usize)> {
     let total_tests = tests.len();
-    let mut passed = 0;
-    let mut failed = 0;
+    let mut passed = 0usize;
+    let mut failed = 0usize;
 
-    println!("{}", "🧪 Running Tests".bold().blue());
+    if let Some(file) = context_file {
+        println!(
+            "{} {}",
+            format!("🧪 Running Tests for:").bold().blue(),
+            file.display()
+        );
+    } else {
+        println!("{}", "🧪 Running Tests".bold().blue());
+    }
     println!();
 
     let overall_start = Instant::now();
@@ -159,11 +291,11 @@ fn run_tests_with_formatting(
         );
     }
 
-    Ok(())
+    Ok((passed, failed))
 }
 
-pub fn list_tests(input: PathBuf) -> anyhow::Result<()> {
-    let content = std::fs::read_to_string(&input)
+fn list_tests_file(input: PathBuf) -> anyhow::Result<()> {
+    let content = fs::read_to_string(&input)
         .with_context(|| format!("Failed to read test file: {}", input.display()))?;
 
     let available_tests = parse_test_names(&content);
@@ -184,4 +316,73 @@ pub fn list_tests(input: PathBuf) -> anyhow::Result<()> {
     );
 
     Ok(())
+}
+
+fn collect_veil_files(path: &Path, recursive: bool) -> anyhow::Result<Vec<PathBuf>> {
+    let mut results = Vec::new();
+
+    if path.is_file() {
+        if path.extension().and_then(|s| s.to_str()) == Some("veil") {
+            results.push(path.to_path_buf());
+        }
+        return Ok(results);
+    }
+
+    if !path.is_dir() {
+        return Ok(results);
+    }
+
+    if recursive {
+        let mut stack = vec![path.to_path_buf()];
+        while let Some(curr) = stack.pop() {
+            for entry in fs::read_dir(&curr).with_context(|| {
+                format!(
+                    "Failed to read directory while scanning: {}",
+                    curr.display()
+                )
+            })? {
+                let entry = entry?;
+                let p = entry.path();
+                if p.is_dir() {
+                    stack.push(p);
+                } else if p.is_file() && p.extension().and_then(|s| s.to_str()) == Some("veil") {
+                    results.push(p);
+                }
+            }
+        }
+    } else {
+        for entry in fs::read_dir(path).with_context(|| {
+            format!(
+                "Failed to read directory while scanning: {}",
+                path.display()
+            )
+        })? {
+            let entry = entry?;
+            let p = entry.path();
+            if p.is_file() && p.extension().and_then(|s| s.to_str()) == Some("veil") {
+                results.push(p);
+            }
+        }
+    }
+
+    results.sort_by(|a, b| a.display().to_string().cmp(&b.display().to_string()));
+    Ok(results)
+}
+
+fn default_target_triple() -> String {
+    if cfg!(target_os = "windows") {
+        "x86_64-pc-windows-msvc".to_string()
+    } else if cfg!(target_os = "macos") {
+        if std::env::consts::ARCH == "aarch64" {
+            "aarch64-apple-darwin".to_string()
+        } else {
+            "x86_64-apple-darwin".to_string()
+        }
+    } else {
+        if std::env::consts::ARCH == "aarch64" {
+            "aarch64-unknown-linux-gnu".to_string()
+        } else {
+            "x86_64-unknown-linux-gnu".to_string()
+        }
+    }
 }

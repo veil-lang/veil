@@ -64,6 +64,7 @@ pub enum CliCommand {
         test_name: Option<String>,
         verbose: bool,
         list: bool,
+        recursive: bool,
     },
 }
 
@@ -146,7 +147,6 @@ enum Command {
         channel: Option<crate::cli::upgrade::Channel>,
     },
     Test {
-        #[arg(value_parser = validate_ve_file)]
         input: PathBuf,
         #[arg(short, long)]
         test_name: Option<String>,
@@ -154,6 +154,12 @@ enum Command {
         verbose: bool,
         #[arg(long, help = "List available tests")]
         list: bool,
+        #[arg(
+            short = 'r',
+            long,
+            help = "Scan directories recursively for .veil files"
+        )]
+        recursive: bool,
     },
 }
 
@@ -235,11 +241,13 @@ pub fn parse() -> anyhow::Result<CliCommand> {
             test_name,
             verbose,
             list,
+            recursive,
         }) => Ok(CliCommand::Test {
             input,
             test_name,
             verbose,
             list,
+            recursive,
         }),
         None => {
             let input = args
