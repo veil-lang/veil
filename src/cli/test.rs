@@ -6,6 +6,29 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Instant;
 
+fn default_target_triple() -> String {
+    let arch = std::env::consts::ARCH;
+    let os = std::env::consts::OS;
+    match os {
+        "windows" => "x86_64-pc-windows-msvc".to_string(),
+        "macos" => match arch {
+            "aarch64" => "aarch64-apple-darwin".to_string(),
+            _ => "x86_64-apple-darwin".to_string(),
+        },
+        "linux" => match arch {
+            "aarch64" => "aarch64-unknown-linux-gnu".to_string(),
+            _ => "x86_64-unknown-linux-gnu".to_string(),
+        },
+        _ => "x86_64-unknown-linux-gnu".to_string(),
+    }
+}
+
+fn default_output_path() -> PathBuf {
+    let is_windows = std::env::consts::OS == "windows";
+    let filename = if is_windows { "program.exe" } else { "program" };
+    PathBuf::from("build").join(filename)
+}
+
 pub fn run_test(
     input: PathBuf,
     test_name: Option<String>,
@@ -39,13 +62,16 @@ pub fn run_test(
     } else {
         available_tests
     };
+    let output = default_output_path();
+    let target_triple = default_target_triple();
     let executable_path = process_build(
         input.clone(),
-        "build/program.exe".into(),
+        output,
         false,
-        "x86_64-pc-windows-msvc".into(),
+        target_triple,
         verbose,
         true,
+        false,
     )?;
 
     run_tests_with_formatting(&executable_path, &tests_to_run, verbose)

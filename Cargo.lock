@@ -1130,6 +1130,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "veil-diagnostics"
+version = "0.0.1"
+dependencies = [
+ "codespan",
+ "codespan-reporting",
+ "thiserror 2.0.16",
+]
+
+[[package]]
+name = "veil-lexer"
+version = "0.0.1"
+
+[[package]]
+name = "veil-syntax"
+version = "0.0.1"
+dependencies = [
+ "codespan",
+ "pest",
+ "pest_derive",
+ "pest_meta",
+ "veil-diagnostics",
+ "veil-lexer",
+]
+
+[[package]]
 name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"

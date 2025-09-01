@@ -1,3 +1,25 @@
+[workspace]
+resolver = "2"
+members = ["crates/lexer", "crates/diagnostics", "crates/syntax"]
+# Planned workspace crates (to be added as they are created):
+#   crates/diagnostics
+#   crates/syntax
+#   crates/ast
+#   crates/hir
+#   crates/lower
+#   crates/resolve
+#   crates/typeck
+#   crates/normalize
+#   crates/mono
+#   crates/ir
+#   crates/codegen-c
+#   crates/compiler
+#   crates/runtime
+#   crates/attr
+#   crates/helpers
+#   crates/cli
+#   apps/vec
+
 [package]
 name = "ve"
 version = "0.2.0-beta.4"

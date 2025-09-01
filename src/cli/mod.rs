@@ -39,6 +39,7 @@ pub enum CliCommand {
         optimize: bool,
         target_triple: String,
         verbose: bool,
+        skip_cc: bool,
     },
     Init {
         directory: PathBuf,
@@ -94,6 +95,9 @@ pub struct Args {
     #[arg(short, long)]
     verbose: bool,
 
+    #[arg(long, help = "Skip C compilation and execution (generate C only)")]
+    no_cc: bool,
+
     #[arg(long)]
     iterations: Option<usize>,
 }
@@ -115,6 +119,9 @@ enum Command {
 
         #[arg(short, long)]
         verbose: bool,
+
+        #[arg(long, help = "Skip C compilation and execution (generate C only)")]
+        no_cc: bool,
     },
     Init {
         project_name: String,
@@ -195,12 +202,14 @@ pub fn parse() -> anyhow::Result<CliCommand> {
             optimize,
             target_triple,
             verbose,
+            no_cc,
         }) => Ok(CliCommand::Build {
             input,
             output,
             optimize,
             target_triple: target_triple.unwrap_or_else(default_target_triple),
             verbose,
+            skip_cc: no_cc,
         }),
         Some(Command::Init {
             directory,
@@ -258,6 +267,7 @@ pub fn parse() -> anyhow::Result<CliCommand> {
                 optimize: args.optimize,
                 target_triple: args.target_triple.unwrap_or_else(default_target_triple),
                 verbose: args.verbose,
+                skip_cc: args.no_cc,
             })
         }
     }
@@ -270,6 +280,7 @@ pub fn process_build(
     target_triple: String,
     verbose: bool,
     is_test: bool,
+    skip_cc: bool,
 ) -> anyhow::Result<PathBuf> {
     let build_dir = input
         .parent()
@@ -451,6 +462,19 @@ pub fn process_build(
     );
 
     target.compile(&program, &c_file)?;
+    if skip_cc {
+        if verbose {
+            println!(
+                "{}",
+                "Skipping C compilation and execution (--no-cc)".yellow()
+            );
+            println!(
+                "{}",
+                format!("Generated C file at: {}", c_file.display()).green()
+            );
+        }
+        return Ok(c_file);
+    }
 
     if verbose {
         println!(
