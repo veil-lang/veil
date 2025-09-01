@@ -1,5 +1,6 @@
 use anyhow::Result;
 use codespan::{FileId, Files};
+use std::fs;
 use std::path::{Path, PathBuf};
 
 pub fn extract_line_col_from_error(
