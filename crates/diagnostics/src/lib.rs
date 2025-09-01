@@ -16,8 +16,6 @@
 //! - Advanced formatting policies
 //! - Rich fix-it application (we expose helpers as notes)
 
-use std::io;
-
 pub use codespan::{FileId, Files, Span};
 pub use codespan_reporting::diagnostic::{Diagnostic, Label, Severity};
 pub use codespan_reporting::term;
@@ -132,12 +130,20 @@ impl Reporter {
     }
 
     /// Emit a single diagnostic.
-    pub fn emit(&mut self, files: &Files<String>, diag: &Diag) -> io::Result<()> {
+    pub fn emit(
+        &mut self,
+        files: &Files<String>,
+        diag: &Diag,
+    ) -> Result<(), codespan_reporting::files::Error> {
         term::emit(&mut self.writer.lock(), &self.config, files, diag)
     }
 
     /// Emit multiple diagnostics.
-    pub fn emit_all<'a, I>(&mut self, files: &Files<String>, diagnostics: I) -> io::Result<()>
+    pub fn emit_all<'a, I>(
+        &mut self,
+        files: &Files<String>,
+        diagnostics: I,
+    ) -> Result<(), codespan_reporting::files::Error>
     where
         I: IntoIterator<Item = &'a Diag>,
     {
@@ -155,7 +161,7 @@ impl Reporter {
         &mut self,
         files: &Files<String>,
         diagnostics: I,
-    ) -> io::Result<Option<Diag>>
+    ) -> Result<Option<Diag>, codespan_reporting::files::Error>
     where
         I: IntoIterator<Item = &'a Diag>,
     {

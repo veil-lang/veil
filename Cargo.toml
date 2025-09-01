@@ -34,6 +34,7 @@ name = "ve"
 path = "src/main.rs"
 
 [dependencies]
+veil-syntax = { path = "crates/syntax" }
 pest = "2.8.1"
 pest_derive = "2.8.1"
 pest_meta = "2.8.1"

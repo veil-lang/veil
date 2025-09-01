@@ -1125,6 +1125,7 @@ dependencies = [
  "shell-words",
  "tempfile",
  "ureq",
+ "veil-syntax",
  "which",
  "winres",
 ]

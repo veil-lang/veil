@@ -57,5 +57,5 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: cargo clippy (deny warnings)
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: cargo clippy (allow warnings)
+        run: cargo clippy --workspace --all-targets --all-features

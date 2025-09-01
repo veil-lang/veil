@@ -1,5 +1,6 @@
 use codespan::{FileId, Files, Span};
 use logos::Logos;
+use veil_syntax::{RawToken, lex_raw};
 
 #[derive(Logos, Debug, PartialEq, Clone)]
 pub enum Token {
@@ -244,14 +245,173 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn tokens(&self) -> Vec<(Token, Span)> {
-        let source = self.files.source(self.file_id);
-        Token::lexer(source)
-            .spanned()
-            .filter_map(|(token, span)| {
-                token
-                    .ok()
-                    .map(|t| (t, Span::new(span.start as u32, span.end as u32)))
-            })
-            .collect()
+        let mut out: Vec<(Token, Span)> = Vec::new();
+
+        match lex_raw(self.files, self.file_id) {
+            Ok(raws) => {
+                for r in raws {
+                    let mapped: Option<Token> = match &r.token {
+                        RawToken::Ident(s) => {
+                            // Map reserved words not explicitly tokenized by grammar
+                            match s.as_str() {
+                                "break" => Some(Token::KwBreak),
+                                "continue" => Some(Token::KwContinue),
+                                _ => Some(Token::Ident(s.clone())),
+                            }
+                        }
+                        RawToken::Int(s) => {
+                            // Normalize hex/bin to decimal string like the previous logos lexer
+                            if let Some(rest) = s.strip_prefix("0x") {
+                                match i64::from_str_radix(rest, 16) {
+                                    Ok(n) => Some(Token::Int(n.to_string())),
+                                    Err(_) => Some(Token::Int("0".to_string())),
+                                }
+                            } else if let Some(rest) = s.strip_prefix("0b") {
+                                match i64::from_str_radix(rest, 2) {
+                                    Ok(n) => Some(Token::Int(n.to_string())),
+                                    Err(_) => Some(Token::Int("0".to_string())),
+                                }
+                            } else {
+                                Some(Token::Int(s.clone()))
+                            }
+                        }
+                        RawToken::Float(s) => match s.parse::<f64>() {
+                            Ok(v) => Some(Token::F64(v)),
+                            Err(_) => None,
+                        },
+                        RawToken::Str(s) => {
+                            // Strip surrounding quotes
+                            if s.len() >= 2 {
+                                Some(Token::Str(s[1..s.len().saturating_sub(1)].to_string()))
+                            } else {
+                                Some(Token::Str(String::new()))
+                            }
+                        }
+                        RawToken::TemplateStr(s) => {
+                            // Strip surrounding backticks
+                            if s.len() >= 2 {
+                                Some(Token::TemplateStr(
+                                    s[1..s.len().saturating_sub(1)].to_string(),
+                                ))
+                            } else {
+                                Some(Token::TemplateStr(String::new()))
+                            }
+                        }
+                        RawToken::Keyword(k) => {
+                            let t = match k.as_str() {
+                                "fn" => Token::KwFn,
+                                "test" => Token::KwTest,
+                                "let" => Token::KwLet,
+                                "var" => Token::KwVar,
+                                "if" => Token::KwIf,
+                                "else" => Token::KwElse,
+                                "return" => Token::KwReturn,
+                                "rawptr" => Token::KwRawPtr,
+                                "defer" => Token::KwDefer,
+                                "safe" => Token::KwSafe,
+                                "as" => Token::KwAs,
+                                "while" => Token::KwWhile,
+                                "for" => Token::KwFor,
+                                "step" => Token::KwStep,
+                                "loop" => Token::KwLoop,
+                                "import" => Token::KwImport,
+                                "from" => Token::KwFrom,
+                                "export" => Token::KwExport,
+                                "struct" => Token::KwStruct,
+                                "impl" => Token::KwImpl,
+                                "new" => Token::KwNew,
+                                "constructor" => Token::KwConstructor,
+                                "enum" => Token::KwEnum,
+                                "match" => Token::KwMatch,
+                                "true" => Token::KwTrue,
+                                "false" => Token::KwFalse,
+                                "None" | "none" => Token::KwNone,
+                                "in" => Token::KwIn,
+                                "foreign" => Token::Foreign,
+                                // Fallback to identifier if something slipped through
+                                other => Token::Ident(other.to_string()),
+                            };
+                            Some(t)
+                        }
+                        RawToken::TypeKeyword(tk) => {
+                            let t = match tk.as_str() {
+                                "bool" => Token::TyBool,
+                                "string" => Token::TyString,
+                                "void" => Token::TyVoid,
+                                "any" => Token::TyAny,
+                                "byte" | "u8" => Token::TyU8,
+                                "ushort" | "u16" => Token::TyU16,
+                                "uint" | "u32" => Token::TyU32,
+                                "ulong" | "u64" => Token::TyU64,
+                                "sbyte" | "i8" => Token::TyI8,
+                                "short" | "i16" => Token::TyI16,
+                                "int" | "i32" => Token::TyI32,
+                                "long" | "i64" => Token::TyI64,
+                                "float" | "f32" => Token::TyF32,
+                                "double" | "f64" => Token::TyF64,
+                                other => Token::Ident(other.to_string()),
+                            };
+                            Some(t)
+                        }
+                        RawToken::Symbol(sym) => {
+                            let t = match sym.as_str() {
+                                "..." => Token::Ellipsis,
+                                "**" => Token::DoubleStar,
+                                "->" => Token::Arrow,
+                                "=>" => Token::Arrow2,
+                                "==" => Token::EqEq,
+                                "!=" => Token::NotEq,
+                                ">=" => Token::GtEq,
+                                "<=" => Token::LtEq,
+                                "..=" => Token::DotDotEq,
+                                "..>" => Token::DotDotGt,
+                                "..<" => Token::DotDotLt,
+                                ".." => Token::DotDot,
+                                "." => Token::Dot,
+                                "(" => Token::LParen,
+                                ")" => Token::RParen,
+                                "{" => Token::LBrace,
+                                "}" => Token::RBrace,
+                                "[" => Token::LBracket,
+                                "]" => Token::RBracket,
+                                "[]" => Token::EmptyArray,
+                                "," => Token::Comma,
+                                "=" => Token::Eq,
+                                ";" => Token::Semi,
+                                "+" => Token::Plus,
+                                "-" => Token::Minus,
+                                "*" => Token::Star,
+                                "/" => Token::Slash,
+                                "^" => Token::Caret,
+                                "%" => Token::Percent,
+                                ">" => Token::Gt,
+                                "<" => Token::Lt,
+                                "|" => Token::Pipe,
+                                "#" => Token::Hash,
+                                "!" => Token::Bang,
+                                "?" => Token::Question,
+                                ":" => Token::Colon,
+                                _ => {
+                                    // Unknown punctuation: drop it to mimic previous logos behavior on invalid tokens
+                                    // (logos would return None on invalid matches)
+                                    // You can add more mappings here as grammar expands.
+                                    continue;
+                                }
+                            };
+                            Some(t)
+                        }
+                    };
+
+                    if let Some(tok) = mapped {
+                        out.push((tok, r.span));
+                    }
+                }
+            }
+            Err(_diags) => {
+                // On lexing error, return empty token stream to trigger parser diagnostics later.
+            }
+        }
+
+        out
     }
 }
