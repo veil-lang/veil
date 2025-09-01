@@ -18,16 +18,6 @@
 //!   re-export the root crate’s AST module (`ve::ast::*`). This can be useful when the
 //!   include-path approach is undesirable on a particular setup.
 //!
-//! Migration path
-//! - Once the AST is moved into this crate for real, the `include!` and `reexport-root` paths
-//!   will be removed and the types will live natively here.
-
-/// Re-export the root crate AST (`ve::ast::*`) when the `reexport-root` feature is enabled.
-/// This avoids textual inclusion but requires the root crate to be a build-time dependency
-/// and may create a cycle if the root crate depends back on `veil-ast`.
-#[cfg(feature = "reexport-root")]
-pub use ve::ast::*;
-
 /// Default path: include the current root AST source directly.
 ///
 /// Notes:

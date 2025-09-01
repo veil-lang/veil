@@ -1160,6 +1160,7 @@ dependencies = [
  "pest",
  "pest_derive",
  "pest_meta",
+ "veil-ast",
  "veil-diagnostics",
  "veil-lexer",
 ]

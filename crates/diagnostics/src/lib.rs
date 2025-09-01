@@ -188,7 +188,8 @@ mod tests {
 
     #[test]
     fn build_error_with_code_and_help() {
-        let fid = FileId::from_raw(1);
+        let mut files = Files::<String>::new();
+        let fid = files.add("test.veil".to_string(), "test content".to_string());
         let span = Span::new(10, 20);
         let diag = error_with("VE0001", "Expected identifier", fid, span)
             .with_labels(vec![

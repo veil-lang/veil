@@ -400,13 +400,13 @@ impl IncrementalCompiler {
             let mut files = codespan::Files::<String>::new();
             let file_id = files.add(normalized_current.to_string_lossy().to_string(), content);
 
-            let lexer = crate::lexer::Lexer::new(&files, file_id);
-            let mut parser = crate::parser::Parser::new(lexer);
-            let mut program = parser.parse().map_err(|e| {
-                crate::helpers::print_parse_error(&files, file_id, &e, &normalized_current);
-                let line_col = crate::helpers::extract_line_col_from_error(&files, file_id, &e);
+            let mut program = veil_syntax::parse_ast(&files, file_id).map_err(|diags| {
                 let clean_path = normalized_current.to_string_lossy().replace("\\\\?\\", "");
-                anyhow::anyhow!("{}:{}: {}", clean_path, line_col, e.message)
+                let msg = diags
+                    .first()
+                    .map(|_| "Parse error")
+                    .unwrap_or("Parse error");
+                anyhow::anyhow!("{}:{}: {}", clean_path, 0, msg)
             })?;
             let is_prelude_module = normalized_current
                 .to_string_lossy()
@@ -646,13 +646,13 @@ impl IncrementalCompiler {
         let mut files = codespan::Files::<String>::new();
         let file_id = files.add(entry_point.to_string_lossy().to_string(), content);
 
-        let lexer = crate::lexer::Lexer::new(&files, file_id);
-        let mut parser = crate::parser::Parser::new(lexer);
-        let mut program = parser.parse().map_err(|e| {
-            crate::helpers::print_parse_error(&files, file_id, &e, entry_point);
-            let line_col = crate::helpers::extract_line_col_from_error(&files, file_id, &e);
+        let mut program = veil_syntax::parse_ast(&files, file_id).map_err(|diags| {
             let clean_path = entry_point.to_string_lossy().replace("\\\\?\\", "");
-            anyhow::anyhow!("{}:{}: {}", clean_path, line_col, e.message)
+            let msg = diags
+                .first()
+                .map(|_| "Parse error")
+                .unwrap_or("Parse error");
+            anyhow::anyhow!("{}:{}: {}", clean_path, 0, msg)
         })?;
 
         let is_prelude_module = entry_point.to_string_lossy().ends_with("prelude.veil");

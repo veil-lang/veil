@@ -177,13 +177,7 @@ pub fn merge_impl_blocks(program: &mut Program) -> Result<(), String> {
     let mut parsed_map: HashMap<String, Option<Type>> = HashMap::new();
 
     for ib in &program.impls {
-        let key = if ib.target_type.ends_with("[]") {
-            ib.target_type.clone()
-        } else if ib.target_type.starts_with("[]") {
-            ib.target_type.clone()
-        } else {
-            ib.target_type.clone()
-        };
+        let key = ib.target_type.clone();
 
         let entry = map.entry(key.clone()).or_default();
         for m in &ib.methods {

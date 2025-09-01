@@ -25,3 +25,4 @@ codespan = "0.11.1"
 # Workspace crates
 veil-lexer = { path = "../lexer" }
 veil-diagnostics = { path = "../diagnostics" }
+veil-ast = { path = "../ast" }
