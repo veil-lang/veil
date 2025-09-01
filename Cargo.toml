@@ -12,6 +12,9 @@ name = "ve"
 path = "src/main.rs"
 
 [dependencies]
+pest = "2.8.1"
+pest_derive = "2.8.1"
+pest_meta = "2.8.1"
 logos = "0.15.0"
 codespan = "0.11.1"
 codespan-reporting = "0.11.0"
