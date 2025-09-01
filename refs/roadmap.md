@@ -41,6 +41,7 @@ Checklist
 - [ ] Tokens: const/pub/str/ch/:: wired in lexer and parseable (no codegen change).
 - [ ] Minimal tests: prelude, division, tokens smoke tests.
 - [ ] Pest grammar and adapter scaffolding at src/parser/grammar/veil.pest and src/parser/pest_adapter.rs; make Pest the default parser; add smoke tests and AST golden fixtures.
+- [ ] Parser: Add increment/decrement operators (++, --) with postfix support.
 
 Acceptance Criteria
 
@@ -69,10 +70,13 @@ Scope
 
 Checklist
 
-- [ ] Declarations: `const/var` (destructuring basic), `let` warns.
+- [ ] Declarations: `const/var` with destructuring support (identifier_list), `let` warns.
 - [ ] Visibility parsed and attached to AST nodes.
 - [ ] Module paths `::` parsing (and `/`).
-- [ ] Tests: const/var, visibility presence, `::` imports.
+- [ ] Parser: Add labeled loops support (`identifier ':' loop`).
+- [ ] Parser: Add `let pattern =` support in while loops.
+- [ ] Parser: Add label support for break/continue statements.
+- [ ] Tests: const/var with destructuring, visibility presence, `::` imports, labeled loops.
 
 Acceptance Criteria
 
@@ -102,6 +106,7 @@ Checklist
 - [ ] Precedence table updated to spec.
 - [ ] New tokens parsed with correct associativity.
 - [ ] Transitional logical ops (`&&`/`||`) warn.
+- [ ] Parser: Add missing operators (`is`, `is not`, `in`, `not in`).
 - [ ] Tests: precedence conformance suite.
 - [ ] Port new operators and precedence to veil.pest; validate AST against golden expectations in CI.
 
@@ -161,7 +166,9 @@ Checklist
 
 - [ ] Types: parse unions/intersections, refs/pointers/weak, dyn.
 - [ ] Postfix `?` parsed and typed.
-- [ ] Tests: unions/intersections smoke; optional flows; type aliases.
+- [ ] Parser: Advanced pattern matching - rest patterns (...), @ bindings, reference patterns (&pattern), range patterns.
+- [ ] Parser: Try expressions (`try { ... }`).
+- [ ] Tests: unions/intersections smoke; optional flows; type aliases; advanced patterns.
 
 Acceptance Criteria
 
@@ -250,8 +257,10 @@ Scope
 Checklist
 
 - [ ] Async grammar and typing.
+- [ ] Parser: Async blocks (`async { ... }`), async closures (`async |args| { ... }`).
+- [ ] Parser: Basic closure expressions (`|args| expr`, `|args| { ... }`).
 - [ ] Minimal runtime shims in C header.
-- [ ] Tests for structured concurrency basics.
+- [ ] Tests for structured concurrency basics, closures, async blocks.
 
 Acceptance Criteria
 
@@ -279,6 +288,8 @@ Scope
 
 Checklist
 
+- [ ] Parser: Unsafe blocks (`unsafe { ... }`) with proper scoping.
+- [ ] Parser: Comptime blocks (`comptime { ... }`) for metaprogramming.
 - [ ] Unsafe gating and diagnostics.
 - [ ] Union read rules enforced.
 - [ ] FFI polish where needed.
@@ -554,7 +565,7 @@ Release Readiness Checklist
 
 ## Milestone-to-Feature Traceability
 
-- Grammar (0.3, 0.4, 0.6)
+- Grammar (0.3, 0.4, 0.6, 0.9, 0.10) - Core syntax (0.3-0.4), advanced patterns (0.6), closures/async blocks (0.9), unsafe/comptime blocks (0.10)
 - Modules/Visibility (0.5, 0.15)
 - Traits (0.7)
 - HIR/IR/Mono (0.8)
@@ -583,6 +594,13 @@ Release Readiness Checklist
 ## Success Criteria for 1.0
 
 - Feature completeness vs. refs (documented any deliberate deferrals).
+- Parser covers 95%+ of language specification including:
+  - Advanced patterns (rest, @-bindings, references, ranges)
+  - Closures and first-class functions
+  - Async blocks and comprehensive async support
+  - Unsafe and comptime blocks
+  - Destructuring in variable declarations
+  - Labeled loops and enhanced control flow
 - Stable CLI and compilation model; fast incremental builds.
 - Clear diagnostics with actionable fixes.
 - Solid tests across parser/typeck/codegen/runtime; examples match spec.
