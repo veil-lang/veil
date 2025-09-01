@@ -1,0 +1,18 @@
+[package]
+name = "veil-ast"
+version = "0.0.1"
+edition = "2024"
+publish = false
+description = "AST data structures for the Veil compiler; facade crate for re-exporting AST types."
+
+[lib]
+name = "veil_ast"
+path = "src/lib.rs"
+
+[features]
+default = []
+reexport-root = []
+
+[dependencies]
+codespan = "0.11.1"
+codespan-reporting = "0.11.0"

@@ -1,16 +1,5 @@
-extern crate codespan;
-extern crate codespan_reporting;
-
-mod ast;
-mod cli;
-mod codegen;
-mod compiler;
-mod helpers;
-mod lexer;
-mod parser;
-mod typeck;
-
 use anyhow::Result;
+use ve::cli;
 
 fn main() -> Result<()> {
     let should_check_updates = std::env::args().nth(1).as_deref() != Some("upgrade");

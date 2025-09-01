@@ -1125,9 +1125,18 @@ dependencies = [
  "shell-words",
  "tempfile",
  "ureq",
+ "veil-ast",
  "veil-syntax",
  "which",
  "winres",
+]
+
+[[package]]
+name = "veil-ast"
+version = "0.0.1"
+dependencies = [
+ "codespan",
+ "codespan-reporting",
 ]
 
 [[package]]

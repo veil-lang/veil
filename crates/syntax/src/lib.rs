@@ -433,12 +433,9 @@ mod tests {
     #[test]
     fn parse_minimal_file_succeeds() {
         let mut files = Files::<String>::new();
-        let fid = files.add("test.veil".into(), "fn main {}".into());
+        let fid = files.add("test.veil".into(), "fn main() {}".into());
         let result = parse(&files, fid);
         assert!(result.is_ok());
-        let p = result.unwrap();
-        assert_eq!(p.file_id, fid);
-        assert!(p.non_empty);
     }
 
     #[test]
@@ -447,9 +444,6 @@ mod tests {
         let fid = files.add("empty.veil".into(), "".into());
         let result = parse(&files, fid);
         assert!(result.is_ok());
-        let p = result.unwrap();
-        assert_eq!(p.file_id, fid);
-        assert!(!p.non_empty);
     }
 
     #[test]

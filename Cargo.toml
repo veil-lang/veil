@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/lexer", "crates/diagnostics", "crates/syntax"]
+members = ["crates/lexer", "crates/diagnostics", "crates/syntax", "crates/ast"]
 # Planned workspace crates (to be added as they are created):
 #   crates/diagnostics
 #   crates/syntax
@@ -35,6 +35,7 @@ path = "src/main.rs"
 
 [dependencies]
 veil-syntax = { path = "crates/syntax" }
+veil-ast = { path = "crates/ast" }
 pest = "2.8.1"
 pest_derive = "2.8.1"
 pest_meta = "2.8.1"

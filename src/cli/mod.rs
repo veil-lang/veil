@@ -1,6 +1,6 @@
 pub mod benchmark;
 pub mod init;
-pub(crate) mod run;
+pub mod run;
 pub mod test;
 pub mod upgrade;
 
