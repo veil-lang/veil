@@ -1,0 +1,13 @@
+fn main() -> i32 {
+  bb0:
+    %0 = const.i64 1
+    br %0, bb1, bb2
+  bb1:
+    %1 = const.i64 0
+    jmp bb2
+  bb2:
+    %2 = const.i64 0
+    %3 = select %0, %1, %2
+    %4 = const.i64 0
+    ret %4
+}

@@ -1,0 +1,5 @@
+fn main() -> i32 {
+  bb0:
+    %0 = const.i64 42
+    ret %0
+}

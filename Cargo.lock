@@ -568,6 +568,7 @@ checksum = "f2481980430f9f78649238835720ddccc57e52df14ffce1c6f37391d61b563e9"
 dependencies = [
  "equivalent",
  "hashbrown",
+ "serde",
 ]
 
 [[package]]
@@ -1193,8 +1194,10 @@ dependencies = [
  "tempfile",
  "ureq",
  "veil-ast",
+ "veil-codegen-c",
  "veil-diagnostics",
  "veil-hir",
+ "veil-ir",
  "veil-mono",
  "veil-normalize",
  "veil-resolve",
@@ -1213,6 +1216,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "veil-codegen-c"
+version = "0.1.0"
+dependencies = [
+ "veil-ir",
+]
+
+[[package]]
 name = "veil-diagnostics"
 version = "0.0.1"
 dependencies = [
@@ -1228,6 +1238,18 @@ dependencies = [
  "codespan",
  "indexmap",
  "veil-ast",
+]
+
+[[package]]
+name = "veil-ir"
+version = "0.0.1"
+dependencies = [
+ "ahash",
+ "indexmap",
+ "serde",
+ "serde_json",
+ "veil-ast",
+ "veil-hir",
 ]
 
 [[package]]

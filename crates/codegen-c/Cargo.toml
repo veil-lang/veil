@@ -1,0 +1,14 @@
+[package]
+name = "veil-codegen-c"
+version = "0.1.0"
+edition = "2024"
+description = "C backend for Veil compiler that consumes the IR and emits C translation units"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lib]
+name = "veil_codegen_c"
+path = "src/lib.rs"
+
+[dependencies]
+veil-ir = { path = "../ir" }

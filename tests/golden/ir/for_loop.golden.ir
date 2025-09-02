@@ -1,0 +1,14 @@
+fn main() -> i32 {
+  bb0:
+    %0 = nop
+    jmp bb1
+  bb1:
+    %1 = call iter_has_next(%0)
+    br %1, bb2, bb3
+  bb2:
+    %2 = call iter_next(%0)
+    jmp bb1
+  bb3:
+    %3 = const.i64 0
+    ret %3
+}

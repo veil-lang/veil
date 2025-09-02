@@ -1180,7 +1180,7 @@ mod tests {
                 Default::default(),
             )],
             span: Default::default(),
-            visibility: Default::default(),
+            visibility: ast::Visibility::Public,
         };
 
         // main uses id(1)
@@ -1197,12 +1197,19 @@ mod tests {
             return_type: Type::I32,
             body: vec![Stmt::Return(call, Default::default())],
             span: Default::default(),
-            visibility: Default::default(),
+            visibility: ast::Visibility::Public,
         };
 
         let program = ast::Program {
+            imports: Vec::new(),
+            stmts: Vec::new(),
             functions: vec![id_fn.clone(), main_fn.clone()],
-            ..Default::default()
+            structs: Vec::new(),
+            enums: Vec::new(),
+            impls: Vec::new(),
+            ffi_functions: Vec::new(),
+            ffi_variables: Vec::new(),
+            tests: Vec::new(),
         };
 
         let mono = Monomorphizer::new(Default::default());

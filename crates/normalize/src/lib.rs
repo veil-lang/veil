@@ -698,6 +698,160 @@ impl Normalizer {
             }
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use veil_hir::*;
+
+    fn span0() -> codespan::Span {
+        codespan::Span::new(0, 1)
+    }
+
+    fn program_with_item(item: HirItem) -> HirProgram {
+        let mut span_map = SpanMap::new();
+        span_map.insert(item.id, span0());
+        HirProgram {
+            module_id: ModuleId::new(0),
+            items: vec![item],
+            span_map,
+        }
+    }
+
+    #[test]
+    fn normalize_pipeline_to_call() {
+        // Build: fn main() { a |> b }
+        let a_id = NodeId::new(10);
+        let b_id = NodeId::new(11);
+        let pipe_id = NodeId::new(12);
+        let block_id = NodeId::new(13);
+        let func_id = NodeId::new(1);
+
+        let expr = HirExpr {
+            id: pipe_id,
+            kind: Box::new(HirExprKind::Pipeline {
+                expr: Box::new(HirExpr {
+                    id: a_id,
+                    kind: Box::new(HirExprKind::Variable("a".to_string())),
+                }),
+                func: Box::new(HirExpr {
+                    id: b_id,
+                    kind: Box::new(HirExprKind::Variable("b".to_string())),
+                }),
+            }),
+        };
+
+        let mut program = program_with_item(HirItem {
+            id: func_id,
+            visibility: HirVisibility::Private,
+            kind: HirItemKind::Function(HirFunction {
+                id: func_id,
+                name: "main".to_string(),
+                symbol_id: None,
+                generic_params: vec![],
+                params: vec![],
+                return_type: HirType::Void,
+                body: HirBlock {
+                    id: block_id,
+                    stmts: vec![],
+                    expr: Some(Box::new(expr)),
+                },
+            }),
+        });
+
+        // Add spans
+        program.span_map.insert(a_id, span0());
+        program.span_map.insert(b_id, span0());
+        program.span_map.insert(pipe_id, span0());
+        program.span_map.insert(block_id, span0());
+
+        normalize_program(&mut program);
+
+        // Inspect normalized expr
+        let HirItemKind::Function(f) = &program.items[0].kind else {
+            panic!("not function")
+        };
+        let Some(e) = &f.body.expr else {
+            panic!("no expr")
+        };
+        match &*e.kind {
+            HirExprKind::Call { func, args } => {
+                match &*func.kind {
+                    HirExprKind::Variable(name) => assert_eq!(name, "b"),
+                    _ => panic!("func should be variable b"),
+                }
+                assert_eq!(args.len(), 1);
+                match &*args[0].kind {
+                    HirExprKind::Variable(name) => assert_eq!(name, "a"),
+                    _ => panic!("arg should be variable a"),
+                }
+            }
+            _ => panic!("pipeline should be normalized to call"),
+        }
+    }
+
+    #[test]
+    fn normalize_postfix_increment_variable() {
+        // Build: fn main() { x++ }
+        let x_id = NodeId::new(20);
+        let post_id = NodeId::new(21);
+        let block_id = NodeId::new(22);
+        let func_id = NodeId::new(2);
+
+        let expr = HirExpr {
+            id: post_id,
+            kind: Box::new(HirExprKind::PostfixIncrement(Box::new(HirExpr {
+                id: x_id,
+                kind: Box::new(HirExprKind::Variable("x".to_string())),
+            }))),
+        };
+
+        let mut program = program_with_item(HirItem {
+            id: func_id,
+            visibility: HirVisibility::Private,
+            kind: HirItemKind::Function(HirFunction {
+                id: func_id,
+                name: "main".to_string(),
+                symbol_id: None,
+                generic_params: vec![],
+                params: vec![],
+                return_type: HirType::Void,
+                body: HirBlock {
+                    id: block_id,
+                    stmts: vec![HirStmt {
+                        id: NodeId::new(30),
+                        kind: HirStmtKind::Expr(expr),
+                    }],
+                    expr: None,
+                },
+            }),
+        });
+
+        // Add spans
+        program.span_map.insert(x_id, span0());
+        program.span_map.insert(post_id, span0());
+        program.span_map.insert(block_id, span0());
+
+        normalize_program(&mut program);
+
+        let HirItemKind::Function(f) = &program.items[0].kind else {
+            panic!("not function")
+        };
+        match &f.body.stmts[0].kind {
+            HirStmtKind::Expr(e) => {
+                // Expect block after normalization
+                match &*e.kind {
+                    HirExprKind::Block(b) => {
+                        assert_eq!(b.stmts.len(), 2, "let tmp; assign");
+                        assert!(b.expr.is_some(), "tail expression exists");
+                    }
+                    _ => panic!("postfix increment should become block"),
+                }
+            }
+            _ => panic!("first stmt should be expr"),
+        }
+    }
 
     #[test]
     fn normalize_pipeline_chain_to_nested_calls() {
@@ -927,160 +1081,6 @@ impl Normalizer {
                 );
             }
             _ => panic!("postfix '?' should normalize to block with early-return pattern"),
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use veil_hir::*;
-
-    fn span0() -> codespan::Span {
-        codespan::Span::new(0, 1)
-    }
-
-    fn program_with_item(item: HirItem) -> HirProgram {
-        let mut span_map = SpanMap::new();
-        span_map.insert(item.id, span0());
-        HirProgram {
-            module_id: ModuleId::new(0),
-            items: vec![item],
-            span_map,
-        }
-    }
-
-    #[test]
-    fn normalize_pipeline_to_call() {
-        // Build: fn main() { a |> b }
-        let a_id = NodeId::new(10);
-        let b_id = NodeId::new(11);
-        let pipe_id = NodeId::new(12);
-        let block_id = NodeId::new(13);
-        let func_id = NodeId::new(1);
-
-        let expr = HirExpr {
-            id: pipe_id,
-            kind: Box::new(HirExprKind::Pipeline {
-                expr: Box::new(HirExpr {
-                    id: a_id,
-                    kind: Box::new(HirExprKind::Variable("a".to_string())),
-                }),
-                func: Box::new(HirExpr {
-                    id: b_id,
-                    kind: Box::new(HirExprKind::Variable("b".to_string())),
-                }),
-            }),
-        };
-
-        let mut program = program_with_item(HirItem {
-            id: func_id,
-            visibility: HirVisibility::Private,
-            kind: HirItemKind::Function(HirFunction {
-                id: func_id,
-                name: "main".to_string(),
-                symbol_id: None,
-                generic_params: vec![],
-                params: vec![],
-                return_type: HirType::Void,
-                body: HirBlock {
-                    id: block_id,
-                    stmts: vec![],
-                    expr: Some(Box::new(expr)),
-                },
-            }),
-        });
-
-        // Add spans
-        program.span_map.insert(a_id, span0());
-        program.span_map.insert(b_id, span0());
-        program.span_map.insert(pipe_id, span0());
-        program.span_map.insert(block_id, span0());
-
-        normalize_program(&mut program);
-
-        // Inspect normalized expr
-        let HirItemKind::Function(f) = &program.items[0].kind else {
-            panic!("not function")
-        };
-        let Some(e) = &f.body.expr else {
-            panic!("no expr")
-        };
-        match &*e.kind {
-            HirExprKind::Call { func, args } => {
-                match &*func.kind {
-                    HirExprKind::Variable(name) => assert_eq!(name, "b"),
-                    _ => panic!("func should be variable b"),
-                }
-                assert_eq!(args.len(), 1);
-                match &*args[0].kind {
-                    HirExprKind::Variable(name) => assert_eq!(name, "a"),
-                    _ => panic!("arg should be variable a"),
-                }
-            }
-            _ => panic!("pipeline should be normalized to call"),
-        }
-    }
-
-    #[test]
-    fn normalize_postfix_increment_variable() {
-        // Build: fn main() { x++ }
-        let x_id = NodeId::new(20);
-        let post_id = NodeId::new(21);
-        let block_id = NodeId::new(22);
-        let func_id = NodeId::new(2);
-
-        let expr = HirExpr {
-            id: post_id,
-            kind: Box::new(HirExprKind::PostfixIncrement(Box::new(HirExpr {
-                id: x_id,
-                kind: Box::new(HirExprKind::Variable("x".to_string())),
-            }))),
-        };
-
-        let mut program = program_with_item(HirItem {
-            id: func_id,
-            visibility: HirVisibility::Private,
-            kind: HirItemKind::Function(HirFunction {
-                id: func_id,
-                name: "main".to_string(),
-                symbol_id: None,
-                generic_params: vec![],
-                params: vec![],
-                return_type: HirType::Void,
-                body: HirBlock {
-                    id: block_id,
-                    stmts: vec![HirStmt {
-                        id: NodeId::new(30),
-                        kind: HirStmtKind::Expr(expr),
-                    }],
-                    expr: None,
-                },
-            }),
-        });
-
-        // Add spans
-        program.span_map.insert(x_id, span0());
-        program.span_map.insert(post_id, span0());
-        program.span_map.insert(block_id, span0());
-
-        normalize_program(&mut program);
-
-        let HirItemKind::Function(f) = &program.items[0].kind else {
-            panic!("not function")
-        };
-        match &f.body.stmts[0].kind {
-            HirStmtKind::Expr(e) => {
-                // Expect block after normalization
-                match &*e.kind {
-                    HirExprKind::Block(b) => {
-                        assert_eq!(b.stmts.len(), 2, "let tmp; assign");
-                        assert!(b.expr.is_some(), "tail expression exists");
-                    }
-                    _ => panic!("postfix increment should become block"),
-                }
-            }
-            _ => panic!("first stmt should be expr"),
         }
     }
 }

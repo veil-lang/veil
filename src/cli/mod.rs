@@ -10,7 +10,7 @@ use crate::helpers::get_bundled_clang_path;
 #[cfg(target_os = "windows")]
 use crate::helpers::prepare_windows_clang_args;
 use crate::helpers::validate_ve_file;
-use crate::{codegen, typeck};
+
 use anyhow::anyhow;
 use clap::{Parser, Subcommand};
 use codespan::Files;
@@ -398,110 +398,61 @@ pub fn process_build(
         }
     }
 
-    let (imported_functions, imported_structs, imported_ffi_vars) =
-        module_compiler.get_imported_info()?;
     let file_id = module_compiler.get_entry_file_id(&mut files, &input)?;
 
-    let mut type_checker = typeck::TypeChecker::new(
-        file_id,
-        imported_functions.clone(),
-        imported_structs.clone(),
-        imported_ffi_vars.clone(),
-    );
-    match type_checker.check(&mut program) {
-        Ok(()) => {
-            // Lower AST to HIR then normalize HIR after successful type check
-            let module_id = crate::hir::ids::ModuleId::new(0);
-            match crate::hir::lower_program(&program, module_id) {
-                Ok(mut hir_program) => {
-                    veil_normalize::normalize_program(&mut hir_program);
-                    if verbose || dump_norm_hir {
-                        let norm_file = build_dir.join("normalized_hir.txt");
-                        let norm_content = format!("Normalized HIR:\n{:#?}", hir_program);
-                        std::fs::write(&norm_file, norm_content)?;
-                        println!(
-                            "{}",
-                            format!("Normalized HIR saved to: {}", norm_file.display()).green()
-                        );
-                    }
+    // M4+M5: Lower AST → HIR, Resolve, then Type Check on HIR (replace legacy AST checker)
+    let module_id = crate::hir::ids::ModuleId::new(0);
+    let mut hir_program = match crate::hir::lower_program(&program, module_id) {
+        Ok(h) => h,
+        Err(err) => {
+            println!("{}", format!("HIR lowering failed: {}", err).yellow());
+            return Err(anyhow!("HIR lowering failed"));
+        }
+    };
+
+    // Name/module/visibility resolution on HIR
+    match veil_resolve::resolve_program(&mut hir_program) {
+        Ok(resolver_ctx) => {
+            // Type check resolved HIR
+            let mut hir_type_checker = veil_typeck::TypeChecker::new(
+                resolver_ctx.symbol_table.clone(),
+                file_id,
+                Some(module_id),
+            );
+
+            if let Err(errors) = hir_type_checker.check_program(&mut hir_program) {
+                let writer = StandardStream::stderr(ColorChoice::Auto);
+                let config = term::Config::default();
+                println!("=== TYPE CHECKER ERRORS (HIR) ===");
+                println!("Found {} errors", errors.len());
+                for diag in &errors {
+                    let _ = term::emit(&mut writer.lock(), &config, &files, diag);
                 }
-                Err(err) => {
-                    if verbose {
-                        println!("{}", format!("HIR lowering failed: {}", err).yellow());
-                    }
-                }
+                return Err(anyhow!("Type check failed"));
+            }
+
+            // Optional: dump normalized HIR snapshot
+            if verbose || dump_norm_hir {
+                veil_normalize::normalize_program(&mut hir_program);
+                let norm_file = build_dir.join("normalized_hir.txt");
+                let norm_content = format!("Normalized HIR:\n{:#?}", hir_program);
+                std::fs::write(&norm_file, norm_content)?;
+                println!(
+                    "{}",
+                    format!("Normalized HIR saved to: {}", norm_file.display()).green()
+                );
             }
         }
         Err(errors) => {
             let writer = StandardStream::stderr(ColorChoice::Auto);
             let config = term::Config::default();
-            println!("=== TYPE CHECKER ERRORS ===");
+            println!("=== RESOLUTION ERRORS ===");
             println!("Found {} errors", errors.len());
-            for (i, error) in errors.iter().enumerate() {
-                println!("Error {}: {}", i + 1, error.message);
-
-                if let Some(label) = error.labels.first() {
-                    println!("  Location: {}..{}", label.range.start, label.range.end);
-                    println!("  Detail: {}", label.message);
-                }
-
-                for note in &error.notes {
-                    println!("  Note: {}", note);
-                }
-
-                if let Err(emit_err) = term::emit(&mut writer.lock(), &config, &files, error) {
-                    println!("  (Failed to emit formatted error: {})", emit_err);
-                }
-
-                let file_id = error.labels.first().map(|l| l.file_id);
-                let file_path = file_id.map(|fid| files.name(fid).to_string_lossy().to_string());
-                let module_info = file_path.as_ref().and_then(|path: &String| {
-                    if let Some(_idx) = path.find("lib/std") {
-                        Some("standard library".to_string())
-                    } else if let Some(lib_start) = path.find("lib/") {
-                        let rest = &path[lib_start + 4..];
-                        if let Some(end) = rest.find('/') {
-                            let lib_name = &rest[..end];
-                            if lib_name != "std" {
-                                return Some(format!("external library '{}'", lib_name));
-                            }
-                        }
-                        None
-                    } else if let Some(ex_start) = path.find("examples/") {
-                        let rest = &path[ex_start + 9..];
-                        if let Some(end) = rest.find('/') {
-                            let ex_name = &rest[..end];
-                            return Some(format!("example module '{}'", ex_name));
-                        }
-                        None
-                    } else {
-                        None
-                    }
-                });
-
-                let location = match file_path {
-                    Some(ref path) => match module_info {
-                        Some(ref module) => format!("in file '{}' ({})", path, module),
-                        None => format!("in file '{}'", path),
-                    },
-                    None => "in unknown location".to_string(),
-                };
-
-                eprintln!("\nType checker error {}: {}", location, error.message);
-
-                if let Some(label) = error.labels.first() {
-                    eprintln!("  --> at {}..{}", label.range.start, label.range.end);
-                    eprintln!("  = detail: {}", label.message);
-                }
-
-                for note in &error.notes {
-                    eprintln!("  note: {}", note);
-                }
-
-                println!();
+            for diag in &errors {
+                let d = diag.to_diagnostic();
+                let _ = term::emit(&mut writer.lock(), &config, &files, &d);
             }
-
-            return Err(anyhow!("Type check failed"));
+            return Err(anyhow!("Resolution failed"));
         }
     }
 
@@ -531,21 +482,51 @@ pub fn process_build(
             )
             .green()
         );
+
+        // M8: Lower mono AST → HIR → normalize → IR and dump when verbose
+        let module_id = crate::hir::ids::ModuleId::new(0);
+        match crate::hir::lower_program(&program, module_id) {
+            Ok(mut mono_hir) => {
+                veil_normalize::normalize_program(&mut mono_hir);
+                let ir = veil_ir::lower_from_hir(&mono_hir);
+                let ir_file = build_dir.join("lowered_ir.txt");
+                let ir_content = ir.to_pretty_string();
+                std::fs::write(&ir_file, ir_content)?;
+                println!("{}", format!("IR saved to: {}", ir_file.display()).green());
+            }
+            Err(err) => {
+                println!("{}", format!("IR lowering (HIR) failed: {}", err).yellow());
+            }
+        }
     }
 
-    let config = codegen::CodegenConfig {
-        target_triple: target_triple.clone(),
-    };
-    let mut target = codegen::Target::create(
-        config,
-        file_id,
-        imported_functions,
-        imported_structs,
-        program.ffi_variables.clone(),
-        is_test,
-    );
+    {
+        // Lower to IR from HIR and emit C via the dedicated IR→C backend
+        let module_id = crate::hir::ids::ModuleId::new(0);
+        let ir = match crate::hir::lower_program(&program, module_id) {
+            Ok(mut mono_hir) => {
+                veil_normalize::normalize_program(&mut mono_hir);
+                veil_ir::lower_from_hir(&mono_hir)
+            }
+            Err(_err) => {
+                // Fallback to temporary AST path to avoid breaking builds
+                veil_ir::lower_from_ast(&program)
+            }
+        };
 
-    target.compile(&program, &c_file)?;
+        // Use the extracted codegen-c crate to render a C translation unit
+        let ir_backend = veil_codegen_c::IrCBackend::new(veil_codegen_c::CodegenConfig {
+            target_triple: target_triple.clone(),
+        });
+        ir_backend.write_to_path(&ir, &c_file)?;
+
+        if verbose {
+            println!(
+                "{}",
+                format!("C emitted from IR to: {}", c_file.display()).green()
+            );
+        }
+    }
     if skip_cc {
         if verbose {
             println!(
@@ -577,7 +558,15 @@ pub fn process_build(
         "-o".to_string(),
         output.to_str().unwrap().into(),
     ];
+    // Link veil-runtime static library if provided via environment.
+    // Expect VEIL_RUNTIME_LIB_DIR to point to a directory containing libveil_runtime.a
+    if let Ok(libdir) = std::env::var("VEIL_RUNTIME_LIB_DIR") {
+        clang_args.push(format!("-L{}", libdir));
+        clang_args.push("-lveil_runtime".to_string());
+    }
 
+    // Suppress codegen-c iterator stubs; require runtime to provide hooks
+    clang_args.push("-DVEIL_RUNTIME_PROVIDES_ITER".to_string());
     if verbose {
         clang_args.insert(0, "-v".to_string());
         clang_args.push("-DVE_DEBUG_MEMORY".to_string());

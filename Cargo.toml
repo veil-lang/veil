@@ -10,6 +10,9 @@ members = [
   "crates/typeck",
   "crates/normalize",
   "crates/mono",
+  "crates/ir",
+  "crates/codegen-c",
+
 ]
 # Planned workspace crates (to be added as they are created):
 #   crates/diagnostics
@@ -51,6 +54,8 @@ veil-resolve = { path = "crates/resolve" }
 veil-typeck = { path = "crates/typeck" }
 veil-normalize = { path = "crates/normalize" }
 veil-mono = { path = "crates/mono" }
+veil-ir = { path = "crates/ir" }
+veil-codegen-c = { path = "crates/codegen-c" }
 pest = "2.8.1"
 pest_derive = "2.8.1"
 pest_meta = "2.8.1"

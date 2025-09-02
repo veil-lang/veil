@@ -203,12 +203,22 @@ pub fn run_benchmark(input: PathBuf, iterations: usize, verbose: bool) -> anyhow
     let clang_args = prepare_windows_clang_args(&output, false, &c_file)?;
 
     #[cfg(not(target_os = "windows"))]
-    let clang_args = vec![
+    let mut clang_args: Vec<String> = vec![
         "-O0".to_string(),
         c_file.to_str().unwrap().into(),
         "-o".to_string(),
         output.to_str().unwrap().into(),
     ];
+
+    // Optionally link the veil-runtime static library if provided.
+    // Expect VEIL_RUNTIME_LIB_DIR to point to a directory containing libveil_runtime.a
+    if let Ok(libdir) = std::env::var("VEIL_RUNTIME_LIB_DIR") {
+        clang_args.push(format!("-L{}", libdir));
+        clang_args.push("-lveil_runtime".to_string());
+    }
+
+    // Suppress codegen-c iterator stubs; require runtime to provide hooks
+    clang_args.push("-DVEIL_RUNTIME_PROVIDES_ITER".to_string());
 
     let clang_path = get_bundled_clang_path()?;
     let status = std::process::Command::new(clang_path)
