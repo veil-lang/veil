@@ -111,6 +111,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a8241f3ebb85c056b509d4327ad0358fbbba6ffb340bf388f26350aeda225b1"
 
 [[package]]
+name = "bincode"
+version = "1.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1f45e9417d87227c7a56d22e471c6206462cba514c7590c09aff4cf6d1ddcad"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "bitflags"
 version = "2.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1194,17 +1203,29 @@ dependencies = [
  "tempfile",
  "ureq",
  "veil-ast",
+ "veil-cli",
  "veil-codegen-c",
+ "veil-compiler",
  "veil-diagnostics",
+ "veil-helpers",
  "veil-hir",
  "veil-ir",
  "veil-mono",
  "veil-normalize",
  "veil-resolve",
+ "veil-runtime",
  "veil-syntax",
  "veil-typeck",
  "which",
  "winres",
+]
+
+[[package]]
+name = "vec"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "veil-cli",
 ]
 
 [[package]]
@@ -1216,10 +1237,74 @@ dependencies = [
 ]
 
 [[package]]
+name = "veil-attr"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "veil-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "codespan",
+ "codespan-reporting",
+ "colored",
+ "dirs",
+ "serde",
+ "serde_json",
+ "shell-words",
+ "tempfile",
+ "veil-ast",
+ "veil-codegen-c",
+ "veil-compiler",
+ "veil-helpers",
+ "veil-hir",
+ "veil-ir",
+ "veil-mono",
+ "veil-normalize",
+ "veil-resolve",
+ "veil-syntax",
+ "veil-typeck",
+ "which",
+]
+
+[[package]]
 name = "veil-codegen-c"
 version = "0.1.0"
 dependencies = [
  "veil-ir",
+]
+
+[[package]]
+name = "veil-compiler"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "anyhow",
+ "bincode",
+ "codespan",
+ "codespan-reporting",
+ "indexmap",
+ "petgraph",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "veil-ast",
+ "veil-codegen-c",
+ "veil-diagnostics",
+ "veil-hir",
+ "veil-ir",
+ "veil-mono",
+ "veil-normalize",
+ "veil-resolve",
+ "veil-syntax",
+ "veil-typeck",
 ]
 
 [[package]]
@@ -1229,6 +1314,17 @@ dependencies = [
  "codespan",
  "codespan-reporting",
  "thiserror 2.0.16",
+]
+
+[[package]]
+name = "veil-helpers"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "codespan",
+ "codespan-reporting",
+ "shell-words",
+ "which",
 ]
 
 [[package]]
@@ -1292,6 +1388,10 @@ dependencies = [
  "veil-diagnostics",
  "veil-hir",
 ]
+
+[[package]]
+name = "veil-runtime"
+version = "0.1.0"
 
 [[package]]
 name = "veil-syntax"

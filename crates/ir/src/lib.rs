@@ -204,6 +204,39 @@ pub enum InstIR {
         lhs: ValueId,
         rhs: ValueId,
     },
+    // Extended arithmetic and bitwise (feature-gated)
+    #[cfg(feature = "extended_ir_ops")]
+    Mod {
+        lhs: ValueId,
+        rhs: ValueId,
+    },
+    // Bitwise ops
+    #[cfg(feature = "extended_ir_ops")]
+    BitAnd {
+        lhs: ValueId,
+        rhs: ValueId,
+    },
+    #[cfg(feature = "extended_ir_ops")]
+    BitOr {
+        lhs: ValueId,
+        rhs: ValueId,
+    },
+    #[cfg(feature = "extended_ir_ops")]
+    BitXor {
+        lhs: ValueId,
+        rhs: ValueId,
+    },
+    // Shifts
+    #[cfg(feature = "extended_ir_ops")]
+    Shl {
+        lhs: ValueId,
+        rhs: ValueId,
+    },
+    #[cfg(feature = "extended_ir_ops")]
+    Shr {
+        lhs: ValueId,
+        rhs: ValueId,
+    },
     // Comparisons (integer/float semantics decided by types upstream)
     CmpEq {
         lhs: ValueId,
@@ -235,6 +268,25 @@ pub enum InstIR {
         then_v: ValueId,
         else_v: ValueId,
     },
+    // Unary ops
+    #[cfg(feature = "extended_ir_ops")]
+    Not {
+        value: ValueId,
+    },
+    #[cfg(feature = "extended_ir_ops")]
+    Neg {
+        value: ValueId,
+    },
+    #[cfg(feature = "extended_ir_ops")]
+    Pos {
+        value: ValueId,
+    },
+    // Cast to a target IR type
+    #[cfg(feature = "extended_ir_ops")]
+    Cast {
+        value: ValueId,
+        ty: TypeIR,
+    },
     // Memory
     Load {
         local: LocalId,
@@ -262,6 +314,18 @@ impl fmt::Display for InstIR {
             Sub { lhs, rhs } => write!(f, "sub %{}, %{}", lhs.0, rhs.0),
             Mul { lhs, rhs } => write!(f, "mul %{}, %{}", lhs.0, rhs.0),
             Div { lhs, rhs } => write!(f, "div %{}, %{}", lhs.0, rhs.0),
+            #[cfg(feature = "extended_ir_ops")]
+            Mod { lhs, rhs } => write!(f, "mod %{}, %{}", lhs.0, rhs.0),
+            #[cfg(feature = "extended_ir_ops")]
+            BitAnd { lhs, rhs } => write!(f, "band %{}, %{}", lhs.0, rhs.0),
+            #[cfg(feature = "extended_ir_ops")]
+            BitOr { lhs, rhs } => write!(f, "bor %{}, %{}", lhs.0, rhs.0),
+            #[cfg(feature = "extended_ir_ops")]
+            BitXor { lhs, rhs } => write!(f, "bxor %{}, %{}", lhs.0, rhs.0),
+            #[cfg(feature = "extended_ir_ops")]
+            Shl { lhs, rhs } => write!(f, "shl %{}, %{}", lhs.0, rhs.0),
+            #[cfg(feature = "extended_ir_ops")]
+            Shr { lhs, rhs } => write!(f, "shr %{}, %{}", lhs.0, rhs.0),
             CmpEq { lhs, rhs } => write!(f, "icmp.eq %{}, %{}", lhs.0, rhs.0),
             CmpNe { lhs, rhs } => write!(f, "icmp.ne %{}, %{}", lhs.0, rhs.0),
             CmpLt { lhs, rhs } => write!(f, "icmp.lt %{}, %{}", lhs.0, rhs.0),
@@ -273,6 +337,14 @@ impl fmt::Display for InstIR {
                 then_v,
                 else_v,
             } => write!(f, "select %{}, %{}, %{}", cond.0, then_v.0, else_v.0),
+            #[cfg(feature = "extended_ir_ops")]
+            Not { value } => write!(f, "not %{}", value.0),
+            #[cfg(feature = "extended_ir_ops")]
+            Neg { value } => write!(f, "neg %{}", value.0),
+            #[cfg(feature = "extended_ir_ops")]
+            Pos { value } => write!(f, "pos %{}", value.0),
+            #[cfg(feature = "extended_ir_ops")]
+            Cast { value, ty } => write!(f, "cast %{} -> {}", value.0, ty),
             Load { local } => write!(f, "load %l{}", local.0),
             Store { local, value } => write!(f, "store %l{}, %{}", local.0, value.0),
             Call { callee, args } => {
@@ -368,7 +440,6 @@ impl fmt::Display for TypeIR {
 /// calls (with simple variable callee), let/expr/return statements.
 pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
     use std::collections::HashMap;
-
     // ------------------------
     // Block utilities
     // ------------------------
@@ -539,6 +610,18 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                             Sub => InstIR::Sub { lhs: l, rhs: r },
                             Mul => InstIR::Mul { lhs: l, rhs: r },
                             Div => InstIR::Div { lhs: l, rhs: r },
+                            #[cfg(feature = "extended_ir_ops")]
+                            Mod => InstIR::Mod { lhs: l, rhs: r },
+                            #[cfg(feature = "extended_ir_ops")]
+                            BitAnd => InstIR::BitAnd { lhs: l, rhs: r },
+                            #[cfg(feature = "extended_ir_ops")]
+                            BitOr => InstIR::BitOr { lhs: l, rhs: r },
+                            #[cfg(feature = "extended_ir_ops")]
+                            BitXor => InstIR::BitXor { lhs: l, rhs: r },
+                            #[cfg(feature = "extended_ir_ops")]
+                            Shl => InstIR::Shl { lhs: l, rhs: r },
+                            #[cfg(feature = "extended_ir_ops")]
+                            Shr => InstIR::Shr { lhs: l, rhs: r },
                             Eq => InstIR::CmpEq { lhs: l, rhs: r },
                             Ne => InstIR::CmpNe { lhs: l, rhs: r },
                             Lt => InstIR::CmpLt { lhs: l, rhs: r },
@@ -572,6 +655,44 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                     ))
                 } else {
                     None
+                }
+            }
+            // Unary operations
+            K::Unary { op, expr } => {
+                let v = lower_expr(expr, blocks, cur_bb, next_val, locals, local_slots)
+                    .unwrap_or_else(|| emit(blocks, *cur_bb, next_val, InstIR::Nop));
+                #[cfg(feature = "extended_ir_ops")]
+                {
+                    use hir::HirUnaryOp::*;
+                    let inst = match op {
+                        Not => InstIR::Not { value: v },
+                        Minus => InstIR::Neg { value: v },
+                        Plus => InstIR::Pos { value: v },
+                    };
+                    Some(emit(blocks, *cur_bb, next_val, inst))
+                }
+                #[cfg(not(feature = "extended_ir_ops"))]
+                {
+                    Some(emit(blocks, *cur_bb, next_val, InstIR::Nop))
+                }
+            }
+            // Casts
+            K::Cast { expr, ty } => {
+                let v = lower_expr(expr, blocks, cur_bb, next_val, locals, local_slots)
+                    .unwrap_or_else(|| emit(blocks, *cur_bb, next_val, InstIR::Nop));
+                #[cfg(feature = "extended_ir_ops")]
+                {
+                    let ity = map_hir_type_to_ir(ty);
+                    Some(emit(
+                        blocks,
+                        *cur_bb,
+                        next_val,
+                        InstIR::Cast { value: v, ty: ity },
+                    ))
+                }
+                #[cfg(not(feature = "extended_ir_ops"))]
+                {
+                    Some(emit(blocks, *cur_bb, next_val, InstIR::Nop))
                 }
             }
             // Control-flow expressions (If/While/Loop) are handled in statement lowering

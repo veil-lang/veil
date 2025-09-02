@@ -12,7 +12,12 @@ members = [
   "crates/mono",
   "crates/ir",
   "crates/codegen-c",
-
+  "crates/compiler",
+  "crates/helpers",
+  "crates/cli",
+  "crates/runtime",
+  "crates/attr",
+  "apps/vec",
 ]
 # Planned workspace crates (to be added as they are created):
 #   crates/diagnostics
@@ -56,6 +61,10 @@ veil-normalize = { path = "crates/normalize" }
 veil-mono = { path = "crates/mono" }
 veil-ir = { path = "crates/ir" }
 veil-codegen-c = { path = "crates/codegen-c" }
+veil-compiler = { path = "crates/compiler" }
+veil-helpers = { path = "crates/helpers" }
+veil-cli = { path = "crates/cli" }
+veil-runtime = { path = "crates/runtime" }
 pest = "2.8.1"
 pest_derive = "2.8.1"
 pest_meta = "2.8.1"

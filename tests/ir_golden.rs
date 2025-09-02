@@ -105,6 +105,90 @@ fn nid(c: &mut u32) -> NodeId {
     NodeId::new(id)
 }
 
+fn build_hir_bitwise_and_mod() -> HirProgram {
+    let mut c = 0u32;
+
+    let lhs = HirExpr {
+        id: nid(&mut c),
+        kind: Box::new(HirExprKind::Int(42)),
+    };
+    let rhs = HirExpr {
+        id: nid(&mut c),
+        kind: Box::new(HirExprKind::Int(15)),
+    };
+
+    // tmp = 42 % 15
+    let mod_expr = HirExpr {
+        id: nid(&mut c),
+        kind: Box::new(HirExprKind::Binary {
+            op: veil_hir::HirBinaryOp::Mod,
+            lhs: Box::new(lhs.clone()),
+            rhs: Box::new(rhs.clone()),
+        }),
+    };
+    let let_stmt = HirStmt {
+        id: nid(&mut c),
+        kind: HirStmtKind::Let {
+            pattern: veil_hir::HirPattern {
+                id: nid(&mut c),
+                kind: Box::new(veil_hir::HirPatternKind::Variable("tmp".to_string())),
+            },
+            ty: Some(HirType::I64),
+            init: Some(mod_expr),
+        },
+    };
+
+    // return (42 & 15)
+    let band_expr = HirExpr {
+        id: nid(&mut c),
+        kind: Box::new(HirExprKind::Binary {
+            op: veil_hir::HirBinaryOp::BitAnd,
+            lhs: Box::new(lhs),
+            rhs: Box::new(rhs),
+        }),
+    };
+    let ret_stmt = HirStmt {
+        id: nid(&mut c),
+        kind: HirStmtKind::Return(Some(band_expr)),
+    };
+
+    let body = HirBlock {
+        id: nid(&mut c),
+        stmts: vec![let_stmt, ret_stmt],
+        expr: None,
+    };
+
+    let func = HirFunction {
+        id: nid(&mut c),
+        name: "main".to_string(),
+        symbol_id: None,
+        generic_params: vec![],
+        params: vec![],
+        return_type: HirType::I64,
+        body,
+    };
+
+    let item = HirItem {
+        id: nid(&mut c),
+        kind: HirItemKind::Function(func),
+        visibility: HirVisibility::Public,
+    };
+
+    HirProgram {
+        module_id: ModuleId::new(0),
+        items: vec![item],
+        span_map: SpanMap::new(),
+    }
+}
+
+#[test]
+fn ir_golden_bitwise_and_mod() {
+    let program = build_hir_bitwise_and_mod();
+    let ir = ir::lower_from_hir(&program);
+    let pretty = ir.to_pretty_string();
+    assert_matches_golden("bitwise_and_mod", &pretty);
+}
+
 // Build: fn main() -> i32 { return 42; }
 fn build_hir_const_return() -> HirProgram {
     let mut c = 0u32;

@@ -29,7 +29,7 @@ int64_t iter_next(void* it) { (void)it; return 0; }
     // Produces: libveil_runtime.so
     let lib_path = libdir.join(shared_lib_name("veil_runtime"));
     let clang_path =
-        ve::helpers::get_bundled_clang_path().context("failed to locate bundled clang")?;
+        veil_helpers::get_bundled_clang_path().context("failed to locate bundled clang")?;
     let status = Command::new(&clang_path)
         .current_dir(libdir)
         .args([
@@ -70,7 +70,7 @@ int64_t iter_next(void* it) { (void)it; return 0; }
     // Ask the CLI to build; with VEIL_RUNTIME_LIB_DIR set, it should pass -L/-l and link successfully.
     // is_test = true so the compiled program isn't executed; we only validate link succeeds.
     let output_name = PathBuf::from("runtime_link_test_bin");
-    let built = ve::cli::process_build(
+    let built = veil_cli::process_build(
         input.clone(),
         output_name.clone(),
         /* optimize */ false,

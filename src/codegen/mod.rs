@@ -1,6 +1,5 @@
 mod c;
 mod compile_error;
-
 use codespan::FileId;
 pub use compile_error::CompileError;
 use std::path::Path;

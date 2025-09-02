@@ -1,13 +1,7 @@
 use anyhow::Result;
-use ve::cli;
+use veil_cli as cli;
 
 fn main() -> Result<()> {
-    let should_check_updates = std::env::args().nth(1).as_deref() != Some("upgrade");
-
-    if should_check_updates {
-        let _ = cli::upgrade::check_and_notify_updates();
-    }
-
     match cli::parse() {
         Ok(cli::CliCommand::Build {
             input,
