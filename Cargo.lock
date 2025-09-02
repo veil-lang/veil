@@ -1177,6 +1177,7 @@ dependencies = [
  "tempfile",
  "ureq",
  "veil-ast",
+ "veil-diagnostics",
  "veil-hir",
  "veil-resolve",
  "veil-syntax",

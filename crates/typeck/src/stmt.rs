@@ -39,6 +39,9 @@ impl TypeChecker {
                 // Determine the variable's type
                 let var_type = ty.clone().or(init_type).unwrap_or(HirType::Unknown);
 
+                // Record the variable type on the pattern node (Typed-HIR attachment)
+                self.context.set_node_type(pattern.id, var_type.clone());
+
                 // Check pattern compatibility with the type
                 self.check_pattern_against_type(pattern, &var_type)?;
 
@@ -48,6 +51,10 @@ impl TypeChecker {
             HirStmtKind::Assign { lhs, rhs } => {
                 let target_type = self.check_expr(lhs)?;
                 let value_type = self.check_expr(rhs)?;
+
+                // Record types for both sides to attach TypeIds in the Typed-HIR map
+                self.context.set_node_type(lhs.id, target_type.clone());
+                self.context.set_node_type(rhs.id, value_type.clone());
 
                 if !self.context.types_compatible(&target_type, &value_type) {
                     self.error(format!(
@@ -114,12 +121,133 @@ impl TypeChecker {
     }
 
     /// Check that a pattern is compatible with a given type
-    fn check_pattern_against_type(
+    pub(crate) fn check_pattern_against_type(
         &mut self,
-        _pattern: &veil_hir::HirPattern,
-        _expected_type: &HirType,
+        pattern: &veil_hir::HirPattern,
+        expected_type: &HirType,
     ) -> Result<(), Vec<Diag>> {
-        // TODO(M5): Implement full pattern typing rules. For now, accept all patterns.
+        use veil_hir::{HirExprKind, HirPatternKind};
+
+        // Helper: does the pattern shape match the given type (union/intersection aware)
+        fn matches_shape(p: &veil_hir::HirPattern, t: &HirType) -> bool {
+            match &*p.kind {
+                HirPatternKind::Wildcard | HirPatternKind::Variable(_) => true,
+                HirPatternKind::Literal(expr) => {
+                    match &*expr.kind {
+                        HirExprKind::Int(_) => matches!(
+                            t,
+                            HirType::I8
+                                | HirType::I16
+                                | HirType::I32
+                                | HirType::I64
+                                | HirType::U8
+                                | HirType::U16
+                                | HirType::U32
+                                | HirType::U64
+                        ),
+                        HirExprKind::Float(_) => matches!(t, HirType::F32 | HirType::F64),
+                        HirExprKind::Bool(_) => matches!(t, HirType::Bool),
+                        HirExprKind::String(_) => matches!(t, HirType::String),
+                        HirExprKind::Char(_) => matches!(t, HirType::Char),
+                        HirExprKind::None => matches!(t, HirType::Optional(_)),
+                        _ => true, // Fallback for complex literal exprs
+                    }
+                }
+                HirPatternKind::Struct { name, .. } => matches!(t, HirType::Struct(n) if n == name),
+                HirPatternKind::EnumVariant { name, .. } => {
+                    matches!(t, HirType::Enum(n) if n == name)
+                }
+                HirPatternKind::Tuple(elems) => {
+                    matches!(t, HirType::Tuple(ts) if ts.len() == elems.len())
+                }
+                HirPatternKind::Array(_elems) => {
+                    matches!(t, HirType::Array(_) | HirType::SizedArray(_, _))
+                }
+                HirPatternKind::Range { .. } => {
+                    matches!(
+                        t,
+                        HirType::I8
+                            | HirType::I16
+                            | HirType::I32
+                            | HirType::I64
+                            | HirType::U8
+                            | HirType::U16
+                            | HirType::U32
+                            | HirType::U64
+                    )
+                }
+            }
+        }
+
+        // Union/intersection dispatcher for quick shape compatibility
+        let shape_ok = match expected_type {
+            HirType::Union(types) => types.iter().any(|t| matches_shape(pattern, t)),
+            HirType::Intersection(types) => types.iter().all(|t| matches_shape(pattern, t)),
+            other => matches_shape(pattern, other),
+        };
+
+        if !shape_ok {
+            self.error(format!(
+                "Pattern does not match expected type shape: pattern={:?}, expected={:?}",
+                pattern.kind, expected_type
+            ));
+            return Ok(());
+        }
+
+        // For destructuring patterns, attempt shallow recursive checks where possible.
+        match (&*pattern.kind, expected_type) {
+            // Wildcard/variable: always OK
+            (HirPatternKind::Wildcard, _) | (HirPatternKind::Variable(_), _) => {}
+
+            // Literal: we already did shape check; nothing more to enforce now.
+            (HirPatternKind::Literal(_), _) => {}
+
+            // Tuple: check arity and recurse element-wise when type carries element info
+            (HirPatternKind::Tuple(pelems), HirType::Tuple(telems))
+                if pelems.len() == telems.len() =>
+            {
+                for (p, t) in pelems.iter().zip(telems.iter()) {
+                    self.check_pattern_against_type(p, t)?;
+                }
+            }
+            (HirPatternKind::Tuple(_), HirType::Union(types)) => {
+                // If union contains a tuple type, prefer the first matching arity to drill in
+                if let Some(telems) = types.iter().find_map(|t| {
+                    if let HirType::Tuple(ts) = t {
+                        Some(ts)
+                    } else {
+                        None
+                    }
+                }) {
+                    if let HirPatternKind::Tuple(pelems) = &*pattern.kind {
+                        if pelems.len() == telems.len() {
+                            for (p, t) in pelems.iter().zip(telems.iter()) {
+                                self.check_pattern_against_type(p, t)?;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Array: no element typing available here; accept after shape check
+            (HirPatternKind::Array(_), HirType::Array(_) | HirType::SizedArray(_, _)) => {}
+
+            // Struct: without field type metadata at this pass, accept after shape check
+            (HirPatternKind::Struct { .. }, HirType::Struct(_)) => {}
+
+            // Enum variant: without variant payload typing here, accept after shape check
+            (HirPatternKind::EnumVariant { .. }, HirType::Enum(_)) => {}
+
+            // Range patterns: already shape-checked (integers)
+            (HirPatternKind::Range { .. }, _) => {}
+
+            // Union/intersection already handled in shape_ok; nothing deeper to do generically
+            (_, HirType::Union(_)) | (_, HirType::Intersection(_)) => {}
+
+            // Fallback: nothing more to enforce
+            _ => {}
+        }
+
         Ok(())
     }
 }

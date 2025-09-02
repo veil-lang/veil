@@ -149,7 +149,7 @@ impl TypeChecker {
                 let match_type = self.check_expr(match_expr)?;
                 let mut arm_types = Vec::new();
 
-                for arm in arms {
+                for arm in arms.iter_mut() {
                     // Check pattern compatibility with match expression type
                     self.check_pattern_type(&arm.pattern, &match_type)?;
 
@@ -181,6 +181,111 @@ impl TypeChecker {
                                 first_type, arm_type
                             ));
                         }
+                    }
+                    // Basic exhaustiveness check for union/intersection types
+                    match &match_type {
+                        HirType::Union(variants) => {
+                            // If any wildcard or variable arm exists, it's exhaustive
+                            let has_wildcard = arms.iter().any(|arm| {
+                                matches!(
+                                    *arm.pattern.kind,
+                                    veil_hir::HirPatternKind::Wildcard
+                                        | veil_hir::HirPatternKind::Variable(_)
+                                )
+                            });
+                            if !has_wildcard {
+                                let mut missing: Vec<HirType> = Vec::new();
+                                for v in variants {
+                                    let covered = arms.iter().any(|arm| {
+                                        // Simple coverage check:
+                                        // - wildcard/variable covers all
+                                        // - literal covers primitives of matching kind
+                                        // - struct/enum cover nominal matches
+                                        // - tuple/array cover structural shapes
+                                        fn covers(p: &veil_hir::HirPattern, ty: &HirType) -> bool {
+                                            match &*p.kind {
+                                                veil_hir::HirPatternKind::Wildcard => true,
+                                                veil_hir::HirPatternKind::Variable(_) => true,
+                                                veil_hir::HirPatternKind::Literal(expr) => {
+                                                    match &*expr.kind {
+                                                        HirExprKind::Int(_) => matches!(
+                                                            ty,
+                                                            HirType::I8
+                                                                | HirType::I16
+                                                                | HirType::I32
+                                                                | HirType::I64
+                                                                | HirType::U8
+                                                                | HirType::U16
+                                                                | HirType::U32
+                                                                | HirType::U64
+                                                        ),
+                                                        HirExprKind::Float(_) => {
+                                                            matches!(ty, HirType::F32 | HirType::F64)
+                                                        }
+                                                        HirExprKind::Bool(_) => {
+                                                            matches!(ty, HirType::Bool)
+                                                        }
+                                                        HirExprKind::String(_) => {
+                                                            matches!(ty, HirType::String)
+                                                        }
+                                                        HirExprKind::Char(_) => {
+                                                            matches!(ty, HirType::Char)
+                                                        }
+                                                        HirExprKind::None => {
+                                                            matches!(ty, HirType::Optional(_))
+                                                        }
+                                                        _ => false,
+                                                    }
+                                                }
+                                                veil_hir::HirPatternKind::Struct { name, .. } => {
+                                                    matches!(ty, HirType::Struct(n) if n == name)
+                                                }
+                                                veil_hir::HirPatternKind::EnumVariant { name, .. } => {
+                                                    matches!(ty, HirType::Enum(n) if n == name)
+                                                }
+                                                veil_hir::HirPatternKind::Tuple(elems) => {
+                                                    matches!(ty, HirType::Tuple(t_elems) if t_elems.len() == elems.len())
+                                                }
+                                                veil_hir::HirPatternKind::Array(_) => {
+                                                    matches!(ty, HirType::Array(_) | HirType::SizedArray(_, _))
+                                                }
+                                                veil_hir::HirPatternKind::Range { .. } => {
+                                                    matches!(
+                                                        ty,
+                                                        HirType::I8
+                                                            | HirType::I16
+                                                            | HirType::I32
+                                                            | HirType::I64
+                                                            | HirType::U8
+                                                            | HirType::U16
+                                                            | HirType::U32
+                                                            | HirType::U64
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        covers(&arm.pattern, v)
+                                    });
+                                    if !covered {
+                                        missing.push(v.clone());
+                                    }
+                                }
+                                if !missing.is_empty() {
+                                    self.warning(format!(
+                                        "Non-exhaustive match on union type {:?}; missing cases: {:?}",
+                                        match_type, missing
+                                    ));
+                                }
+                            }
+                        }
+                        HirType::Intersection(_parts) => {
+                            // TODO(M5): Intersection exhaustiveness is complex; warn for now.
+                            self.warning(
+                                "Exhaustiveness checking for intersection types is not fully implemented"
+                                    .to_string(),
+                            );
+                        }
+                        _ => {}
                     }
                     first_type.clone()
                 } else {
@@ -384,6 +489,8 @@ impl TypeChecker {
             HirExprKind::Block(block) => self.check_block(block)?,
         };
 
+        // Record computed type and attach a TypeId for this expression node
+        self.context.set_node_type(expr.id, expr_type.clone());
         Ok(expr_type)
     }
 
@@ -436,8 +543,8 @@ impl TypeChecker {
         &mut self,
         receiver_type: &HirType,
         method_name: &str,
-        arg_types: &[HirType],
-        location: NodeId,
+        _arg_types: &[HirType],
+        _location: NodeId,
     ) -> Result<HirType, Vec<Diag>> {
         // Method resolution is not yet implemented; fallback to error
         self.error(format!(
@@ -487,7 +594,7 @@ impl TypeChecker {
         op: HirBinaryOp,
         left_type: &HirType,
         right_type: &HirType,
-        _location: NodeId,
+        location: NodeId,
     ) -> Result<HirType, Vec<Diag>> {
         use HirBinaryOp::*;
         use HirType::*;
@@ -517,6 +624,8 @@ impl TypeChecker {
                 // '/' requires floating-point operands per spec; suggest '//' for integers
                 let left_is_float = matches!(left_type, F32 | F64);
                 let right_is_float = matches!(right_type, F32 | F64);
+                let left_is_int = self.is_integer_type(left_type);
+                let right_is_int = self.is_integer_type(right_type);
                 if left_is_float && right_is_float {
                     if self.context.types_compatible(left_type, right_type) {
                         Ok(left_type.clone())
@@ -528,10 +637,29 @@ impl TypeChecker {
                         Ok(Unknown)
                     }
                 } else {
-                    self.error(format!(
-                        "Float division '/' requires f32 or f64 operands; use '//' for integer division (found left={:?}, right={:?})",
-                        left_type, right_type
-                    ));
+                    if left_is_int && right_is_int {
+                        // Both integer operands: suggest using '//' for integer division
+                        self.error_with_fix(
+                            location,
+                            Some("VE0010"),
+                            format!(
+                                "Float division '/' requires f32 or f64 operands; found integer types: left={:?}, right={:?}",
+                                left_type, right_type
+                            ),
+                            "Use '//' for integer division, e.g. `a // b`",
+                        );
+                    } else {
+                        // Mixed types (int/float): suggest casting the integer to a float
+                        self.error_with_fix(
+                            location,
+                            Some("VE0011"),
+                            format!(
+                                "Float division '/' requires both operands to be floats (no implicit coercion): left={:?}, right={:?}",
+                                left_type, right_type
+                            ),
+                            "Cast the integer operand to f32/f64, e.g. `x as f64 / y`",
+                        );
+                    }
                     Ok(Unknown)
                 }
             }
@@ -669,6 +797,8 @@ impl TypeChecker {
             DivAssign => {
                 let left_is_float = matches!(left_type, F32 | F64);
                 let right_is_float = matches!(right_type, F32 | F64);
+                let left_is_int = self.is_integer_type(left_type);
+                let right_is_int = self.is_integer_type(right_type);
                 if left_is_float && right_is_float {
                     if self.context.types_compatible(left_type, right_type) {
                         Ok(left_type.clone())
@@ -680,10 +810,27 @@ impl TypeChecker {
                         Ok(Unknown)
                     }
                 } else {
-                    self.error(format!(
-                        "Float '/=' requires f32 or f64 operands; use '//=' for integers (left={:?}, right={:?})",
-                        left_type, right_type
-                    ));
+                    if left_is_int && right_is_int {
+                        self.error_with_fix(
+                            location,
+                            Some("VE0012"),
+                            format!(
+                                "Float '/=' requires f32 or f64 operands; found integer types: left={:?}, right={:?}",
+                                left_type, right_type
+                            ),
+                            "Use '//=' for integer division assignment, e.g. `a //= b`",
+                        );
+                    } else {
+                        self.error_with_fix(
+                            location,
+                            Some("VE0013"),
+                            format!(
+                                "Float '/=' requires both operands to be floats (no implicit coercion): left={:?}, right={:?}",
+                                left_type, right_type
+                            ),
+                            "Cast the integer operand to f32/f64, e.g. `x as f64 /= y`",
+                        );
+                    }
                     Ok(Unknown)
                 }
             }
@@ -759,7 +906,7 @@ impl TypeChecker {
         &mut self,
         op: HirUnaryOp,
         operand_type: &HirType,
-        location: NodeId,
+        _location: NodeId,
     ) -> Result<HirType, Vec<Diag>> {
         use HirType::*;
         use HirUnaryOp::*;
@@ -795,7 +942,7 @@ impl TypeChecker {
         &mut self,
         array_type: &HirType,
         index_type: &HirType,
-        location: NodeId,
+        _location: NodeId,
     ) -> Result<HirType, Vec<Diag>> {
         // Index must be integer
         if !self.is_integer_type(index_type) {
@@ -819,7 +966,7 @@ impl TypeChecker {
         &mut self,
         struct_name: &str,
         fields: &mut Vec<(String, HirExpr)>,
-        location: NodeId,
+        _location: NodeId,
     ) -> Result<HirType, Vec<Diag>> {
         for (_name, expr) in fields.iter_mut() {
             let _ = self.check_expr(expr)?;
@@ -833,9 +980,7 @@ impl TypeChecker {
         pattern: &veil_hir::HirPattern,
         expected_type: &HirType,
     ) -> Result<(), Vec<Diag>> {
-        // This would be implemented in pattern.rs
-        // For now, just accept all patterns
-        Ok(())
+        self.check_pattern_against_type(pattern, expected_type)
     }
 
     /// Check if a type is numeric
