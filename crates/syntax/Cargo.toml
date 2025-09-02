@@ -10,7 +10,6 @@ name = "veil_syntax"
 path = "src/lib.rs"
 
 [features]
-# Grammar validation using pest_meta (enable in CI or local checks)
 grammar-validation = ["dep:pest_meta"]
 default = []
 

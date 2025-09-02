@@ -362,6 +362,23 @@ pub fn process_build(
             "{}",
             format!("Parsed AST saved to: {}", ast_file.display()).green()
         );
+
+        // Lower AST to HIR and save HIR dump
+        let module_id = crate::hir::ids::ModuleId::new(0);
+        match crate::hir::lower_program(&program, module_id) {
+            Ok(hir_program) => {
+                let hir_file = build_dir.join("lowered_hir.txt");
+                let hir_content = format!("HIR Program:\n{:#?}", hir_program);
+                std::fs::write(&hir_file, hir_content)?;
+                println!(
+                    "{}",
+                    format!("HIR saved to: {}", hir_file.display()).green()
+                );
+            }
+            Err(err) => {
+                println!("{}", format!("HIR lowering failed: {}", err).yellow());
+            }
+        }
     }
 
     let (imported_functions, imported_structs, imported_ffi_vars) =

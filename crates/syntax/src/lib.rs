@@ -1641,12 +1641,29 @@ pub fn lex_raw(files: &Files<String>, file_id: FileId) -> Result<Vec<RawSpanned>
             ) {
                 continue;
             }
-            let span = inner.as_span();
+
+            // Handle the token rule which wraps individual tokens
+            let (actual_rule, actual_span, actual_text) = if rule == Rule::token {
+                // Get the first inner rule from the token
+                if let Some(token_inner) = inner.into_inner().next() {
+                    (
+                        token_inner.as_rule(),
+                        token_inner.as_span(),
+                        token_inner.as_str(),
+                    )
+                } else {
+                    continue;
+                }
+            } else {
+                (rule, inner.as_span(), inner.as_str())
+            };
+
+            let span = actual_span;
             let start = span.start() as u32;
             let end = span.end() as u32;
-            let text = inner.as_str();
+            let text = actual_text;
 
-            let token = match rule {
+            let token = match actual_rule {
                 Rule::ident => RawToken::Ident(text.to_string()),
                 Rule::int => RawToken::Int(text.to_string()),
                 Rule::float => RawToken::Float(text.to_string()),
@@ -1680,8 +1697,6 @@ pub fn lex_raw(files: &Files<String>, file_id: FileId) -> Result<Vec<RawSpanned>
                 | Rule::KW_MATCH
                 | Rule::KW_TRUE
                 | Rule::KW_FALSE
-                | Rule::KW_NONE1
-                | Rule::KW_NONE2
                 | Rule::KW_IN
                 | Rule::KW_FOREIGN => RawToken::Keyword(text.to_string()),
 
@@ -1752,7 +1767,7 @@ pub fn lex_raw(files: &Files<String>, file_id: FileId) -> Result<Vec<RawSpanned>
                 | Rule::COLON => RawToken::Symbol(text.to_string()),
 
                 // Container rules, should be skipped above
-                Rule::tokens | Rule::program => continue,
+                Rule::tokens | Rule::program | Rule::token => continue,
 
                 // Fallback: treat any unknown as symbol to avoid panic in early skeleton
                 _ => RawToken::Symbol(text.to_string()),
@@ -1802,15 +1817,16 @@ mod tests {
     #[test]
     fn lex_raw_basic_tokens() {
         let mut files = Files::<String>::new();
-        let fid = files.add("t.veil", "fn test() { return 1+2; }".to_string());
+        let fid = files.add("t.veil", "fn hello() { return 1+2; }".to_string());
         let toks = lex_raw(&files, fid).expect("lex ok");
+
         assert!(
             toks.iter()
                 .any(|t| matches!(t.token, RawToken::Keyword(ref k) if k == "fn"))
         );
         assert!(
             toks.iter()
-                .any(|t| matches!(t.token, RawToken::Ident(ref s) if s == "test"))
+                .any(|t| matches!(t.token, RawToken::Ident(ref s) if s == "hello"))
         );
         assert!(
             toks.iter()

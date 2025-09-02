@@ -1,0 +1,19 @@
+[package]
+name = "veil-resolve"
+version = "0.0.1"
+edition = "2024"
+publish = false
+description = "Name resolution, module system, and symbol table management for the Veil compiler"
+
+[lib]
+name = "veil_resolve"
+path = "src/lib.rs"
+
+[dependencies]
+veil-ast = { path = "../ast" }
+veil-hir = { path = "../hir" }
+veil-diagnostics = { path = "../diagnostics" }
+petgraph = "0.6.4"
+indexmap = "2.6.0"
+ahash = "0.8.11"
+codespan = "0.11.1"

@@ -1,0 +1,15 @@
+[package]
+name = "veil-hir"
+version = "0.0.1"
+edition = "2024"
+publish = false
+description = "HIR (High-level Intermediate Representation) data structures and lowering pass for the Veil compiler"
+
+[lib]
+name = "veil_hir"
+path = "src/lib.rs"
+
+[dependencies]
+veil-ast = { path = "../ast" }
+codespan = "0.11.1"
+indexmap = "2.6.0"

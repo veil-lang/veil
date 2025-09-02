@@ -1,0 +1,22 @@
+[package]
+name = "veil-typeck"
+version = "0.1.0"
+edition = "2024"
+description = "Type checker for the Veil programming language"
+license = "Apache-2.0"
+
+[dependencies]
+# Core HIR and diagnostics
+veil-hir = { path = "../hir" }
+veil-ast = { path = "../ast" }
+veil-diagnostics = { path = "../diagnostics" }
+veil-resolve = { path = "../resolve" }
+
+# External dependencies
+codespan = "0.11.1"
+codespan-reporting = "0.11.1"
+indexmap = "2.2.6"
+thiserror = "1.0.50"
+
+[dev-dependencies]
+# Test utilities
