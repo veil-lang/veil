@@ -27,6 +27,15 @@ fn default_output_path() -> PathBuf {
 pub fn run_project(input: std::path::PathBuf, verbose: bool) -> anyhow::Result<()> {
     let output = default_output_path();
     let target_triple = default_target_triple();
-    process_build(input, output, false, target_triple, verbose, false, false)?;
+    process_build(
+        input,
+        output,
+        false,
+        target_triple,
+        verbose,
+        false,
+        false,
+        false,
+    )?;
     Ok(())
 }

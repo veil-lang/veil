@@ -15,6 +15,7 @@ fn main() -> Result<()> {
             optimize,
             target_triple,
             verbose,
+            dump_norm_hir,
             skip_cc,
         }) => {
             cli::process_build(
@@ -23,6 +24,7 @@ fn main() -> Result<()> {
                 optimize,
                 target_triple,
                 verbose,
+                dump_norm_hir,
                 false,
                 skip_cc,
             )?;

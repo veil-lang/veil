@@ -8,6 +8,8 @@ members = [
   "crates/hir",
   "crates/resolve",
   "crates/typeck",
+  "crates/normalize",
+  "crates/mono",
 ]
 # Planned workspace crates (to be added as they are created):
 #   crates/diagnostics
@@ -47,6 +49,8 @@ veil-ast = { path = "crates/ast" }
 veil-hir = { path = "crates/hir" }
 veil-resolve = { path = "crates/resolve" }
 veil-typeck = { path = "crates/typeck" }
+veil-normalize = { path = "crates/normalize" }
+veil-mono = { path = "crates/mono" }
 pest = "2.8.1"
 pest_derive = "2.8.1"
 pest_meta = "2.8.1"

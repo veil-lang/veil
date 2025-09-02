@@ -110,7 +110,7 @@ impl CBackend {
         output_path: &Path,
     ) -> Result<(), CompileError> {
         let mut program = program.clone();
-        program = self.monomorphize_generics(&program)?;
+        // Monomorphization is performed earlier in the pipeline (M7); no backend monomorphization here.
         if let Err(e) = crate::ast::merge_impl_blocks(&mut program) {
             return Err(CompileError::CodegenError {
                 message: e,
@@ -118,7 +118,7 @@ impl CBackend {
                 file_id: self.file_id,
             });
         }
-        let program = self.monomorphize_generics(&program)?;
+        let program = program;
 
         self.analyze_memory_requirements(&program);
         self.emit_header();

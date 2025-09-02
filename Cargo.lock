@@ -272,6 +272,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "diff"
+version = "0.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56254986775e3233ffa9c4d7d3faaf6d36a2c09d30b20687e9f88bc8bafc16c8"
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -772,6 +778,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pretty_assertions"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ae130e2f271fbc2ac3a40fb1d07180839cdbbe443c7a27e1e3c13c5cac0116d"
+dependencies = [
+ "diff",
+ "yansi",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.101"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1179,6 +1195,8 @@ dependencies = [
  "veil-ast",
  "veil-diagnostics",
  "veil-hir",
+ "veil-mono",
+ "veil-normalize",
  "veil-resolve",
  "veil-syntax",
  "veil-typeck",
@@ -1215,6 +1233,30 @@ dependencies = [
 [[package]]
 name = "veil-lexer"
 version = "0.0.1"
+
+[[package]]
+name = "veil-mono"
+version = "0.0.1"
+dependencies = [
+ "ahash",
+ "indexmap",
+ "serde",
+ "serde_json",
+ "veil-ast",
+ "veil-hir",
+ "veil-normalize",
+ "veil-typeck",
+]
+
+[[package]]
+name = "veil-normalize"
+version = "0.1.0"
+dependencies = [
+ "codespan",
+ "pretty_assertions",
+ "veil-diagnostics",
+ "veil-hir",
+]
 
 [[package]]
 name = "veil-resolve"
@@ -1680,6 +1722,12 @@ name = "writeable"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ea2f10b9bb0928dfb1b42b65e1f9e36f7f54dbdf08457afefb38afcdec4fa2bb"
+
+[[package]]
+name = "yansi"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cfe53a6657fd280eaa890a3bc59152892ffa3e30101319d168b781ed6529b049"
 
 [[package]]
 name = "yoke"

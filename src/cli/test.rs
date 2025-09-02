@@ -70,6 +70,7 @@ pub fn run_test(
         false,
         target_triple,
         verbose,
+        false,
         true,
         false,
     )?;

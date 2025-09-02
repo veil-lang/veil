@@ -39,6 +39,7 @@ pub enum CliCommand {
         optimize: bool,
         target_triple: String,
         verbose: bool,
+        dump_norm_hir: bool,
         skip_cc: bool,
     },
     Init {
@@ -95,6 +96,12 @@ pub struct Args {
     #[arg(short, long)]
     verbose: bool,
 
+    #[arg(
+        long,
+        help = "Dump normalized HIR after typecheck (even without --verbose)"
+    )]
+    dump_norm_hir: bool,
+
     #[arg(long, help = "Skip C compilation and execution (generate C only)")]
     no_cc: bool,
 
@@ -119,6 +126,12 @@ enum Command {
 
         #[arg(short, long)]
         verbose: bool,
+
+        #[arg(
+            long,
+            help = "Dump normalized HIR after typecheck (even without --verbose)"
+        )]
+        dump_norm_hir: bool,
 
         #[arg(long, help = "Skip C compilation and execution (generate C only)")]
         no_cc: bool,
@@ -202,6 +215,7 @@ pub fn parse() -> anyhow::Result<CliCommand> {
             optimize,
             target_triple,
             verbose,
+            dump_norm_hir,
             no_cc,
         }) => Ok(CliCommand::Build {
             input,
@@ -209,6 +223,7 @@ pub fn parse() -> anyhow::Result<CliCommand> {
             optimize,
             target_triple: target_triple.unwrap_or_else(default_target_triple),
             verbose,
+            dump_norm_hir,
             skip_cc: no_cc,
         }),
         Some(Command::Init {
@@ -267,6 +282,7 @@ pub fn parse() -> anyhow::Result<CliCommand> {
                 optimize: args.optimize,
                 target_triple: args.target_triple.unwrap_or_else(default_target_triple),
                 verbose: args.verbose,
+                dump_norm_hir: args.dump_norm_hir,
                 skip_cc: args.no_cc,
             })
         }
@@ -279,6 +295,7 @@ pub fn process_build(
     optimize: bool,
     target_triple: String,
     verbose: bool,
+    dump_norm_hir: bool,
     is_test: bool,
     skip_cc: bool,
 ) -> anyhow::Result<PathBuf> {
@@ -392,7 +409,29 @@ pub fn process_build(
         imported_ffi_vars.clone(),
     );
     match type_checker.check(&mut program) {
-        Ok(()) => (),
+        Ok(()) => {
+            // Lower AST to HIR then normalize HIR after successful type check
+            let module_id = crate::hir::ids::ModuleId::new(0);
+            match crate::hir::lower_program(&program, module_id) {
+                Ok(mut hir_program) => {
+                    veil_normalize::normalize_program(&mut hir_program);
+                    if verbose || dump_norm_hir {
+                        let norm_file = build_dir.join("normalized_hir.txt");
+                        let norm_content = format!("Normalized HIR:\n{:#?}", hir_program);
+                        std::fs::write(&norm_file, norm_content)?;
+                        println!(
+                            "{}",
+                            format!("Normalized HIR saved to: {}", norm_file.display()).green()
+                        );
+                    }
+                }
+                Err(err) => {
+                    if verbose {
+                        println!("{}", format!("HIR lowering failed: {}", err).yellow());
+                    }
+                }
+            }
+        }
         Err(errors) => {
             let writer = StandardStream::stderr(ColorChoice::Auto);
             let config = term::Config::default();
@@ -464,6 +503,34 @@ pub fn process_build(
 
             return Err(anyhow!("Type check failed"));
         }
+    }
+
+    // M7: Monomorphize generic functions before codegen (with metadata)
+    let mono = veil_mono::Monomorphizer::new(Default::default());
+    let (program, mono_meta) = mono
+        .monomorphize_with_metadata(&program)
+        .map_err(|e| anyhow!("Monomorphization failed: {}", e))?;
+    if verbose {
+        let mono_file = build_dir.join("monomorphized_ast.txt");
+        let mono_content = format!("Monomorphized Program (AST):\n{:#?}", program);
+        std::fs::write(&mono_file, mono_content)?;
+        println!(
+            "{}",
+            format!("Monomorphized AST saved to: {}", mono_file.display()).green()
+        );
+
+        let meta_file = build_dir.join("monomorphization_metadata.json");
+        let meta_content =
+            serde_json::to_string_pretty(&mono_meta).unwrap_or_else(|_| String::from("{}"));
+        std::fs::write(&meta_file, meta_content)?;
+        println!(
+            "{}",
+            format!(
+                "Monomorphization metadata saved to: {}",
+                meta_file.display()
+            )
+            .green()
+        );
     }
 
     let config = codegen::CodegenConfig {
