@@ -54,13 +54,18 @@ pub fn resolve_standard_library_path(module_path: &str) -> Result<PathBuf> {
             .unwrap_or_else(|| PathBuf::from("lib"))
     };
 
-    let full_path = if let Some(module_name) = module_path.strip_prefix("std/") {
+    let full_path = if let Some(module_name) = module_path
+        .strip_prefix("std::")
+        .or_else(|| module_path.strip_prefix("std/"))
+    {
         base_path
             .join("std")
             .join("src")
             .join(format!("{}.veil", module_name))
     } else {
-        base_path.join("src").join(format!("{}.veil", module_path))
+        base_path
+            .join("src")
+            .join(format!("{}.veil", module_path.replace("::", "/")))
     };
 
     if full_path.exists() {
@@ -92,12 +97,13 @@ pub fn resolve_imports_only(
                         let current_dir = base_path
                             .parent()
                             .ok_or_else(|| anyhow!("Base path has no parent"))?;
-                        current_dir.join(format!("{}.veil", module_path))
+                        current_dir.join(format!("{}.veil", module_path.replace("::", "/")))
                     }
                     ast::ModuleType::External => {
                         let external_libs_dir =
                             std::env::var("VEIL_LIBS_PATH").unwrap_or_else(|_| "libs".to_string());
-                        PathBuf::from(external_libs_dir).join(format!("{}.veil", module_path))
+                        PathBuf::from(external_libs_dir)
+                            .join(format!("{}.veil", module_path.replace("::", "/")))
                     }
                 };
 

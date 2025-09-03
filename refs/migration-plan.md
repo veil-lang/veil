@@ -1,5 +1,85 @@
 # Veil v2.0 Migration Plan
 
+## M10 – Migration Cutover to Pass-Based Pipeline
+
+Goal
+
+- Replace all deprecated src/\* compiler paths with the new pass-based pipeline across crates: AST → HIR → Resolve → TypeCheck → Normalize → Monomorphize → IR → Codegen-C. The new pipeline must meet the current language specification (refs/language-spec.md) as the single source of truth (SoT) and maintain a clear separation of concerns per crate.
+
+Scope of Work (crates/\*)
+
+- crates/syntax: Pest grammar parity with spec; parse both module path styles and canonicalize to spec (support `::` and `/` with a transitional warning on the non-canonical form; canonical form is `::` per spec examples). Implement full precedence table (power right-assoc; bitwise vs logical ordering; pipeline; assignment right-assoc), declarations (const/var, visibility), FFI, closures, async blocks, unsafe blocks, try blocks, and expression forms (|>, postfix ?, ++/--, // vs /, ranges, is/is not, in/not in).
+- crates/ast: Ensure AST nodes cover all spec constructs with spans. Keep stable data model for adapter/snapshots.
+- crates/lower (AST→HIR): Desugar sugar to core HIR: pipeline to nested calls; ++/-- to +=/-= with correct value semantics; postfix ? to early-return structure; if-let/match helpers; preserve/merge spans.
+- crates/hir: Stable IDs and normalized node forms for spec features. Extend nodes for traits stubs, visibility flags, async markers where needed.
+- crates/resolve: Symbol tables, module graph, re-exports, scoped visibility (pub, pub(crate), pub(super), pub(in path)), module path normalization (canonicalize `::`), cycle detection, and accurate diagnostics.
+- crates/typeck: HIR type checker enforces spec rules: integer // vs float / with fix-its; optionals + postfix ? control-flow; unions/intersections (basic lattice and match exhaustiveness); visibility access checks; traits phase-1 validation (bounds/where/associated presence); gating of unsafe operations; async surface typing (async fn to Future-like, await context check).
+- crates/normalize: Final desugar for IR lowering; verify spans and determinism.
+- crates/mono: Monomorphize generics on typed/normalized HIR; deterministic instance naming; caches; metadata for future vtables.
+- crates/ir: Post-mono structured IR covering arithmetic, logical, shifts, bitwise, casts, locals, load/store, control flow (if/while/loop), match (literals/guards), for loops via iterator hooks; deterministic printer and goldens.
+- crates/codegen-c: Pure IR→C; visibility-driven symbol exports; link to runtime; early-return pattern for postfix ?; iterator hooks suppression when runtime provided.
+- crates/compiler: PassManager is the only driver; per-pass caches; build fingerprinting; per-pass dump hooks for debugging; pruning of legacy code paths. Auto-prelude insertion at entry unless compiling prelude itself.
+- crates/cli: Route ve build/run through PassManager; provide dump flags for AST/HIR/IR; expose --pass-timings/--cache-stats; emit build/pass-stats.json for CI.
+- lib/std/src: Ensure std/prelude.veil matches spec; Option/Result and common imports available.
+
+Spec Conformance (SoT: refs/language-spec.md)
+
+- Grammar and precedence:
+  - Power \*\* (right-assoc); ranges vs casts vs postfix order; bitwise vs logical precedence; pipeline |> between logical and assignment; assignment right-assoc.
+  - Operators: // (int), / (float), ++/-- (ints only on var), |>, is/is not, in/not in, ~, ^, bitwise &, |, shifts << >>.
+- Declarations and visibility:
+  - const/var, visibility modifiers on items and fields; type alias; union decls (syntax acceptance; semantic checks minimal).
+- Types:
+  - str, ch, isize/usize, i128/u128; optionals T?; unions T | U; intersections T & U; pointers \*T; borrowed &T; weak T; dyn Trait (surface only).
+- Expressions/statements:
+  - postfix ?, closures (sync/async), async/await, spawn blocks (syntax; basic validations), unsafe blocks, try blocks.
+- Imports/exports:
+  - Import list/alias; export blocks; module paths accept :: canonically (transitional support for /).
+- Type system:
+  - No implicit numeric coercions; enforce / vs //; optionals propagation; unions/intersections compatibility; match exhaustiveness warnings/diagnostics; trait bounds (phase 1).
+- Codegen:
+  - IR coverage sufficient for arithmetic/logic/branch/select/load/store/calls/match basics/loops; C backend produces runnable output; runtime hooks linked.
+
+Acceptance Criteria (M10)
+
+- Build path cutover:
+  - ve build/run exclusively uses PassManager on crates/_; legacy src/_ compiler paths are removed or gated off (not used by default).
+- Spec compliance minimum:
+  - End-to-end compile for programs using: const/var; visibility; import/export (with :: paths); precedence-correct expressions including |>, postfix ?, ++/--; division rules (/ vs //) with fix-its; ranges; match with guards; basic unions/intersections; basic trait bound validation; async syntax parsed with await context checks; unsafe gated.
+- Determinism and artifacts:
+  - HIR/IR goldens stable; IR printer deterministic; codegen-C output compiles and executes examples/tests; pass-stats.json emitted when requested.
+- Caching and reproducibility:
+  - Per-pass caches keyed by content digests (entry + transitive imports) and compiler fingerprint; observed hit/miss via flags; .cache preserved.
+- Tests:
+  - Positive/negative tests for grammar, precedence, division diagnostics, postfix ?, unions/intersections basics, visibility rules, :: module paths, imports/aliases.
+- Documentation:
+  - Update ARCHITECTURE.md and refs/migration-plan.md to reflect crate-based pipeline and spec alignment; note canonical module path policy.
+
+Sprint Plan (for M10)
+
+- Sprint M10-A: Cutover and parity
+  - Wire CLI → PassManager end-to-end; remove legacy src/\* pipeline usage.
+  - Syntax/precedence parity in crates/syntax with spec; :: canonicalization (warn on /); auto-prelude; dumps for AST/HIR/IR.
+  - Resolver visibility + imports/re-exports; division diagnostics in typeck; postfix ? lowering/typing; pipeline/++/-- desugar.
+  - IR coverage audit and goldens; IR→C codegen pass for covered features.
+- Sprint M10-B: Conformance closure and QA
+  - Unions/intersections lattice basics; match exhaustiveness warnings; trait phase-1 checks; unsafe gating.
+  - Async surface checks (await-in-async, spawn scope validations basic).
+  - Transitive import digests for caches; pass-stats.json emission (done); docs updates; delete or quarantine legacy modules.
+  - Test suite expansion and stabilize goldens.
+
+Gaps to Close (tracked in this doc and to be reflected in crates/\* issues)
+
+- Traits semantics beyond phase-1 (vtable/dyn dispatch) – planned next milestones.
+- Full async runtime semantics and I/O – parse/validate now; runtime integration later.
+- Advanced pattern matching (full coverage per spec) – expand progressively.
+- Symbol-level dirty propagation in caches – after cutover.
+- Formatter/linter (`ve fmt`/`ve lint`) – basic stubs only in M10; feature-complete later.
+
+Note on CI Gates
+
+- The prior “M10 – CI Quality Gates” is moved to M11 to focus M10 on migration cutover and spec conformance. CI remains green with existing workflows; new gates (perf budgets, artifact uploads, grammar validation) will be hardened in M11.
+
 A concrete, subsystem-oriented plan to migrate the current compiler and toolchain to the v2.0 language specification under `refs/`. This document focuses on Gap Analysis and an actionable Subsystem Checklist. Complementary documents:
 
 - Architecture Refactor Plan (separate doc)

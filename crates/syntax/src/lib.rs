@@ -25,6 +25,7 @@ API stability notes:
 use pest::Parser;
 use pest_derive::Parser;
 pub use veil_ast as ast;
+use veil_diagnostics::help;
 use veil_diagnostics::prelude::*;
 
 /// Pest grammar for skeleton parsing and raw tokenization.
@@ -231,10 +232,22 @@ fn codespan_span(span: pest::Span<'_>) -> Span {
 }
 
 /// Parse using veil.pest and build a veil_ast::Program with spans.
+/// Returns the program only; warnings are discarded.
+pub fn parse_ast(files: &Files<String>, file_id: FileId) -> Result<ast::Program, Vec<Diag>> {
+    match parse_ast_with_warnings(files, file_id) {
+        Ok((program, _warnings)) => Ok(program),
+        Err(diags) => Err(diags),
+    }
+}
+
+/// Parse using veil.pest and build a veil_ast::Program with spans, returning (Program, parser_warnings).
 /// This adapter covers declarations (fn/struct/enum/impl/type alias/import/export/ffi/test),
 /// statements, expressions (with precedence), types (incl. arrays/optionals/pointers),
 /// template strings with embedded expressions, and "/"-only module paths.
-pub fn parse_ast(files: &Files<String>, file_id: FileId) -> Result<ast::Program, Vec<Diag>> {
+pub fn parse_ast_with_warnings(
+    files: &Files<String>,
+    file_id: FileId,
+) -> Result<(ast::Program, Vec<Diag>), Vec<Diag>> {
     use ast_grammar::AstRule as R;
     use pest::iterators::Pair;
 
@@ -249,6 +262,8 @@ pub fn parse_ast(files: &Files<String>, file_id: FileId) -> Result<ast::Program,
     };
 
     let _parse_ident = |p: &Pair<'_, R>| p.as_str().to_string();
+    // Collect parser warnings (e.g., legacy '/' module paths) without failing parse
+    let mut warnings: Vec<Diag> = Vec::new();
 
     // Parse ModuleType from a module path string
     let _module_type_of = |mp: &str| {
@@ -1010,7 +1025,11 @@ pub fn parse_ast(files: &Files<String>, file_id: FileId) -> Result<ast::Program,
     }
 
     // Parse imports and export-import
-    fn parse_import_decl(pair: Pair<'_, R>) -> ast::ImportDeclaration {
+    fn parse_import_decl(
+        pair: Pair<'_, R>,
+        file_id: FileId,
+        warnings: &mut Vec<Diag>,
+    ) -> ast::ImportDeclaration {
         let mut module_path = String::new();
         let mut alias = None;
         let mut specifiers: Vec<ast::ImportSpecifier> = Vec::new();
@@ -1018,7 +1037,20 @@ pub fn parse_ast(files: &Files<String>, file_id: FileId) -> Result<ast::Program,
 
         for c in pair.into_inner() {
             match c.as_rule() {
-                R::module_path => module_path = c.as_str().to_string(),
+                R::module_path => {
+                    module_path = c.as_str().to_string();
+                    // Legacy path warning: prefer '::' over '/'
+                    if module_path.contains('/') {
+                        let sp = codespan_span(c.as_span());
+                        let d = warning(
+                            "Legacy module path separator '/' detected; use '::' instead",
+                            file_id,
+                            sp,
+                        )
+                        .with_notes(vec![help("fix-it: replace '/' with '::'")]);
+                        warnings.push(d);
+                    }
+                }
                 R::import_list => {
                     is_list = true;
                     for it in c.into_inner() {
@@ -1046,30 +1078,42 @@ pub fn parse_ast(files: &Files<String>, file_id: FileId) -> Result<ast::Program,
             }
         }
 
-        let module_type = if module_path.starts_with("std/") {
-            ast::ModuleType::Standard
-        } else if module_path.starts_with("./") || module_path.starts_with("../") {
-            ast::ModuleType::Local
+        // Canonicalize module paths to '::' while detecting legacy '/' for classification
+        let raw_module_path = module_path.clone();
+        let module_path_canon = if raw_module_path.contains('/') {
+            raw_module_path.replace("/", "::")
         } else {
-            ast::ModuleType::External
+            raw_module_path.clone()
         };
+        let module_type =
+            if raw_module_path.starts_with("std::") || raw_module_path.starts_with("std/") {
+                ast::ModuleType::Standard
+            } else if raw_module_path.starts_with("./") || raw_module_path.starts_with("../") {
+                ast::ModuleType::Local
+            } else {
+                ast::ModuleType::External
+            };
 
         if is_list {
             ast::ImportDeclaration::ImportSpecifiers {
-                module_path,
+                module_path: module_path_canon,
                 module_type,
                 specifiers,
             }
         } else {
             ast::ImportDeclaration::ImportAll {
-                module_path,
+                module_path: module_path_canon,
                 module_type,
                 alias,
             }
         }
     }
 
-    fn parse_export_import_decl(pair: Pair<'_, R>) -> ast::ImportDeclaration {
+    fn parse_export_import_decl(
+        pair: Pair<'_, R>,
+        file_id: FileId,
+        warnings: &mut Vec<Diag>,
+    ) -> ast::ImportDeclaration {
         // export import ...; normalize to ExportImport* variants
         let mut module_path = String::new();
         let mut alias = None;
@@ -1078,7 +1122,20 @@ pub fn parse_ast(files: &Files<String>, file_id: FileId) -> Result<ast::Program,
 
         for c in pair.into_inner() {
             match c.as_rule() {
-                R::module_path => module_path = c.as_str().to_string(),
+                R::module_path => {
+                    module_path = c.as_str().to_string();
+                    // Legacy path warning: prefer '::' over '/'
+                    if module_path.contains('/') {
+                        let sp = codespan_span(c.as_span());
+                        let d = warning(
+                            "Legacy module path separator '/' detected; use '::' instead",
+                            file_id,
+                            sp,
+                        )
+                        .with_notes(vec![help("fix-it: replace '/' with '::'")]);
+                        warnings.push(d);
+                    }
+                }
                 R::import_list => {
                     list = true;
                     for it in c.into_inner() {
@@ -1106,23 +1163,31 @@ pub fn parse_ast(files: &Files<String>, file_id: FileId) -> Result<ast::Program,
             }
         }
 
-        let module_type = if module_path.starts_with("std/") {
-            ast::ModuleType::Standard
-        } else if module_path.starts_with("./") || module_path.starts_with("../") {
-            ast::ModuleType::Local
+        // Canonicalize module paths to '::' while detecting legacy '/' for classification
+        let raw_module_path = module_path.clone();
+        let module_path_canon = if raw_module_path.contains('/') {
+            raw_module_path.replace("/", "::")
         } else {
-            ast::ModuleType::External
+            raw_module_path.clone()
         };
+        let module_type =
+            if raw_module_path.starts_with("std::") || raw_module_path.starts_with("std/") {
+                ast::ModuleType::Standard
+            } else if raw_module_path.starts_with("./") || raw_module_path.starts_with("../") {
+                ast::ModuleType::Local
+            } else {
+                ast::ModuleType::External
+            };
 
         if list {
             ast::ImportDeclaration::ExportImportSpecifiers {
-                module_path,
+                module_path: module_path_canon,
                 module_type,
                 specifiers,
             }
         } else {
             ast::ImportDeclaration::ExportImportAll {
-                module_path,
+                module_path: module_path_canon,
                 module_type,
                 alias,
             }
@@ -1468,10 +1533,16 @@ pub fn parse_ast(files: &Files<String>, file_id: FileId) -> Result<ast::Program,
                 for item in program_pair.into_inner() {
                     match item.as_rule() {
                         R::import_decl => {
-                            program.imports.push(parse_import_decl(item));
+                            program
+                                .imports
+                                .push(parse_import_decl(item, file_id, &mut warnings));
                         }
                         R::export_import_decl => {
-                            program.imports.push(parse_export_import_decl(item));
+                            program.imports.push(parse_export_import_decl(
+                                item,
+                                file_id,
+                                &mut warnings,
+                            ));
                         }
                         R::export_decl => {
                             // export {fn|struct|enum|type_alias}
@@ -1548,7 +1619,7 @@ pub fn parse_ast(files: &Files<String>, file_id: FileId) -> Result<ast::Program,
                 }
             }
 
-            Ok(program)
+            Ok((program, warnings))
         }
         Err(e) => {
             let mut diags = Vec::with_capacity(1);

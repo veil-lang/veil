@@ -380,13 +380,18 @@ fn resolve_standard_library_path(module_path: &str) -> Result<PathBuf> {
             .unwrap_or_else(|| PathBuf::from("lib"))
     };
 
-    let full_path = if let Some(module_name) = module_path.strip_prefix("std/") {
+    let full_path = if let Some(module_name) = module_path
+        .strip_prefix("std::")
+        .or_else(|| module_path.strip_prefix("std/"))
+    {
         base_path
             .join("std")
             .join("src")
             .join(format!("{}.veil", module_name))
     } else {
-        base_path.join("src").join(format!("{}.veil", module_path))
+        base_path
+            .join("src")
+            .join(format!("{}.veil", module_path.replace("::", "/")))
     };
 
     if full_path.exists() {
@@ -419,12 +424,13 @@ fn resolve_imports_only(
                         let current_dir = base_path
                             .parent()
                             .ok_or_else(|| anyhow!("Base path has no parent"))?;
-                        current_dir.join(format!("{}.veil", module_path))
+                        current_dir.join(format!("{}.veil", module_path.replace("::", "/")))
                     }
                     ast::ModuleType::External => {
                         let external_libs_dir =
                             std::env::var("VEIL_LIBS_PATH").unwrap_or_else(|_| "libs".to_string());
-                        PathBuf::from(external_libs_dir).join(format!("{}.veil", module_path))
+                        PathBuf::from(external_libs_dir)
+                            .join(format!("{}.veil", module_path.replace("::", "/")))
                     }
                 };
 
@@ -447,12 +453,13 @@ fn resolve_imports_only(
                         let current_dir = base_path
                             .parent()
                             .ok_or_else(|| anyhow!("Base path has no parent"))?;
-                        current_dir.join(format!("{}.veil", module_path))
+                        current_dir.join(format!("{}.veil", module_path.replace("::", "/")))
                     }
                     ast::ModuleType::External => {
                         let external_libs_dir =
                             std::env::var("VEIL_LIBS_PATH").unwrap_or_else(|_| "libs".to_string());
-                        PathBuf::from(external_libs_dir).join(format!("{}.veil", module_path))
+                        PathBuf::from(external_libs_dir)
+                            .join(format!("{}.veil", module_path.replace("::", "/")))
                     }
                 };
 
@@ -475,12 +482,13 @@ fn resolve_imports_only(
                         let current_dir = base_path
                             .parent()
                             .ok_or_else(|| anyhow!("Base path has no parent"))?;
-                        current_dir.join(format!("{}.veil", module_path))
+                        current_dir.join(format!("{}.veil", module_path.replace("::", "/")))
                     }
                     ast::ModuleType::External => {
                         let external_libs_dir =
                             std::env::var("VEIL_LIBS_PATH").unwrap_or_else(|_| "libs".to_string());
-                        PathBuf::from(external_libs_dir).join(format!("{}.veil", module_path))
+                        PathBuf::from(external_libs_dir)
+                            .join(format!("{}.veil", module_path.replace("::", "/")))
                     }
                 };
 
@@ -503,12 +511,13 @@ fn resolve_imports_only(
                         let current_dir = base_path
                             .parent()
                             .ok_or_else(|| anyhow!("Base path has no parent"))?;
-                        current_dir.join(format!("{}.veil", module_path))
+                        current_dir.join(format!("{}.veil", module_path.replace("::", "/")))
                     }
                     ast::ModuleType::External => {
                         let external_libs_dir =
                             std::env::var("VEIL_LIBS_PATH").unwrap_or_else(|_| "libs".to_string());
-                        PathBuf::from(external_libs_dir).join(format!("{}.veil", module_path))
+                        PathBuf::from(external_libs_dir)
+                            .join(format!("{}.veil", module_path.replace("::", "/")))
                     }
                 };
                 resolved.push(ResolvedImport {
@@ -684,7 +693,8 @@ impl Pass for BuildIrPass {
         let file_id = files.add(entry.to_string_lossy().to_string(), entry_content);
 
         // Parse AST
-        let mut program = veil_syntax::parse_ast(&files, file_id).map_err(|_diags| {
+        let (mut program, parse_warnings) = veil_syntax::parse_ast_with_warnings(&files, file_id)
+            .map_err(|_diags| {
             anyhow::anyhow!(
                 "{}:{}: {}",
                 entry.to_string_lossy().replace("\\\\?\\", ""),
@@ -692,19 +702,28 @@ impl Pass for BuildIrPass {
                 "Parse error"
             )
         })?;
+        if verbose && !parse_warnings.is_empty() {
+            let writer = StandardStream::stderr(ColorChoice::Auto);
+            let config = term::Config::default();
+            for diag in &parse_warnings {
+                let _ = term::emit(&mut writer.lock(), &config, &files, diag);
+            }
+        }
 
         // Ensure prelude import unless compiling prelude itself
         let is_prelude_module = entry.to_string_lossy().ends_with("prelude.veil");
         let has_prelude_import = program.imports.iter().any(|import| match import {
-            ast::ImportDeclaration::ImportAll { module_path, .. } => module_path == "std/prelude",
+            ast::ImportDeclaration::ImportAll { module_path, .. } => {
+                module_path == "std::prelude" || module_path == "std/prelude"
+            }
             ast::ImportDeclaration::ExportImportAll { module_path, .. } => {
-                module_path == "std/prelude"
+                module_path == "std::prelude" || module_path == "std/prelude"
             }
             _ => false,
         });
         if !is_prelude_module && !has_prelude_import {
             let prelude_import = ast::ImportDeclaration::ImportAll {
-                module_path: "std/prelude".to_string(),
+                module_path: "std::prelude".to_string(),
                 module_type: ast::ModuleType::Standard,
                 alias: None,
             };
@@ -809,25 +828,37 @@ pub fn process_build(
         .with_context(|| format!("Failed to read input file {}", input.display()))?;
     let file_id = files.add(input.to_string_lossy().to_string(), entry_content.clone());
 
-    let mut program = veil_syntax::parse_ast(&files, file_id).map_err(|diags| {
-        let clean_path = input.to_string_lossy().replace("\\\\?\\", "");
-        let msg = diags
-            .first()
-            .map(|_| "Parse error")
-            .unwrap_or("Parse error");
-        anyhow!("{}:{}: {}", clean_path, 0, msg)
-    })?;
+    let (mut program, parse_warnings) = veil_syntax::parse_ast_with_warnings(&files, file_id)
+        .map_err(|diags| {
+            let clean_path = input.to_string_lossy().replace("\\\\?\\", "");
+            let msg = diags
+                .first()
+                .map(|_| "Parse error")
+                .unwrap_or("Parse error");
+            anyhow!("{}:{}: {}", clean_path, 0, msg)
+        })?;
+    if verbose && !parse_warnings.is_empty() {
+        let writer = StandardStream::stderr(ColorChoice::Auto);
+        let config = term::Config::default();
+        for diag in &parse_warnings {
+            let _ = term::emit(&mut writer.lock(), &config, &files, diag);
+        }
+    }
 
     // Ensure prelude import unless compiling prelude itself
     let is_prelude_module = input.to_string_lossy().ends_with("prelude.veil");
     let has_prelude_import = program.imports.iter().any(|import| match import {
-        ast::ImportDeclaration::ImportAll { module_path, .. } => module_path == "std/prelude",
-        ast::ImportDeclaration::ExportImportAll { module_path, .. } => module_path == "std/prelude",
+        ast::ImportDeclaration::ImportAll { module_path, .. } => {
+            module_path == "std::prelude" || module_path == "std/prelude"
+        }
+        ast::ImportDeclaration::ExportImportAll { module_path, .. } => {
+            module_path == "std::prelude" || module_path == "std/prelude"
+        }
         _ => false,
     });
     if !is_prelude_module && !has_prelude_import {
         let prelude_import = ast::ImportDeclaration::ImportAll {
-            module_path: "std/prelude".to_string(),
+            module_path: "std::prelude".to_string(),
             module_type: ast::ModuleType::Standard,
             alias: None,
         };

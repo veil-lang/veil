@@ -400,30 +400,31 @@ impl IncrementalCompiler {
             let mut files = codespan::Files::<String>::new();
             let file_id = files.add(normalized_current.to_string_lossy().to_string(), content);
 
-            let mut program = veil_syntax::parse_ast(&files, file_id).map_err(|diags| {
-                let clean_path = normalized_current.to_string_lossy().replace("\\\\?\\", "");
-                let msg = diags
-                    .first()
-                    .map(|_| "Parse error")
-                    .unwrap_or("Parse error");
-                anyhow::anyhow!("{}:{}: {}", clean_path, 0, msg)
-            })?;
+            let (mut program, _parse_warnings) =
+                veil_syntax::parse_ast_with_warnings(&files, file_id).map_err(|diags| {
+                    let clean_path = normalized_current.to_string_lossy().replace("\\\\?\\", "");
+                    let msg = diags
+                        .first()
+                        .map(|_| "Parse error")
+                        .unwrap_or("Parse error");
+                    anyhow::anyhow!("{}:{}: {}", clean_path, 0, msg)
+                })?;
             let is_prelude_module = normalized_current
                 .to_string_lossy()
                 .ends_with("prelude.veil");
             let has_prelude_import = program.imports.iter().any(|import| match import {
                 crate::ast::ImportDeclaration::ImportAll { module_path, .. } => {
-                    module_path == "std/prelude"
+                    module_path == "std::prelude" || module_path == "std/prelude"
                 }
                 crate::ast::ImportDeclaration::ExportImportAll { module_path, .. } => {
-                    module_path == "std/prelude"
+                    module_path == "std::prelude" || module_path == "std/prelude"
                 }
                 _ => false,
             });
 
             if !is_prelude_module && !has_prelude_import {
                 let prelude_import = crate::ast::ImportDeclaration::ImportAll {
-                    module_path: "std/prelude".to_string(),
+                    module_path: "std::prelude".to_string(),
                     module_type: crate::ast::ModuleType::Standard,
                     alias: None,
                 };
@@ -646,29 +647,30 @@ impl IncrementalCompiler {
         let mut files = codespan::Files::<String>::new();
         let file_id = files.add(entry_point.to_string_lossy().to_string(), content);
 
-        let mut program = veil_syntax::parse_ast(&files, file_id).map_err(|diags| {
-            let clean_path = entry_point.to_string_lossy().replace("\\\\?\\", "");
-            let msg = diags
-                .first()
-                .map(|_| "Parse error")
-                .unwrap_or("Parse error");
-            anyhow::anyhow!("{}:{}: {}", clean_path, 0, msg)
-        })?;
+        let (mut program, _parse_warnings) = veil_syntax::parse_ast_with_warnings(&files, file_id)
+            .map_err(|diags| {
+                let clean_path = entry_point.to_string_lossy().replace("\\\\?\\", "");
+                let msg = diags
+                    .first()
+                    .map(|_| "Parse error")
+                    .unwrap_or("Parse error");
+                anyhow::anyhow!("{}:{}: {}", clean_path, 0, msg)
+            })?;
 
         let is_prelude_module = entry_point.to_string_lossy().ends_with("prelude.veil");
         let has_prelude_import = program.imports.iter().any(|import| match import {
             crate::ast::ImportDeclaration::ImportAll { module_path, .. } => {
-                module_path == "std/prelude"
+                module_path == "std::prelude" || module_path == "std/prelude"
             }
             crate::ast::ImportDeclaration::ExportImportAll { module_path, .. } => {
-                module_path == "std/prelude"
+                module_path == "std::prelude" || module_path == "std/prelude"
             }
             _ => false,
         });
 
         if !is_prelude_module && !has_prelude_import {
             let prelude_import = crate::ast::ImportDeclaration::ImportAll {
-                module_path: "std/prelude".to_string(),
+                module_path: "std::prelude".to_string(),
                 module_type: crate::ast::ModuleType::Standard,
                 alias: None,
             };
