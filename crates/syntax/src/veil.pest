@@ -30,7 +30,7 @@ template_str = @{ "`" ~ (bt_string_chunk | template_interpolation)* ~ "`" }
 bool_lit = _{ "true" | "false" }
 none_lit = _{ "None" | "none" }
 
-module_path = @{ ident ~ ("/" ~ ident)* }  // '/' only; '::' is intentionally not accepted
+module_path = @{ ident ~ ( ( "::" | "/" ) ~ ident )* }  // Accept both '::' and '/' separators
 
 // Keywords (kept as rules for clarity; identifiers are separate)
 KW_FN          = { "fn" ~ !ident_continue }

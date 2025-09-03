@@ -167,7 +167,7 @@ fn golden_ast_dump_smoke() {
 Tests:
 - hello_world
 Imports:
-- std/prelude (ImportAll)
+- std::prelude (ImportAll)
 Structs:
 - Point
 Enums:

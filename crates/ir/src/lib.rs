@@ -109,7 +109,7 @@ impl FunctionIR {
     pub fn to_pretty_string(&self) -> String {
         let mut s = String::new();
         // Header
-        s.push_str("function ");
+        s.push_str("fn ");
         s.push_str(&self.name);
         s.push('(');
         for (i, p) in self.params.iter().enumerate() {
@@ -123,12 +123,7 @@ impl FunctionIR {
         s.push_str(") -> ");
         s.push_str(&self.ret.to_string());
         s.push_str(" {\n");
-        // Locals
-        if !self.locals.is_empty() {
-            for l in &self.locals {
-                s.push_str(&format!("  %l{}: {}\n", l.id.0, l.ty.to_string()));
-            }
-        }
+        // Locals elided in pretty printer
 
         // Blocks sorted by id
         let mut blocks = self.blocks.clone();
@@ -1532,8 +1527,8 @@ mod tests {
         p.functions.push(f_a);
 
         let printed = p.to_pretty_string();
-        let a_idx = printed.find("function alpha(").expect("alpha present");
-        let z_idx = printed.find("function zeta(").expect("zeta present");
+        let a_idx = printed.find("fn alpha(").expect("alpha present");
+        let z_idx = printed.find("fn zeta(").expect("zeta present");
         assert!(
             a_idx < z_idx,
             "alpha must print before zeta for determinism"
@@ -1553,7 +1548,7 @@ mod tests {
         };
 
         let s = f.to_pretty_string();
-        assert!(s.contains("function main() -> i32 {"));
+        assert!(s.contains("fn main() -> i32 {"));
         assert!(s.contains("bb0:"));
         assert!(s.contains("%0 = const.i64 42"));
         assert!(s.contains("ret %0"));
