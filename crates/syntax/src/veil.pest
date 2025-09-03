@@ -1,13 +1,14 @@
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 
 COMMENT      = _{ LINE_COMMENT | BLOCK_COMMENT }
-LINE_COMMENT = _{ "//" ~ (!"\n" ~ ANY)* ~ ("\n" | EOI) }
+LINE_COMMENT = _{ "/#" ~ (!"\n" ~ ANY)* ~ ("\n" | EOI) }
 BLOCK_COMMENT= _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
 
 S = _{ (WHITESPACE | COMMENT)* }
+WS = _{ WHITESPACE* }
 
 ident_continue = _{ ASCII_ALPHANUMERIC | "_" }
-ident = @{ (ASCII_ALPHA | "_") ~ ident_continue* }
+ident = @{ !KEYWORD ~ (ASCII_ALPHA | "_") ~ ident_continue* }
 
 hex_prefix = @{ "0x" }
 bin_prefix = @{ "0b" }
@@ -33,70 +34,81 @@ none_lit = _{ "None" | "none" }
 module_path = @{ ident ~ ( ( "::" | "/" ) ~ ident )* }  // Accept both '::' and '/' separators
 
 // Keywords (kept as rules for clarity; identifiers are separate)
-KW_FN          = { "fn" ~ !ident_continue }
-KW_TEST        = { "test" ~ !ident_continue }
-KW_LET         = { "let" ~ !ident_continue }
-KW_VAR         = { "var" ~ !ident_continue }
-KW_CONST       = { "const" ~ !ident_continue }
-KW_IF          = { "if" ~ !ident_continue }
-KW_ELSE        = { "else" ~ !ident_continue }
-KW_RETURN      = { "return" ~ !ident_continue }
-KW_DEFER       = { "defer" ~ !ident_continue }
-KW_SAFE        = { "safe" ~ !ident_continue }
-KW_AS          = { "as" ~ !ident_continue }
-KW_WHILE       = { "while" ~ !ident_continue }
-KW_FOR         = { "for" ~ !ident_continue }
-KW_IN          = { "in" ~ !ident_continue }
-KW_STEP        = { "step" ~ !ident_continue }
-KW_LOOP        = { "loop" ~ !ident_continue }
-KW_IMPORT      = { "import" ~ !ident_continue }
-KW_FROM        = { "from" ~ !ident_continue }
-KW_EXPORT      = { "export" ~ !ident_continue }
-KW_STRUCT      = { "struct" ~ !ident_continue }
-KW_ENUM        = { "enum" ~ !ident_continue }
-KW_UNION       = { "union" ~ !ident_continue }
-KW_TRAIT       = { "trait" ~ !ident_continue }
-KW_IMPL        = { "impl" ~ !ident_continue }
-KW_NEW         = { "new" ~ !ident_continue }
-KW_CONSTRUCTOR = { "constructor" ~ !ident_continue }
-KW_MATCH       = { "match" ~ !ident_continue }
-KW_TRUE        = { "true" ~ !ident_continue }
-KW_FALSE       = { "false" ~ !ident_continue }
-KW_RAWPTR      = { "rawptr" ~ !ident_continue }
-KW_FOREIGN     = { "foreign" ~ !ident_continue }
-KW_TYPE        = { "type" ~ !ident_continue }
-KW_PUB         = { "pub" ~ !ident_continue }
-KW_ASYNC       = { "async" ~ !ident_continue }
-KW_AWAIT       = { "await" ~ !ident_continue }
+KW_FN          = @{ "fn" ~ !ident_continue }
+KW_TEST        = @{ "test" ~ !ident_continue }
+KW_LET         = @{ "let" ~ !ident_continue }
+KW_VAR         = @{ "var" ~ !ident_continue }
+KW_CONST       = @{ "const" ~ !ident_continue }
+KW_IF          = @{ "if" ~ !ident_continue }
+KW_ELSE        = @{ "else" ~ !ident_continue }
+KW_RETURN      = @{ "return" ~ !ident_continue }
+KW_DEFER       = @{ "defer" ~ !ident_continue }
+KW_SAFE        = @{ "safe" ~ !ident_continue }
+KW_AS          = @{ "as" ~ !ident_continue }
+KW_WHILE       = @{ "while" ~ !ident_continue }
+KW_FOR         = @{ "for" ~ !ident_continue }
+KW_IN          = @{ "in" ~ !ident_continue }
+KW_STEP        = @{ "step" ~ !ident_continue }
+KW_LOOP        = @{ "loop" ~ !ident_continue }
+KW_IMPORT      = @{ "import" ~ !ident_continue }
+KW_FROM        = @{ "from" ~ !ident_continue }
+KW_EXPORT      = @{ "export" ~ !ident_continue }
+KW_STRUCT      = @{ "struct" ~ !ident_continue }
+KW_ENUM        = @{ "enum" ~ !ident_continue }
+KW_UNION       = @{ "union" ~ !ident_continue }
+KW_TRAIT       = @{ "trait" ~ !ident_continue }
+KW_IMPL        = @{ "impl" ~ !ident_continue }
+KW_NEW         = @{ "new" ~ !ident_continue }
+KW_CONSTRUCTOR = @{ "constructor" ~ !ident_continue }
+KW_MATCH       = @{ "match" ~ !ident_continue }
+KW_TRUE        = @{ "true" ~ !ident_continue }
+KW_FALSE       = @{ "false" ~ !ident_continue }
+KW_RAWPTR      = @{ "rawptr" ~ !ident_continue }
+KW_FOREIGN     = @{ "foreign" ~ !ident_continue }
+KW_TYPE        = @{ "type" ~ !ident_continue }
+KW_PUB         = @{ "pub" ~ !ident_continue }
+KW_ASYNC       = @{ "async" ~ !ident_continue }
+KW_AWAIT       = @{ "await" ~ !ident_continue }
+
+KEYWORD = _{
+    KW_FN | KW_TEST | KW_LET | KW_VAR | KW_CONST | KW_IF | KW_ELSE | KW_RETURN | KW_DEFER | KW_SAFE | KW_AS
+  | KW_WHILE | KW_FOR | KW_IN | KW_STEP | KW_LOOP | KW_IMPORT | KW_FROM | KW_EXPORT | KW_STRUCT | KW_ENUM
+  | KW_UNION | KW_TRAIT | KW_IMPL | KW_NEW | KW_CONSTRUCTOR | KW_MATCH | KW_TRUE | KW_FALSE | KW_RAWPTR
+  | KW_FOREIGN | KW_TYPE | KW_PUB | KW_ASYNC | KW_AWAIT
+  | TY_BOOL | TY_STRING | TY_STR | TY_VOID | TY_ANY | TY_U8A | TY_U8B | TY_U16A | TY_U16B | TY_U32A | TY_U32B | TY_U64A | TY_U64B
+  | TY_I8A | TY_I8B | TY_I16A | TY_I16B | TY_I32A | TY_I32B | TY_I64A | TY_I64B | TY_F32A | TY_F32B | TY_F64A | TY_F64B
+  | none_lit
+}
 
 // Primitive types (aligns with implementation)
-TY_BOOL   = { "bool" ~ !ident_continue }
-TY_STRING = { "string" ~ !ident_continue }
-TY_VOID   = { "void" ~ !ident_continue }
-TY_ANY    = { "any" ~ !ident_continue }
+TY_BOOL   = @{ "bool" ~ !ident_continue }
+TY_STRING = @{ "string" ~ !ident_continue }
+TY_STR    = @{ "str" ~ !ident_continue }
+TY_VOID   = @{ "void" ~ !ident_continue }
+TY_ANY    = @{ "any" ~ !ident_continue }
 
-TY_U8A  = { "byte" ~ !ident_continue }
-TY_U8B  = { "u8" ~ !ident_continue }
-TY_U16A = { "ushort" ~ !ident_continue }
-TY_U16B = { "u16" ~ !ident_continue }
-TY_U32A = { "uint" ~ !ident_continue }
-TY_U32B = { "u32" ~ !ident_continue }
-TY_U64A = { "ulong" ~ !ident_continue }
-TY_U64B = { "u64" ~ !ident_continue }
+TY_U8A  = @{ "byte" ~ !ident_continue }
+TY_U8B  = @{ "u8" ~ !ident_continue }
+TY_U16A = @{ "ushort" ~ !ident_continue }
+TY_U16B = @{ "u16" ~ !ident_continue }
+TY_U32A = @{ "uint" ~ !ident_continue }
+TY_U32B = @{ "u32" ~ !ident_continue }
+TY_U64A = @{ "ulong" ~ !ident_continue }
+TY_U64B = @{ "u64" ~ !ident_continue }
 
-TY_I8A  = { "sbyte" ~ !ident_continue }
-TY_I8B  = { "i8" ~ !ident_continue }
-TY_I16A = { "short" ~ !ident_continue }
-TY_I16B = { "i16" ~ !ident_continue }
-TY_I32A = { "int" ~ !ident_continue }
-TY_I32B = { "i32" ~ !ident_continue }
-TY_I64A = { "long" ~ !ident_continue }
-TY_I64B = { "i64" ~ !ident_continue }
+TY_I8A  = @{ "sbyte" ~ !ident_continue }
+TY_I8B  = @{ "i8" ~ !ident_continue }
+TY_I16A = @{ "short" ~ !ident_continue }
+TY_I16B = @{ "i16" ~ !ident_continue }
+TY_I32A = @{ "int" ~ !ident_continue }
+TY_I32B = @{ "i32" ~ !ident_continue }
+TY_I64A = @{ "long" ~ !ident_continue }
+TY_I64B = @{ "i64" ~ !ident_continue }
 
-TY_F32A = { "float" ~ !ident_continue }
-TY_F32B = { "f32" ~ !ident_continue }
-TY_F64A = { "double" ~ !ident_continue }
-TY_F64B = { "f64" ~ !ident_continue }
+TY_F32A = @{ "float" ~ !ident_continue }
+TY_F32B = @{ "f32" ~ !ident_continue }
+TY_F64A = @{ "double" ~ !ident_continue }
+TY_F64B = @{ "f64" ~ !ident_continue }
 
 // Multi-char operators and tokens
 ELLIPSIS   = { "..." }
@@ -111,6 +123,7 @@ ANDAND     = { "&&" }
 OROR       = { "||" }
 SHL        = { "<<" }
 SHR        = { ">>" }
+IDIV       = { "//" }
 RANGE_EQ   = { "..=" }
 RANGE_GT   = { "..>" }
 RANGE_LT   = { "..<" }
@@ -160,11 +173,11 @@ token = {
   | KW_WHILE | KW_FOR | KW_IN | KW_STEP | KW_LOOP | KW_IMPORT | KW_FROM | KW_EXPORT | KW_STRUCT | KW_ENUM
   | KW_UNION | KW_TRAIT | KW_IMPL | KW_NEW | KW_CONSTRUCTOR | KW_MATCH | KW_TRUE | KW_FALSE | KW_RAWPTR
   | KW_FOREIGN | KW_TYPE | KW_PUB | KW_ASYNC | KW_AWAIT
-  | TY_BOOL | TY_STRING | TY_VOID | TY_ANY | TY_U8A | TY_U8B | TY_U16A | TY_U16B | TY_U32A | TY_U32B | TY_U64A | TY_U64B
+  | TY_BOOL | TY_STRING | TY_STR | TY_VOID | TY_ANY | TY_U8A | TY_U8B | TY_U16A | TY_U16B | TY_U32A | TY_U32B | TY_U64A | TY_U64B
   | TY_I8A | TY_I8B | TY_I16A | TY_I16B | TY_I32A | TY_I32B | TY_I64A | TY_I64B | TY_F32A | TY_F32B | TY_F64A | TY_F64B
-  | ELLIPSIS | POW | ARROW | FATARROW | EQEQ | NOTEQ | GTE | LTE | ANDAND | OROR | SHL | SHR
+  | ELLIPSIS | POW | ARROW | FATARROW | EQEQ | NOTEQ | GTE | LTE | ANDAND | OROR | SHL | SHR | IDIV
   | RANGE_EQ | RANGE_GT | RANGE_LT | RANGE
-  | PLUSEQ | MINUSEQ | MULEQ | DIVEQ | IDIVEQ | MODEQ | POWEQ | SHLEQ | SHREQ | ANDEQ | XOREQ | OREQ
+  | PLUSEQ | MINUSEQ | MULEQ | IDIVEQ | DIVEQ | MODEQ | POWEQ | SHLEQ | SHREQ | ANDEQ | XOREQ | OREQ
   | LPAREN | RPAREN | LBRACE | RBRACE | LBRACK | RBRACK | COMMA | SEMI | COLON | DOT | EQ | PLUS | MINUS
   | STAR | SLASH | BANG | PERCENT | CARET | AMP | PIPE | GT | LT | QUESTION | HASH
   | bool_lit | none_lit | int_lit | float_lit | str_lit | template_str | ident
@@ -185,7 +198,25 @@ item = _{
     | impl_block
     | ffi_decl
     | test_decl
-    | stmt
+    | stmt_guarded
+}
+
+// Guard statements from starting at declaration keywords to reduce backtracking
+stmt_guarded = _{
+    !KW_FN
+  ~ !KW_IMPORT
+  ~ !KW_EXPORT
+  ~ !KW_TYPE
+  ~ !KW_STRUCT
+  ~ !KW_ENUM
+  ~ !KW_UNION
+  ~ !KW_TRAIT
+  ~ !KW_IMPL
+  ~ !KW_TEST
+  ~ !KW_FOREIGN
+  ~ !KW_PUB
+  ~ !KW_ASYNC
+  ~ stmt
 }
 
 // Visibility
@@ -195,10 +226,10 @@ visibility = {
 
 // Imports / Exports
 import_decl = {
-    KW_IMPORT ~ S ~ (
-        module_path ~ ( S ~ "as" ~ S ~ ident )?
-      | LBRACE ~ S ~ import_list ~ S ~ RBRACE ~ S ~ KW_FROM ~ S ~ module_path
-    ) ~ S ~ SEMI
+    KW_IMPORT ~ S? ~ (
+        module_path ~ ( S? ~ "as" ~ S? ~ ident )?
+      | LBRACE ~ S? ~ import_list ~ S? ~ RBRACE ~ S? ~ KW_FROM ~ S? ~ module_path
+    ) ~ S? ~ SEMI
 }
 
 export_decl = {
@@ -221,15 +252,28 @@ export_import_decl = {
     ) ~ S ~ SEMI
 }
 
-import_list = { import_item ~ ( S ~ COMMA ~ S ~ import_item )* }
+import_list = { import_item ~ ( S? ~ COMMA ~ S? ~ import_item )* }
 import_item = { ident ~ ( S ~ "as" ~ S ~ ident )? }
 
 // Type alias
 type_alias = { KW_TYPE ~ S ~ ident ~ S ~ generic_params? ~ S ~ EQ ~ S ~ ty ~ S ~ SEMI }
 
 // Declarations
+function_decl_min = {
+    KW_FN ~ S? ~ ident ~ S? ~ generic_params? ~ S? ~ parameter_list ~ S? ~ ( ARROW ~ S? ~ ty )? ~ S? ~ where_clause? ~ S? ~ ( block | SEMI )
+}
 function_decl = {
-    attribute* ~ S ~ visibility? ~ S ~ KW_ASYNC? ~ S ~ KW_FN ~ S ~ ident ~ S ~ generic_params? ~ S ~ parameter_list ~ S ~ ( ARROW ~ S ~ ty )? ~ S ~ where_clause? ~ S ~ ( block | SEMI )
+    attribute* ~ S? ~ visibility? ~ S? ~ KW_ASYNC? ~ S? ~ function_decl_min
+}
+
+// Debug-only: Minimal function head to isolate name and empty params
+fn_head = {
+    KW_FN ~ S? ~ ident ~ S? ~ LPAREN ~ S? ~ RPAREN
+}
+
+// Debug-only: Minimal function core to isolate header + block parsing
+fn_core = {
+    KW_FN ~ S? ~ ident ~ S? ~ parameter_list ~ S? ~ block
 }
 
 struct_decl = {
@@ -310,7 +354,7 @@ metadata_kv = { metadata_kv_pair ~ ( S ~ COMMA ~ S ~ metadata_kv_pair )* }
 metadata_kv_pair = { ident ~ S ~ COLON ~ S ~ literal }
 
 // Parameters / Generics / Where
-parameter_list = { LPAREN ~ S ~ ( parameter ~ ( S ~ COMMA ~ S ~ parameter )* )? ~ S ~ RPAREN }
+parameter_list = { LPAREN ~ S? ~ ( parameter ~ ( S? ~ COMMA ~ S? ~ parameter )* )? ~ S? ~ RPAREN }
 parameter = { (ELLIPSIS ~ S)? ~ ident ~ S ~ COLON ~ S ~ ty }
 
 generic_params = { LT ~ S ~ ( generic_param ~ ( S ~ COMMA ~ S ~ generic_param )* )? ~ S ~ GT }
@@ -340,17 +384,17 @@ stmt = _{
     | expr_stmt
 }
 
-block = { LBRACE ~ S ~ stmt* ~ S ~ RBRACE }
+block = { LBRACE ~ S? ~ ( stmt ~ S? )* ~ RBRACE }
 
 let_stmt = {
-    KW_LET ~ S ~ ident ~ ( S ~ COLON ~ S ~ ty )? ~ S ~ EQ ~ S ~ expr ~ S ~ SEMI
+    KW_LET ~ S ~ ident ~ ( S? ~ COLON ~ S? ~ ty )? ~ S? ~ EQ ~ S? ~ expr ~ WS? ~ SEMI
 }
 var_stmt = {
-    KW_VAR ~ S ~ ident ~ ( S ~ COLON ~ S ~ ty )? ~ S ~ EQ ~ S ~ expr ~ S ~ SEMI
+    KW_VAR ~ S ~ ident ~ ( S ~ COLON ~ S ~ ty )? ~ S ~ EQ ~ S ~ expr ~ WS? ~ SEMI
 }
 
-return_stmt = { KW_RETURN ~ ( S ~ expr )? ~ S ~ SEMI }
-defer_stmt  = { KW_DEFER ~ S ~ expr ~ S ~ SEMI }
+return_stmt = { KW_RETURN ~ ( S ~ expr )? ~ WS? ~ SEMI }
+defer_stmt  = { KW_DEFER ~ S ~ expr ~ WS? ~ SEMI }
 
 while_stmt = {
     KW_WHILE ~ S ~ expr ~ S ~ block
@@ -377,12 +421,12 @@ match_arm = {
 }
 
 // Expressions
-expr_stmt = { expr ~ S ~ SEMI }
+expr_stmt = { expr ~ WS? ~ SEMI }
 
 expr = _{ assignment_expr }
 
 assignment_expr = {
-    pipeline_expr ~ ( S ~ ( EQ | PLUSEQ | MINUSEQ | MULEQ | DIVEQ | IDIVEQ | MODEQ | POWEQ | SHLEQ | SHREQ | ANDEQ | XOREQ | OREQ ) ~ S ~ assignment_expr )?
+    pipeline_expr ~ ( S ~ ( EQ | PLUSEQ | MINUSEQ | MULEQ | IDIVEQ | DIVEQ | MODEQ | POWEQ | SHLEQ | SHREQ | ANDEQ | XOREQ | OREQ ) ~ S ~ assignment_expr )?
 }
 
 pipeline_expr = { logical_or_expr ~ ( S ~ "|>" ~ S ~ logical_or_expr )* }
@@ -391,16 +435,16 @@ logical_or_expr = { logical_and_expr ~ ( S ~ OROR ~
  S ~ logical_and_expr )* }
 logical_and_expr = { bit_or_expr ~ ( S ~ ANDAND ~ S ~ bit_or_expr )* }
 
-bit_or_expr = { bit_xor_expr ~ ( S ~ PIPE ~ S ~ bit_xor_expr )* }
-bit_xor_expr= { bit_and_expr ~ ( S ~ CARET ~ S ~ bit_and_expr )* }
-bit_and_expr= { equality_expr ~ ( S ~ AMP ~ S ~ equality_expr )* }
+bit_or_expr = { bit_xor_expr ~ ( WS ~ PIPE ~ WS ~ bit_xor_expr )* }
+bit_xor_expr= { bit_and_expr ~ ( WS ~ CARET ~ WS ~ bit_and_expr )* }
+bit_and_expr= { equality_expr ~ ( WS ~ AMP ~ WS ~ equality_expr )* }
 
-equality_expr = { relational_expr ~ ( S ~ ( EQEQ | NOTEQ ) ~ S ~ relational_expr )* }
-relational_expr = { shift_expr ~ ( S ~ ( LT | GT | LTE | GTE ) ~ S ~ shift_expr )* }
-shift_expr = { range_expr ~ ( S ~ ( SHL | SHR ) ~ S ~ range_expr )* }
-additive_expr = { multiplicative_expr ~ ( S ~ ( PLUS | MINUS ) ~ S ~ multiplicative_expr )* }
-multiplicative_expr = { power_expr ~ ( S ~ ( STAR | SLASH | PERCENT ) ~ S ~ power_expr )* }
-power_expr = { cast_expr ~ ( S ~ POW ~ S ~ power_expr )? }
+equality_expr = { relational_expr ~ ( WS ~ ( EQEQ | NOTEQ ) ~ WS ~ relational_expr )* }
+relational_expr = { shift_expr ~ ( WS ~ ( LT | GT | LTE | GTE ) ~ WS ~ shift_expr )* }
+shift_expr = { range_expr ~ ( WS ~ ( SHL | SHR ) ~ WS ~ range_expr )* }
+additive_expr = { multiplicative_expr ~ ( WS ~ ( PLUS | MINUS ) ~ WS ~ multiplicative_expr )* }
+multiplicative_expr = { power_expr ~ ( WS ~ ( STAR | IDIV | SLASH | PERCENT ) ~ WS ~ power_expr )* }
+power_expr = { cast_expr ~ ( WS ~ POW ~ WS ~ power_expr )? }
 
 cast_expr = { unary_expr ~ ( S ~ KW_AS ~ S ~ ty )* }
 
@@ -446,7 +490,7 @@ new_expr = { KW_NEW ~ S ~ ident ~ S ~ LPAREN ~ S ~ argument_list? ~ S ~ RPAREN }
 
 var_ref = { ident }
 
-argument_list = { expr ~ ( S ~ COMMA ~ S ~ expr )* }
+argument_list = { expr ~ ( S? ~ COMMA ~ S? ~ expr )* }
 
 array_lit = {
       LBRACK ~ S ~ ( expr ~ ( S ~ COMMA ~ S ~ expr )* )? ~ S ~ RBRACK
@@ -515,7 +559,7 @@ ty_primary = {
 
 primitive_type = {
       TY_BOOL
-    | TY_STRING
+    | TY_STRING | TY_STR
     | TY_VOID
     | TY_ANY
     | TY_U8A | TY_U8B

@@ -1,0 +1,61 @@
+/# Minimal M1 test - basic MVL features that should parse
+/# Using new /# comment syntax
+
+fn test_arithmetic() -> i32 {
+    let a: i32 = 10;
+    let b: i32 = 3;
+
+    /# Integer division using // operator
+    let quotient = a // b;
+
+    /# Float division using / operator
+    let x: f32 = 10.0;
+    let y: f32 = 3.0;
+    let result = x / y;
+
+    return quotient;
+}
+
+fn test_strings() -> void {
+    /# Both str and string types accepted
+    let s1: str = "hello";
+    let s2: string = s1;
+    return;
+}
+
+fn test_arrays() -> void {
+    let arr: [i32] = [1, 2, 3];
+    let first = arr[0];
+    return;
+}
+
+fn test_control_flow() -> void {
+    let i: i32 = 0;
+
+    if i == 0 {
+        let x = 1;
+    } else {
+        let y = 2;
+    }
+
+    while i < 5 {
+        i = i + 1;
+    }
+
+    for j in 0..3 {
+        let temp = j;
+    }
+
+    return;
+}
+
+/# FFI declaration stub
+foreign fn printf(format: str) -> void;
+
+fn main() -> void {
+    test_arithmetic();
+    test_strings();
+    test_arrays();
+    test_control_flow();
+    return;
+}

@@ -600,7 +600,7 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                             Add => InstIR::Add { lhs: l, rhs: r },
                             Sub => InstIR::Sub { lhs: l, rhs: r },
                             Mul => InstIR::Mul { lhs: l, rhs: r },
-                            Div => InstIR::Div { lhs: l, rhs: r },
+                            Div | IDiv => InstIR::Div { lhs: l, rhs: r },
                             Mod => InstIR::Mod { lhs: l, rhs: r },
                             BitAnd => InstIR::BitAnd { lhs: l, rhs: r },
                             #[cfg(feature = "extended_ir_ops")]

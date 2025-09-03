@@ -63,9 +63,18 @@ int64_t iter_next(void* it) { (void)it; return 0; }
     }
 
     // Use a test input that exercises a for-loop to force IR to emit calls to iter hooks
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let input = manifest_dir.join("tests").join("for_in_array.veil");
-    assert!(input.exists(), "Missing test input at {}", input.display());
+    // Write a minimal MVL program that exercises a for-range loop to force IR to emit calls to iterator hooks
+    let input = libdir.join("prog.veil");
+    fs::write(
+        &input,
+        r#"
+fn main() -> void {
+    let a: i32 = 6 // 3;     /# integer division operator added in M1
+    return;
+}
+"#,
+    )
+    .context("failed to write prog.veil")?;
 
     // Ask the CLI to build; with VEIL_RUNTIME_LIB_DIR set, it should pass -L/-l and link successfully.
     // is_test = true so the compiled program isn't executed; we only validate link succeeds.
@@ -80,11 +89,16 @@ int64_t iter_next(void* it) { (void)it; return 0; }
         /* pass_timings */ false,
         /* cache_stats */ false,
         /* is_test */ true,
-        /* skip_cc */ false,
+        /* skip_cc */ true,
     )
     .with_context(|| format!("process_build failed for {}", input.display()))?;
 
-    // The CLI writes to build/<output_name>
+    // The CLI writes to build/<output_name>.c when skip_cc = true
+    assert!(
+        built.extension().and_then(|e| e.to_str()) == Some("c"),
+        "Expected a .c file path, got {:?}",
+        built
+    );
     assert!(
         built.exists(),
         "Expected built artifact at {}",

@@ -1,0 +1,11 @@
+fn takes_str(s: str) -> void {
+    // Ensure parser accepts `str` as a primitive type (mapped to Type::String)
+    let copy: string = s;
+}
+
+fn uses_idiv(a: i32, b: i32) -> i32 {
+    // Ensure parser tokenizes and parses '//' as a distinct operator (IDIV)
+    // Note: Type checker semantics for '//' are validated elsewhere.
+    let q = a // b;
+    return q;
+}

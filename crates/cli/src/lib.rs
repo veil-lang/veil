@@ -828,15 +828,21 @@ pub fn process_build(
         .with_context(|| format!("Failed to read input file {}", input.display()))?;
     let file_id = files.add(input.to_string_lossy().to_string(), entry_content.clone());
 
-    let (mut program, parse_warnings) = veil_syntax::parse_ast_with_warnings(&files, file_id)
-        .map_err(|diags| {
+    let (mut program, parse_warnings) = match veil_syntax::parse_ast_with_warnings(&files, file_id)
+    {
+        Ok(x) => x,
+        Err(diags) => {
+            let writer = StandardStream::stderr(ColorChoice::Auto);
+            let config = term::Config::default();
+            eprintln!("=== PARSE ERRORS ===");
+            eprintln!("Found {} errors", diags.len());
+            for d in &diags {
+                let _ = term::emit(&mut writer.lock(), &config, &files, d);
+            }
             let clean_path = input.to_string_lossy().replace("\\\\?\\", "");
-            let msg = diags
-                .first()
-                .map(|_| "Parse error")
-                .unwrap_or("Parse error");
-            anyhow!("{}:{}: {}", clean_path, 0, msg)
-        })?;
+            return Err(anyhow!("Parse failed for {}", clean_path));
+        }
+    };
     if verbose && !parse_warnings.is_empty() {
         let writer = StandardStream::stderr(ColorChoice::Auto);
         let config = term::Config::default();

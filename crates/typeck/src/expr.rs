@@ -663,6 +663,46 @@ impl TypeChecker {
                     Ok(Unknown)
                 }
             }
+            IDiv => {
+                let left_is_int = self.is_integer_type(left_type);
+                let right_is_int = self.is_integer_type(right_type);
+                if left_is_int && right_is_int {
+                    if self.context.types_compatible(left_type, right_type) {
+                        Ok(left_type.clone())
+                    } else {
+                        self.error(format!(
+                            "Integer division '//' between incompatible integer types: {:?} and {:?}",
+                            left_type, right_type
+                        ));
+                        Ok(Unknown)
+                    }
+                } else {
+                    let left_is_float = matches!(left_type, F32 | F64);
+                    let right_is_float = matches!(right_type, F32 | F64);
+                    if left_is_float && right_is_float {
+                        self.error_with_fix(
+                            location,
+                            Some("VE0014"),
+                            format!(
+                                "Integer division '//' requires integer operands; found float types: left={:?}, right={:?}",
+                                left_type, right_type
+                            ),
+                            "Use '/' for floating-point division, e.g. `a / b`",
+                        );
+                    } else {
+                        self.error_with_fix(
+                            location,
+                            Some("VE0015"),
+                            format!(
+                                "Integer division '//' requires both operands to be integers (no implicit coercion): left={:?}, right={:?}",
+                                left_type, right_type
+                            ),
+                            "Cast the float to an integer or use '/', e.g. `a as i32 // b` or `a / b`",
+                        );
+                    }
+                    Ok(Unknown)
+                }
+            }
             Mod => {
                 // '%' is defined for integers; enforce integer operands
                 if self.is_integer_type(left_type) && self.is_integer_type(right_type) {

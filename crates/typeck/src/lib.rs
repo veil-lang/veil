@@ -966,6 +966,118 @@ mod tests {
     }
 
     #[test]
+    fn test_idiv_integers_type_ok() {
+        let symbol_table = SymbolTable::new();
+        let mut files = veil_diagnostics::Files::<String>::new();
+        let fid = files.add("idiv_ints.veil".to_string(), String::new());
+        let mut checker = TypeChecker::new(symbol_table, fid, None);
+
+        // 6 // 3 -> Ok(i32) with no diagnostics
+        let mut expr = veil_hir::HirExpr {
+            id: NodeId::new(30),
+            kind: Box::new(veil_hir::HirExprKind::Binary {
+                op: veil_hir::HirBinaryOp::IDiv,
+                lhs: Box::new(veil_hir::HirExpr {
+                    id: NodeId::new(31),
+                    kind: Box::new(veil_hir::HirExprKind::Int(6)),
+                }),
+                rhs: Box::new(veil_hir::HirExpr {
+                    id: NodeId::new(32),
+                    kind: Box::new(veil_hir::HirExprKind::Int(3)),
+                }),
+            }),
+        };
+
+        // Span is optional here; no error expected
+        let ty = checker.check_expr(&mut expr).expect("type check ok");
+        assert_eq!(
+            ty,
+            HirType::I32,
+            "expected i32 type for integer '//' division"
+        );
+        assert!(
+            checker.errors.is_empty(),
+            "no diagnostics expected for integer '//' division"
+        );
+    }
+
+    #[test]
+    fn test_idiv_floats_emit_ve0014() {
+        let symbol_table = SymbolTable::new();
+        let mut files = veil_diagnostics::Files::<String>::new();
+        let fid = files.add("idiv_floats.veil".to_string(), String::new());
+        let mut checker = TypeChecker::new(symbol_table, fid, None);
+
+        // 1.0 // 2.0 -> VE0014: use '/'
+        let mut expr = veil_hir::HirExpr {
+            id: NodeId::new(40),
+            kind: Box::new(veil_hir::HirExprKind::Binary {
+                op: veil_hir::HirBinaryOp::IDiv,
+                lhs: Box::new(veil_hir::HirExpr {
+                    id: NodeId::new(41),
+                    kind: Box::new(veil_hir::HirExprKind::Float(1.0)),
+                }),
+                rhs: Box::new(veil_hir::HirExpr {
+                    id: NodeId::new(42),
+                    kind: Box::new(veil_hir::HirExprKind::Float(2.0)),
+                }),
+            }),
+        };
+
+        // Provide a span for actionable diagnostic
+        let mut span_map = SpanMap::new();
+        span_map.insert(NodeId::new(40), Span::new(0, 1));
+        checker.context.span_map = Some(span_map);
+
+        let _ = checker.check_expr(&mut expr);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|d| d.code.as_deref() == Some("VE0014")),
+            "expected VE0014 for '//' with float operands suggesting use of '/'"
+        );
+    }
+
+    #[test]
+    fn test_idiv_mixed_types_emit_ve0015() {
+        let symbol_table = SymbolTable::new();
+        let mut files = veil_diagnostics::Files::<String>::new();
+        let fid = files.add("idiv_mixed.veil".to_string(), String::new());
+        let mut checker = TypeChecker::new(symbol_table, fid, None);
+
+        // 1 // 2.0 -> VE0015: both operands must be integers or use '/'
+        let mut expr = veil_hir::HirExpr {
+            id: NodeId::new(50),
+            kind: Box::new(veil_hir::HirExprKind::Binary {
+                op: veil_hir::HirBinaryOp::IDiv,
+                lhs: Box::new(veil_hir::HirExpr {
+                    id: NodeId::new(51),
+                    kind: Box::new(veil_hir::HirExprKind::Int(1)),
+                }),
+                rhs: Box::new(veil_hir::HirExpr {
+                    id: NodeId::new(52),
+                    kind: Box::new(veil_hir::HirExprKind::Float(2.0)),
+                }),
+            }),
+        };
+
+        // Provide span for actionable diagnostic
+        let mut span_map = SpanMap::new();
+        span_map.insert(NodeId::new(50), Span::new(0, 1));
+        checker.context.span_map = Some(span_map);
+
+        let _ = checker.check_expr(&mut expr);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|d| d.code.as_deref() == Some("VE0015")),
+            "expected VE0015 for '//' with mixed int/float operands"
+        );
+    }
+
+    #[test]
     fn test_postfix_question_requires_optional_return_type() {
         // Symbol table with variable `x: i32?`
         let mut symbol_table = SymbolTable::new();

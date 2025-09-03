@@ -89,3 +89,10 @@ winres = "0.1.12"
 
 [dev-dependencies]
 veil-diagnostics = { path = "crates/diagnostics" }
+
+# Features:
+# - default: build the new crates/* pipeline only (no legacy)
+# - legacy: gates legacy src/* modules; disabled by default
+[features]
+default = []
+legacy = []

@@ -428,6 +428,7 @@ pub enum HirBinaryOp {
     Sub,
     Mul,
     Div,
+    IDiv,
     Mod,
     Pow,
     // Bitwise

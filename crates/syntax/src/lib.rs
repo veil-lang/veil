@@ -59,7 +59,7 @@ bt_string_inner = { "\\`" | !"`" ~ ANY }
 template_str = @{ "`" ~ bt_string_inner* ~ "`" }
 
 ELLIPSIS = { "..." }
-DOUBLE_STAR = { "**" }
+POW = { "**" }
 ARROW  = { "->" }
 FATARROW = { "=>" }
 EQEQ   = { "==" }
@@ -72,6 +72,7 @@ RANGE_LT = { "..<" }
 RANGE   = { ".." }
 ANDAND  = { "&&" }
 OROR    = { "||" }
+IDIV    = { "//" }
 
 DOT = { "." }
 LPAREN = { "(" }
@@ -131,6 +132,7 @@ KW_FOREIGN = @{ "foreign" ~ !ident_continue }
 
 TY_BOOL = @{ "bool" ~ !ident_continue }
 TY_STRING = @{ "string" ~ !ident_continue }
+TY_STR = @{ "str" ~ !ident_continue }
 TY_VOID = @{ "void" ~ !ident_continue }
 TY_ANY = @{ "any" ~ !ident_continue }
 
@@ -161,13 +163,13 @@ token = {
     | KW_SAFE | KW_AS | KW_WHILE | KW_FOR | KW_STEP | KW_LOOP | KW_IMPORT | KW_FROM | KW_EXPORT
     | KW_STRUCT | KW_IMPL | KW_NEW | KW_CONSTRUCTOR | KW_ENUM | KW_MATCH | KW_TRUE | KW_FALSE
     | KW_NONE1 | KW_NONE2 | KW_IN | KW_FOREIGN
-    | TY_BOOL | TY_STRING | TY_VOID | TY_ANY
+    | TY_BOOL | TY_STRING | TY_STR | TY_VOID | TY_ANY
     | TY_U8A | TY_U8B | TY_U16A | TY_U16B | TY_U32A | TY_U32B | TY_U64A | TY_U64B
     | TY_I8A | TY_I8B | TY_I16A | TY_I16B | TY_I32A | TY_I32B | TY_I64A | TY_I64B
     | TY_F32A | TY_F32B | TY_F64A | TY_F64B
-    | ELLIPSIS | DOUBLE_STAR | ARROW | FATARROW | EQEQ | NOTEQ | GTE | LTE
+    | ELLIPSIS | POW | ARROW | FATARROW | EQEQ | NOTEQ | GTE | LTE
     | RANGE_EQ | RANGE_GT | RANGE_LT | RANGE
-    | ANDAND | OROR
+    | ANDAND | OROR | IDIV
     | EMPTY_ARR
     | DOT | LPAREN | RPAREN | LBRACE | RBRACE | LBRACK | RBRACK | COMMA | EQ | SEMI
     | PLUS | MINUS | STAR | SLASH | CARET | PERCENT | GT | LT | PIPE | HASH | BANG | QUESTION | COLON
@@ -267,7 +269,7 @@ pub fn parse_ast_with_warnings(
 
     // Parse ModuleType from a module path string
     let _module_type_of = |mp: &str| {
-        if mp.starts_with("std/") {
+        if mp.starts_with("std::") || mp.starts_with("std/") {
             ast::ModuleType::Standard
         } else if mp.starts_with("./") || mp.starts_with("../") {
             ast::ModuleType::Local
@@ -285,7 +287,7 @@ pub fn parse_ast_with_warnings(
                     let t = p.as_str();
                     match t {
                         "bool" => Type::Bool,
-                        "string" => Type::String,
+                        "string" | "str" => Type::String,
                         "void" => Type::Void,
                         "any" => Type::Any,
                         "i8" | "sbyte" => Type::I8,
@@ -620,6 +622,7 @@ pub fn parse_ast_with_warnings(
                         | R::MINUS
                         | R::STAR
                         | R::SLASH
+                        | R::IDIV
                         | R::PERCENT
                         | R::CARET
                         | R::EQEQ
@@ -641,6 +644,7 @@ pub fn parse_ast_with_warnings(
                                 R::MINUS => BinOp::Sub,
                                 R::STAR => BinOp::Mul,
                                 R::SLASH => BinOp::Div,
+                                R::IDIV => BinOp::IDiv,
                                 R::PERCENT => BinOp::Mod,
                                 R::CARET => BinOp::Pow, // reuse Pow for xor; better would be distinct, but AST has Pow/Pow2
                                 R::EQEQ => BinOp::Eq,
@@ -1043,11 +1047,11 @@ pub fn parse_ast_with_warnings(
                     if module_path.contains('/') {
                         let sp = codespan_span(c.as_span());
                         let d = warning(
-                            "Legacy module path separator '/' detected; use '::' instead",
+                            "Deprecated module path separator '/' detected; use '::' instead",
                             file_id,
                             sp,
                         )
-                        .with_notes(vec![help("fix-it: replace '/' with '::'")]);
+                        .with_notes(vec![help("Replace '/' with '::'")]);
                         warnings.push(d);
                     }
                 }
@@ -1128,11 +1132,11 @@ pub fn parse_ast_with_warnings(
                     if module_path.contains('/') {
                         let sp = codespan_span(c.as_span());
                         let d = warning(
-                            "Legacy module path separator '/' detected; use '::' instead",
+                            "Deprecated module path separator '/' detected; use '::' instead",
                             file_id,
                             sp,
                         )
-                        .with_notes(vec![help("fix-it: replace '/' with '::'")]);
+                        .with_notes(vec![help("Replace '/' with '::'")]);
                         warnings.push(d);
                     }
                 }
@@ -1209,6 +1213,39 @@ pub fn parse_ast_with_warnings(
                     visibility = ast::Visibility::Public;
                 }
                 R::ident => name = c.as_str().to_string(),
+                R::function_decl_min => {
+                    // Handle nested function_decl_min
+                    for inner in c.into_inner() {
+                        match inner.as_rule() {
+                            R::ident => name = inner.as_str().to_string(),
+                            R::parameter_list => {
+                                for p in inner.into_inner() {
+                                    if matches!(p.as_rule(), R::parameter) {
+                                        let mut pname = String::new();
+                                        let mut pty = ast::Type::Unknown;
+                                        for q in p.into_inner() {
+                                            match q.as_rule() {
+                                                R::ident => pname = q.as_str().to_string(),
+                                                R::ty => pty = parse_type(q),
+                                                _ => {}
+                                            }
+                                        }
+                                        params.push((pname, pty));
+                                    }
+                                }
+                            }
+                            R::ty => return_type = parse_type(inner),
+                            R::block => {
+                                span = Span::new(
+                                    inner.as_span().start() as u32,
+                                    inner.as_span().end() as u32,
+                                );
+                                body = parse_block_stmts(inner);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
                 R::parameter_list => {
                     for p in c.into_inner() {
                         if matches!(p.as_rule(), R::parameter) {
@@ -1774,6 +1811,7 @@ pub fn lex_raw(files: &Files<String>, file_id: FileId) -> Result<Vec<RawSpanned>
                 // Type keywords
                 Rule::TY_BOOL
                 | Rule::TY_STRING
+                | Rule::TY_STR
                 | Rule::TY_VOID
                 | Rule::TY_ANY
                 | Rule::TY_U8A
@@ -1799,7 +1837,7 @@ pub fn lex_raw(files: &Files<String>, file_id: FileId) -> Result<Vec<RawSpanned>
 
                 // Symbols and operators
                 Rule::ELLIPSIS
-                | Rule::DOUBLE_STAR
+                | Rule::POW
                 | Rule::ARROW
                 | Rule::FATARROW
                 | Rule::EQEQ
@@ -1812,6 +1850,7 @@ pub fn lex_raw(files: &Files<String>, file_id: FileId) -> Result<Vec<RawSpanned>
                 | Rule::RANGE
                 | Rule::ANDAND
                 | Rule::OROR
+                | Rule::IDIV
                 | Rule::EMPTY_ARR
                 | Rule::DOT
                 | Rule::LPAREN

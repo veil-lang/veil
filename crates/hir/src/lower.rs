@@ -461,7 +461,17 @@ impl LoweringContext {
         self.record_span(stmt_id, span);
 
         let kind = match stmt {
-            ast::Stmt::Expr(expr, _) => HirStmtKind::Expr(self.lower_expr(expr)?),
+            ast::Stmt::Expr(expr, _) => {
+                // Special-case assignment expressions as statement-level assignments
+                if let ast::Expr::Assign(lhs, rhs, _) = expr {
+                    HirStmtKind::Assign {
+                        lhs: self.lower_expr(lhs)?,
+                        rhs: self.lower_expr(rhs)?,
+                    }
+                } else {
+                    HirStmtKind::Expr(self.lower_expr(expr)?)
+                }
+            }
             ast::Stmt::Let(name, ty, value, _, _) => {
                 let pattern_id = self.next_node_id();
                 let pattern = HirPattern {
@@ -493,6 +503,59 @@ impl LoweringContext {
                 HirStmtKind::Break(expr.as_ref().map(|e| self.lower_expr(e)).transpose()?)
             }
             ast::Stmt::Continue(_) => HirStmtKind::Continue,
+            // While statement: emit as expression node
+            ast::Stmt::While(cond, body, _) => {
+                // Create an expression node with the while construct
+                let expr_id = self.next_node_id();
+                self.record_span(expr_id, self.get_stmt_span(stmt));
+                let while_expr = HirExpr {
+                    id: expr_id,
+                    kind: Box::new(HirExprKind::While {
+                        condition: Box::new(self.lower_expr(cond)?),
+                        body: self.lower_stmts_to_block(body),
+                    }),
+                };
+                HirStmtKind::Expr(while_expr)
+            }
+            // Loop statement: emit as expression node
+            ast::Stmt::Loop(body, _) => {
+                let expr_id = self.next_node_id();
+                self.record_span(expr_id, self.get_stmt_span(stmt));
+                let loop_expr = HirExpr {
+                    id: expr_id,
+                    kind: Box::new(HirExprKind::Loop {
+                        body: self.lower_stmts_to_block(body),
+                    }),
+                };
+                HirStmtKind::Expr(loop_expr)
+            }
+            // For statement: lower pattern, iter expr, and body to a For expression
+            ast::Stmt::For(var_name, _index_var, iter_expr, _step, body, _) => {
+                // Build a simple variable pattern
+                let pat_id = self.next_node_id();
+                self.record_span(pat_id, self.get_stmt_span(stmt));
+                let pattern = HirPattern {
+                    id: pat_id,
+                    kind: Box::new(HirPatternKind::Variable(var_name.clone())),
+                };
+
+                // Lower iterator expression and body
+                let iter_hir = self.lower_expr(iter_expr)?;
+                let body_hir = self.lower_stmts_to_block(body);
+
+                // Wrap as an expression statement
+                let expr_id = self.next_node_id();
+                self.record_span(expr_id, self.get_stmt_span(stmt));
+                let for_expr = HirExpr {
+                    id: expr_id,
+                    kind: Box::new(HirExprKind::For {
+                        pattern,
+                        iter: Box::new(iter_hir),
+                        body: body_hir,
+                    }),
+                };
+                HirStmtKind::Expr(for_expr)
+            }
             // TODO: Handle other statement types
             _ => return Err(LoweringError::UnsupportedConstruct("statement".to_string())),
         };
@@ -627,6 +690,16 @@ impl LoweringContext {
                 HirExprKind::Template { parts: hir_parts }
             }
 
+            // If expression
+            ast::Expr::If(cond, then_stmts, else_stmts, _) => HirExprKind::If {
+                condition: Box::new(self.lower_expr(cond)?),
+                then_branch: self.lower_stmts_to_block(then_stmts),
+                else_branch: else_stmts.as_ref().map(|s| self.lower_stmts_to_block(s)),
+            },
+            // Loop expression
+            ast::Expr::Loop(body, _) => HirExprKind::Loop {
+                body: self.lower_stmts_to_block(body),
+            },
             // TODO: Add more expression kinds as needed
             _ => {
                 return Err(LoweringError::UnsupportedConstruct(
@@ -706,6 +779,7 @@ impl LoweringContext {
             ast::BinOp::Sub => HirBinaryOp::Sub,
             ast::BinOp::Mul => HirBinaryOp::Mul,
             ast::BinOp::Div => HirBinaryOp::Div,
+            ast::BinOp::IDiv => HirBinaryOp::Div,
             ast::BinOp::Mod => HirBinaryOp::Mod,
             ast::BinOp::And => HirBinaryOp::And,
             ast::BinOp::Or => HirBinaryOp::Or,
