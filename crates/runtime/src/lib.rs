@@ -1,4 +1,4 @@
-#![forbid(unsafe_code)]
+#![deny(unsafe_op_in_unsafe_fn)]
 #![deny(rust_2018_idioms)]
 #![deny(unused_must_use)]
 
@@ -28,7 +28,7 @@ use core::ffi::c_void;
 /// - This default implementation does not dereference the pointer and simply
 ///   returns `false`. It is safe under all inputs but not functional.
 /// - A real runtime should replace this with logic matching the iterator layout.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn iter_has_next(_it: *mut c_void) -> bool {
     // Default shim: no elements.
     false
@@ -42,7 +42,7 @@ pub extern "C" fn iter_has_next(_it: *mut c_void) -> bool {
 /// - A real runtime should replace this with logic matching the iterator layout
 ///   and the expected element type. If elements are not integers, the codegen
 ///   and runtime contract should be updated to support the required types.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn iter_next(_it: *mut c_void) -> i64 {
     // Default shim: zero value.
     0

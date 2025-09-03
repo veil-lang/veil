@@ -21,6 +21,11 @@ use veil_ir as ir;
 use veil_normalize as normalize;
 use veil_resolve as resolve;
 use veil_typeck as typeck;
+pub mod benchmark;
+pub mod init;
+pub mod run;
+pub mod test;
+pub mod upgrade;
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -600,6 +605,52 @@ fn merge_imports_into_program(
     Ok(())
 }
 
+fn compute_transitive_import_digests(
+    root_imports: &[ast::ImportDeclaration],
+    base_path: &Path,
+    files: &mut Files<String>,
+) -> Vec<String> {
+    // Breadth-first traversal of imports to collect transitive module digests.
+    // Errors are non-fatal; missing/unparseable modules are skipped for robustness.
+    let mut digests: Vec<(String, String)> = Vec::new(); // (path_str, digest)
+    let mut visited: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    let mut queue: std::collections::VecDeque<ResolvedImport> =
+        resolve_imports_only(root_imports, base_path)
+            .unwrap_or_default()
+            .into();
+
+    while let Some(item) = queue.pop_front() {
+        let path_str = item.path.to_string_lossy().to_string();
+        if !visited.insert(path_str.clone()) {
+            continue;
+        }
+
+        // Digest file contents if available
+        if let Ok(bytes) = fs::read(&item.path) {
+            let d = digest_bytes(&bytes);
+            digests.push((path_str.clone(), d));
+
+            // Parse to discover further imports
+            if let Ok(content_str) = String::from_utf8(bytes) {
+                let fid = files.add(path_str.clone(), content_str);
+                if let Ok(parsed) = veil_syntax::parse_ast(files, fid) {
+                    // Resolve imports from this module, using this module's path as base
+                    if let Ok(next_level) = resolve_imports_only(&parsed.imports, &item.path) {
+                        for n in next_level {
+                            queue.push_back(n);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Stable ordering by path for deterministic key composition
+    digests.sort_by(|a, b| a.0.cmp(&b.0));
+    digests.into_iter().map(|(_, d)| d).collect()
+}
+
 /// M9: Cached IR build pass (used by process_build)
 #[derive(Debug, Clone)]
 struct BuildIrInput {
@@ -923,14 +974,8 @@ pub fn process_build(
 
     // Derive cache key from entry content, resolved imports, and build knobs
     let entry_digest = digest_bytes(entry_content.as_bytes());
-    let mut dep_digests: Vec<String> = Vec::new();
-    if let Ok(resolved) = resolve_imports_only(&program.imports, &input) {
-        for item in resolved {
-            if let Ok(bytes) = fs::read(&item.path) {
-                dep_digests.push(digest_bytes(&bytes));
-            }
-        }
-    }
+    let dep_digests: Vec<String> =
+        compute_transitive_import_digests(&program.imports, &input, &mut files);
     let mut parts: Vec<String> = Vec::new();
     parts.push(entry_digest);
     parts.extend(dep_digests);
@@ -959,7 +1004,7 @@ pub fn process_build(
 
     let stats = pcx.take_stats();
     if verbose || pass_timings || cache_stats {
-        for s in stats {
+        for s in &stats {
             if pass_timings && cache_stats {
                 println!("[{}] {:?} ({} ms)", s.pass, s.cache, s.duration.as_millis());
             } else if pass_timings {
@@ -968,6 +1013,36 @@ pub fn process_build(
                 println!("[{}] {:?}", s.pass, s.cache);
             } else {
                 println!("[{}]", s.pass);
+            }
+        }
+
+        // Emit JSON for CI diffing
+        let stats_path = build_dir.join("pass-stats.json");
+        let payload = serde_json::json!({
+            "fingerprint": veil_compiler::default_fingerprint(),
+            "input": input.to_string_lossy(),
+            "optimize": optimize,
+            "target_triple": target_triple,
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+            "stats": stats,
+        });
+        match serde_json::to_vec_pretty(&payload) {
+            Ok(bytes) => {
+                if let Err(e) = std::fs::write(&stats_path, bytes) {
+                    if verbose {
+                        eprintln!("Failed to write pass stats: {}", e);
+                    }
+                } else if verbose {
+                    println!(
+                        "{}",
+                        format!("Pass stats saved to: {}", stats_path.display()).green()
+                    );
+                }
+            }
+            Err(e) => {
+                if verbose {
+                    eprintln!("Failed to serialize pass stats: {}", e);
+                }
             }
         }
     }

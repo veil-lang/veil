@@ -24,20 +24,14 @@ pub fn create_project(directory: &Path, project_name: &str) -> Result<()> {
     })?;
 
     // 2) Create .gitignore (skip build artifacts and temporary files)
-    write_if_missing(
-        &project_dir.join(".gitignore"),
-        include_str!("./templates/gitignore.txt"),
-    )?;
+    write_if_missing(&project_dir.join(".gitignore"), _template_gitignore())?;
 
     // 3) Create README.md
     let readme = render_readme(project_name);
     write_if_missing(&project_dir.join("README.md"), &readme)?;
 
     // 4) Create a simple main.veil program
-    write_if_missing(
-        &src_dir.join("main.veil"),
-        include_str!("./templates/main.veil.txt"),
-    )?;
+    write_if_missing(&src_dir.join("main.veil"), _template_main_veil())?;
 
     // 5) Optional: basic ve-project.json metadata (non-binding, for editors/tools)
     let meta = render_project_meta(project_name)?;
@@ -100,14 +94,12 @@ fn iso8601_now_utc() -> Result<String> {
     // Use SystemTime and RFC3339-like formatting without pulling chrono here.
     // It's fine if precision is seconds.
     let now = SystemTime::now();
-    let datetime: time::OffsetDateTime = now
+    let secs = now
         .duration_since(SystemTime::UNIX_EPOCH)
         .map_err(|e| anyhow!("System time before UNIX_EPOCH: {}", e))?
-        .as_secs()
-        .try_into()
-        .map(|secs: i128| time::OffsetDateTime::from_unix_timestamp(secs as i64))
-        .transpose()
-        .unwrap_or_else(|_| Ok(time::OffsetDateTime::UNIX_EPOCH))?;
+        .as_secs() as i64;
+    let datetime =
+        time::OffsetDateTime::from_unix_timestamp(secs).unwrap_or(time::OffsetDateTime::UNIX_EPOCH);
     Ok(datetime
         .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string()))
@@ -167,10 +159,26 @@ fn main() {
 // Re-route the include_str! used above to our inline definitions
 #[doc(hidden)]
 #[allow(non_upper_case_globals)]
-static include_str__templates_gitignore_txt: &str = _template_gitignore();
+static include_str__templates_gitignore_txt: &str = "target
+build
+*.exe
+*.o
+*.obj
+*.dll
+*.so
+*.dylib
+*.pdb
+.DS_Store
+";
 #[doc(hidden)]
 #[allow(non_upper_case_globals)]
-static include_str__templates_main_veil_txt: &str = _template_main_veil();
+static include_str__templates_main_veil_txt: &str = r#"// Entry point for Veil program
+// Prelude is auto-imported; you can use print and other standard tools directly.
+
+fn main() {
+    print(`Hello, Veil!`);
+}
+"#;
 
 // Replace include_str! macro usages through function wrappers
 #[inline(always)]

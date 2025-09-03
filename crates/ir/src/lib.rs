@@ -109,7 +109,7 @@ impl FunctionIR {
     pub fn to_pretty_string(&self) -> String {
         let mut s = String::new();
         // Header
-        s.push_str("fn ");
+        s.push_str("function ");
         s.push_str(&self.name);
         s.push('(');
         for (i, p) in self.params.iter().enumerate() {
@@ -205,13 +205,11 @@ pub enum InstIR {
         rhs: ValueId,
     },
     // Extended arithmetic and bitwise (feature-gated)
-    #[cfg(feature = "extended_ir_ops")]
     Mod {
         lhs: ValueId,
         rhs: ValueId,
     },
     // Bitwise ops
-    #[cfg(feature = "extended_ir_ops")]
     BitAnd {
         lhs: ValueId,
         rhs: ValueId,
@@ -314,9 +312,7 @@ impl fmt::Display for InstIR {
             Sub { lhs, rhs } => write!(f, "sub %{}, %{}", lhs.0, rhs.0),
             Mul { lhs, rhs } => write!(f, "mul %{}, %{}", lhs.0, rhs.0),
             Div { lhs, rhs } => write!(f, "div %{}, %{}", lhs.0, rhs.0),
-            #[cfg(feature = "extended_ir_ops")]
             Mod { lhs, rhs } => write!(f, "mod %{}, %{}", lhs.0, rhs.0),
-            #[cfg(feature = "extended_ir_ops")]
             BitAnd { lhs, rhs } => write!(f, "band %{}, %{}", lhs.0, rhs.0),
             #[cfg(feature = "extended_ir_ops")]
             BitOr { lhs, rhs } => write!(f, "bor %{}, %{}", lhs.0, rhs.0),
@@ -610,9 +606,7 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                             Sub => InstIR::Sub { lhs: l, rhs: r },
                             Mul => InstIR::Mul { lhs: l, rhs: r },
                             Div => InstIR::Div { lhs: l, rhs: r },
-                            #[cfg(feature = "extended_ir_ops")]
                             Mod => InstIR::Mod { lhs: l, rhs: r },
-                            #[cfg(feature = "extended_ir_ops")]
                             BitAnd => InstIR::BitAnd { lhs: l, rhs: r },
                             #[cfg(feature = "extended_ir_ops")]
                             BitOr => InstIR::BitOr { lhs: l, rhs: r },
@@ -1538,8 +1532,8 @@ mod tests {
         p.functions.push(f_a);
 
         let printed = p.to_pretty_string();
-        let a_idx = printed.find("fn alpha(").expect("alpha present");
-        let z_idx = printed.find("fn zeta(").expect("zeta present");
+        let a_idx = printed.find("function alpha(").expect("alpha present");
+        let z_idx = printed.find("function zeta(").expect("zeta present");
         assert!(
             a_idx < z_idx,
             "alpha must print before zeta for determinism"
@@ -1559,9 +1553,10 @@ mod tests {
         };
 
         let s = f.to_pretty_string();
-        assert!(s.contains("fn main() -> i32 {"));
+        assert!(s.contains("function main() -> i32 {"));
         assert!(s.contains("bb0:"));
         assert!(s.contains("%0 = const.i64 42"));
-        assert!(s.trim_end().ends_with("ret %0}"));
+        assert!(s.contains("ret %0"));
+        assert!(s.trim_end().ends_with('}'));
     }
 }

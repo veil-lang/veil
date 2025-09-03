@@ -339,7 +339,9 @@ impl PassManager {
         let target = option_env!("VEIL_COMPILER_TARGET")
             .or(option_env!("TARGET"))
             .unwrap_or("unknown");
-        let profile = option_env!("VEIL_COMPILER_PROFILE").unwrap_or(env!("PROFILE"));
+        let profile = option_env!("VEIL_COMPILER_PROFILE")
+            .or(option_env!("PROFILE"))
+            .unwrap_or("unknown");
         let git_sha = option_env!("VEIL_COMPILER_GIT_SHA").unwrap_or("unknown");
         let git_tag = option_env!("VEIL_COMPILER_GIT_TAG").unwrap_or("-");
         let ts = option_env!("VEIL_COMPILER_BUILD_UNIX_TS").unwrap_or("0");
