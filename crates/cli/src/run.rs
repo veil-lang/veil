@@ -15,6 +15,8 @@ pub fn run_project(input: PathBuf, verbose: bool) -> Result<()> {
         /* target_triple */ default_target_triple(),
         /* verbose */ verbose,
         /* dump_norm_hir */ false,
+        /* pass_timings */ false,
+        /* cache_stats */ false,
         /* is_test */ false,
         /* skip_cc */ false,
     )?;

@@ -10,9 +10,9 @@ use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 use colored::*;
 use std::fs;
 use std::path::{Path, PathBuf};
-
 use veil_ast as ast;
 use veil_codegen_c as codegen_c;
+use veil_compiler::{Pass, PassCx, PassManager, digest_bytes, digest_strs};
 #[cfg(target_os = "windows")]
 use veil_helpers::prepare_windows_clang_args;
 use veil_helpers::{get_bundled_clang_path, validate_ve_file};
@@ -21,8 +21,6 @@ use veil_ir as ir;
 use veil_normalize as normalize;
 use veil_resolve as resolve;
 use veil_typeck as typeck;
-
-/// Re-exported CLI API: command enumeration and parsing/build orchestration.
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -52,6 +50,8 @@ pub enum CliCommand {
         target_triple: String,
         verbose: bool,
         dump_norm_hir: bool,
+        pass_timings: bool,
+        cache_stats: bool,
         skip_cc: bool,
     },
     Init {
@@ -117,6 +117,12 @@ pub struct Args {
     #[arg(long, help = "Skip C compilation and execution (generate C only)")]
     no_cc: bool,
 
+    #[arg(long, help = "Show per-pass timings in the build output")]
+    pass_timings: bool,
+
+    #[arg(long, help = "Show cache hit/miss statistics for each pass")]
+    cache_stats: bool,
+
     #[arg(long)]
     iterations: Option<usize>,
 }
@@ -147,6 +153,12 @@ enum Command {
 
         #[arg(long, help = "Skip C compilation and execution (generate C only)")]
         no_cc: bool,
+
+        #[arg(long, help = "Show per-pass timings in the build output")]
+        pass_timings: bool,
+
+        #[arg(long, help = "Show cache hit/miss statistics for each pass")]
+        cache_stats: bool,
     },
     Init {
         project_name: String,
@@ -230,15 +242,23 @@ pub fn parse() -> anyhow::Result<CliCommand> {
             verbose,
             dump_norm_hir,
             no_cc,
-        }) => Ok(CliCommand::Build {
-            input,
-            output,
-            optimize,
-            target_triple: target_triple.unwrap_or_else(default_target_triple),
-            verbose,
-            dump_norm_hir,
-            skip_cc: no_cc,
-        }),
+            pass_timings,
+            cache_stats,
+        }) => {
+            if pass_timings { /* pass_timings: no-op in CLI parse stage */ }
+            if cache_stats { /* cache_stats: no-op in CLI parse stage */ }
+            Ok(CliCommand::Build {
+                input,
+                output,
+                optimize,
+                target_triple: target_triple.unwrap_or_else(default_target_triple),
+                verbose,
+                dump_norm_hir,
+                pass_timings,
+                cache_stats,
+                skip_cc: no_cc,
+            })
+        }
         Some(Command::Init {
             directory,
             project_name,
@@ -289,6 +309,8 @@ pub fn parse() -> anyhow::Result<CliCommand> {
                     verbose: args.verbose,
                 });
             }
+            if args.pass_timings { /* pass_timings: no-op in CLI parse stage */ }
+            if args.cache_stats { /* cache_stats: no-op in CLI parse stage */ }
             Ok(CliCommand::Build {
                 input,
                 output: args.output,
@@ -296,6 +318,8 @@ pub fn parse() -> anyhow::Result<CliCommand> {
                 target_triple: args.target_triple.unwrap_or_else(default_target_triple),
                 verbose: args.verbose,
                 dump_norm_hir: args.dump_norm_hir,
+                pass_timings: args.pass_timings,
+                cache_stats: args.cache_stats,
                 skip_cc: args.no_cc,
             })
         }
@@ -576,6 +600,109 @@ fn merge_imports_into_program(
     Ok(())
 }
 
+/// M9: Cached IR build pass (used by process_build)
+#[derive(Debug, Clone)]
+struct BuildIrInput {
+    entry: PathBuf,
+    dump_norm_hir: bool,
+    verbose: bool,
+}
+
+#[derive(Debug, Default)]
+struct BuildIrPass;
+
+impl Pass for BuildIrPass {
+    const NAME: &'static str = "build-ir";
+
+    type Input = BuildIrInput;
+    type Output = ir::ProgramIR;
+
+    fn run(&self, input: &Self::Input, _cx: &mut PassCx) -> Result<Self::Output> {
+        let BuildIrInput {
+            entry,
+            dump_norm_hir,
+            verbose,
+        } = input.clone();
+
+        // Local codespan files for parsing and diagnostics mapping
+        let mut files = Files::<String>::new();
+
+        // Parse entry file
+        let entry_content = fs::read_to_string(&entry)
+            .with_context(|| format!("Failed to read input file {}", entry.display()))?;
+        let file_id = files.add(entry.to_string_lossy().to_string(), entry_content);
+
+        // Parse AST
+        let mut program = veil_syntax::parse_ast(&files, file_id).map_err(|_diags| {
+            anyhow::anyhow!(
+                "{}:{}: {}",
+                entry.to_string_lossy().replace("\\\\?\\", ""),
+                0,
+                "Parse error"
+            )
+        })?;
+
+        // Ensure prelude import unless compiling prelude itself
+        let is_prelude_module = entry.to_string_lossy().ends_with("prelude.veil");
+        let has_prelude_import = program.imports.iter().any(|import| match import {
+            ast::ImportDeclaration::ImportAll { module_path, .. } => module_path == "std/prelude",
+            ast::ImportDeclaration::ExportImportAll { module_path, .. } => {
+                module_path == "std/prelude"
+            }
+            _ => false,
+        });
+        if !is_prelude_module && !has_prelude_import {
+            let prelude_import = ast::ImportDeclaration::ImportAll {
+                module_path: "std/prelude".to_string(),
+                module_type: ast::ModuleType::Standard,
+                alias: None,
+            };
+            program.imports.insert(0, prelude_import);
+        }
+
+        // Merge imported public items into root program
+        merge_imports_into_program(&mut program, &entry, &mut files)?;
+
+        // HIR: lower, resolve, typecheck, normalize
+        let module_id = hir::ids::ModuleId::new(0);
+        let mut hir_program = hir::lower_program(&program, module_id)
+            .map_err(|e| anyhow::anyhow!("HIR lowering failed: {}", e))?;
+
+        // Name/module/visibility resolution on HIR
+        let resolver_ctx = resolve::resolve_program(&mut hir_program)
+            .map_err(|_errs| anyhow::anyhow!("Resolution failed"))?;
+
+        // Typecheck
+        let mut hir_type_checker =
+            typeck::TypeChecker::new(resolver_ctx.symbol_table.clone(), file_id, Some(module_id));
+        if let Err(_errors) = hir_type_checker.check_program(&mut hir_program) {
+            return Err(anyhow::anyhow!("Type check failed"));
+        }
+
+        // Optional normalized HIR dump (side-effect only controlled by flags)
+        if verbose || dump_norm_hir {
+            normalize::normalize_program(&mut hir_program);
+        } else {
+            normalize::normalize_program(&mut hir_program);
+        }
+
+        // M7 (current pipeline kept): monomorphize at AST level (compat)
+        let mono = veil_mono::Monomorphizer::new(Default::default());
+        let (program_mono, _meta) = mono
+            .monomorphize_with_metadata(&program)
+            .map_err(|e| anyhow::anyhow!("Monomorphization failed: {}", e))?;
+
+        // Lower mono AST → HIR → normalize → IR
+        let module_id = hir::ids::ModuleId::new(0);
+        let mut mono_hir = hir::lower_program(&program_mono, module_id)
+            .map_err(|e| anyhow::anyhow!("IR lowering (HIR) failed: {}", e))?;
+        normalize::normalize_program(&mut mono_hir);
+        let program_ir = ir::lower_from_hir(&mono_hir);
+
+        Ok(program_ir)
+    }
+}
+
 /// Public: process a build end-to-end, returning the final output path (exe or C file when skip_cc).
 pub fn process_build(
     input: PathBuf,
@@ -584,6 +711,8 @@ pub fn process_build(
     target_triple: String,
     verbose: bool,
     dump_norm_hir: bool,
+    pass_timings: bool,
+    cache_stats: bool,
     is_test: bool,
     skip_cc: bool,
 ) -> anyhow::Result<PathBuf> {
@@ -627,7 +756,7 @@ pub fn process_build(
     // Parse entry file
     let entry_content = fs::read_to_string(&input)
         .with_context(|| format!("Failed to read input file {}", input.display()))?;
-    let file_id = files.add(input.to_string_lossy().to_string(), entry_content);
+    let file_id = files.add(input.to_string_lossy().to_string(), entry_content.clone());
 
     let mut program = veil_syntax::parse_ast(&files, file_id).map_err(|diags| {
         let clean_path = input.to_string_lossy().replace("\\\\?\\", "");
@@ -745,8 +874,6 @@ pub fn process_build(
             return Err(anyhow!("Resolution failed"));
         }
     }
-
-    // M7: Monomorphize (AST-level, as in original pipeline)
     let mono = veil_mono::Monomorphizer::new(Default::default());
     let (program, mono_meta) = mono
         .monomorphize_with_metadata(&program)
@@ -790,18 +917,60 @@ pub fn process_build(
         }
     }
 
-    // Lower to IR (non-verbose path)
-    let module_id = hir::ids::ModuleId::new(0);
-    let program_ir = match hir::lower_program(&program, module_id) {
-        Ok(mut mono_hir) => {
-            normalize::normalize_program(&mut mono_hir);
-            ir::lower_from_hir(&mono_hir)
+    let mut pm =
+        PassManager::with_fs_cache(&build_dir, veil_compiler::default_fingerprint(), verbose);
+    let mut pcx = PassCx::new(&build_dir, verbose);
+
+    // Derive cache key from entry content, resolved imports, and build knobs
+    let entry_digest = digest_bytes(entry_content.as_bytes());
+    let mut dep_digests: Vec<String> = Vec::new();
+    if let Ok(resolved) = resolve_imports_only(&program.imports, &input) {
+        for item in resolved {
+            if let Ok(bytes) = fs::read(&item.path) {
+                dep_digests.push(digest_bytes(&bytes));
+            }
         }
-        Err(_err) => {
+    }
+    let mut parts: Vec<String> = Vec::new();
+    parts.push(entry_digest);
+    parts.extend(dep_digests);
+    parts.push(format!("opt:{}", optimize));
+    parts.push(format!("triple:{}", target_triple));
+    let parts_refs: Vec<&str> = parts.iter().map(|s| s.as_str()).collect();
+    let key_seed = digest_strs(&parts_refs);
+
+    let build_input = BuildIrInput {
+        entry: input.clone(),
+        dump_norm_hir,
+        verbose,
+    };
+
+    let program_ir = pm
+        .run_cached(
+            &BuildIrPass::default(),
+            key_seed.as_bytes(),
+            &build_input,
+            &mut pcx,
+        )
+        .unwrap_or_else(|_| {
             // Fallback to AST path to avoid breaking builds
             ir::lower_from_ast(&program)
+        });
+
+    let stats = pcx.take_stats();
+    if verbose || pass_timings || cache_stats {
+        for s in stats {
+            if pass_timings && cache_stats {
+                println!("[{}] {:?} ({} ms)", s.pass, s.cache, s.duration.as_millis());
+            } else if pass_timings {
+                println!("[{}] ({} ms)", s.pass, s.duration.as_millis());
+            } else if cache_stats {
+                println!("[{}] {:?}", s.pass, s.cache);
+            } else {
+                println!("[{}]", s.pass);
+            }
         }
-    };
+    }
 
     // Emit C via IR→C backend
     let ir_backend = codegen_c::IrCBackend::new(codegen_c::CodegenConfig {
@@ -848,7 +1017,6 @@ pub fn process_build(
     ];
 
     // Link veil-runtime static library if provided via environment.
-    // Expect VEIL_RUNTIME_LIB_DIR to point to a directory containing libveil_runtime.a
     if let Ok(libdir) = std::env::var("VEIL_RUNTIME_LIB_DIR") {
         clang_args.push(format!("-L{}", libdir));
         clang_args.push("-lveil_runtime".to_string());

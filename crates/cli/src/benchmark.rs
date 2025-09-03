@@ -44,6 +44,8 @@ pub fn run_benchmark(input: PathBuf, iterations: usize, verbose: bool) -> Result
             /* target_triple */ default_target_triple(),
             /* verbose */ verbose,
             /* dump_norm_hir */ false,
+            /* pass_timings */ false,
+            /* cache_stats */ false,
             /* is_test */ true,
             /* skip_cc */ false,
         )?;

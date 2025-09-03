@@ -77,6 +77,8 @@ int64_t iter_next(void* it) { (void)it; return 0; }
         /* target_triple */ "x86_64-unknown-linux-gnu".to_string(),
         /* verbose */ true,
         /* dump_norm_hir */ false,
+        /* pass_timings */ false,
+        /* cache_stats */ false,
         /* is_test */ true,
         /* skip_cc */ false,
     )

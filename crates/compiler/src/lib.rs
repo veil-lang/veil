@@ -321,6 +321,38 @@ impl PassManager {
         hasher.update(seed);
         hex_encode(hasher.finalize())
     }
+
+    /// Returns a stable, human-readable build fingerprint suitable for cache keys.
+    ///
+    /// Composition (when available via build-time env):
+    ///   <pkg>@<ver>|<rustc>|<target>|<profile>|sha=<git_sha>,tag=<git_tag>|ts=<unix_ts>
+    ///
+    /// Notes:
+    /// - Values are sourced from compile-time env variables populated by a build script
+    ///   when present, and fall back to Cargo-provided values or "unknown".
+    /// - This string is intended for inclusion in PassManager cache fingerprints to
+    ///   force recomputation across toolchain or source tree changes.
+    pub fn default_fingerprint() -> String {
+        let name = option_env!("VEIL_COMPILER_PKG_NAME").unwrap_or(env!("CARGO_PKG_NAME"));
+        let ver = option_env!("VEIL_COMPILER_PKG_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"));
+        let rustc = option_env!("VEIL_COMPILER_RUSTC_VERSION").unwrap_or("rustc-unknown");
+        let target = option_env!("VEIL_COMPILER_TARGET")
+            .or(option_env!("TARGET"))
+            .unwrap_or("unknown");
+        let profile = option_env!("VEIL_COMPILER_PROFILE").unwrap_or(env!("PROFILE"));
+        let git_sha = option_env!("VEIL_COMPILER_GIT_SHA").unwrap_or("unknown");
+        let git_tag = option_env!("VEIL_COMPILER_GIT_TAG").unwrap_or("-");
+        let ts = option_env!("VEIL_COMPILER_BUILD_UNIX_TS").unwrap_or("0");
+        format!(
+            "{}@{}|{}|{}|{}|sha={},tag={}|ts={}",
+            name, ver, rustc, target, profile, git_sha, git_tag, ts
+        )
+    }
+}
+/// Public re-export for ergonomic access without referencing PassManager directly.
+/// Equivalent to PassManager::default_fingerprint().
+pub fn default_fingerprint() -> String {
+    PassManager::default_fingerprint()
 }
 
 /// Helper to compute a stable SHA-256 hex digest of a file on disk.

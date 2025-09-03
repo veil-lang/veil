@@ -10,6 +10,8 @@ fn main() -> Result<()> {
             target_triple,
             verbose,
             dump_norm_hir,
+            pass_timings,
+            cache_stats,
             skip_cc,
         }) => {
             cli::process_build(
@@ -19,6 +21,8 @@ fn main() -> Result<()> {
                 target_triple,
                 verbose,
                 dump_norm_hir,
+                pass_timings,
+                cache_stats,
                 false,
                 skip_cc,
             )?;

@@ -76,6 +76,8 @@ pub fn run_test(
         /* target_triple */ default_target_triple(),
         /* verbose */ verbose,
         /* dump_norm_hir */ false,
+        /* pass_timings */ false,
+        /* cache_stats */ false,
         /* is_test */ true, // Do not run the compiled binary here
         /* skip_cc */ false, // Produce the binary to validate link-time issues
     )?;
