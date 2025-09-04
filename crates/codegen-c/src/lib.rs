@@ -371,24 +371,15 @@ impl IrCBackend {
                                 .map(|a| val_ref(*a))
                                 .collect::<Vec<_>>()
                                 .join(", ");
+                            let call = format!("{}({})", callee, argv);
 
-                            // For iter_next, prefer not to commit to a concrete type if no IR proto exists.
-                            // The macro (#define iter_next(it) (0)) will yield a null/zero literal.
-                            if callee == "iter_next" && ret_c == "int64_t" {
-                                // Defer to the type of first use where possible; here we keep int64_t temp.
-                                declare_or_assign(
-                                    res,
-                                    &ret_c,
-                                    &format!("{}({})", callee, argv),
-                                    &mut out,
-                                );
+                            // Void-returning calls should be emitted as statements, not assigned.
+                            if ret_c == "void" {
+                                let _ = writeln!(out, "    {};", call);
                             } else {
-                                declare_or_assign(
-                                    res,
-                                    &ret_c,
-                                    &format!("{}({})", callee, argv),
-                                    &mut out,
-                                );
+                                // For iter_next, prefer not to commit to a concrete type if no IR proto exists.
+                                // The macro (#define iter_next(it) (0)) will yield a null/zero literal.
+                                declare_or_assign(res, &ret_c, &call, &mut out);
                             }
                         }
                     }

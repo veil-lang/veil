@@ -1,4 +1,5 @@
 fn main() -> void {
     let a: i32 = 6;
+    println("Hello, World! The value of a is {a}");
     return;
 }
