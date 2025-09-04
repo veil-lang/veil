@@ -564,23 +564,71 @@ fn merge_imports_into_program(
     let mut visited: std::collections::HashSet<std::path::PathBuf> =
         std::collections::HashSet::new();
 
+    let mut iteration: usize = 0;
+
     while let Some(item) = queue.pop_front() {
-        // Avoid re-processing the same module path
-        if !visited.insert(item.path.clone()) {
+        iteration += 1;
+
+        let canonical = std::fs::canonicalize(&item.path).unwrap_or(item.path.clone());
+        #[cfg(windows)]
+        let canonical_key = {
+            use std::path::PathBuf;
+            PathBuf::from(
+                canonical
+                    .to_string_lossy()
+                    .to_lowercase()
+                    .replace('\\', "/"),
+            )
+        };
+        #[cfg(not(windows))]
+        let canonical_key = canonical.clone();
+
+        if !visited.insert(canonical_key) {
             continue;
+        }
+
+        if iteration > 20_000 {
+            return Err(anyhow!(
+                "Aborting import processing after {} iterations (probable cyclic or exploding import graph)",
+                iteration
+            ));
         }
 
         let content = fs::read_to_string(&item.path)
             .with_context(|| format!("Failed to read module {}", item.path.display()))?;
-        let fid = files.add(item.path.to_string_lossy().to_string(), content);
-        let imported = veil_syntax::parse_ast(files, fid).map_err(|diags| {
+        let content_len = content.len();
+
+        // Parse the imported module on a dedicated thread with a larger stack to avoid
+        // overflowing the main thread stack on Windows.
+        let path_string = item.path.to_string_lossy().to_string();
+        let content_clone = content.clone();
+        let parse_join_handle = std::thread::Builder::new()
+            .name("veil-parse".into())
+            .stack_size(16 * 1024 * 1024)
+            .spawn(move || {
+                // Use a temporary Files buffer isolated to this thread.
+                let mut temp_files = Files::<String>::new();
+                let tfid = temp_files.add(path_string.clone(), content_clone);
+                veil_syntax::parse_ast(&temp_files, tfid)
+            })
+            .map_err(|e| anyhow!("Failed to spawn parser thread: {}", e))?;
+
+        let parse_result = parse_join_handle
+            .join()
+            .map_err(|_| anyhow!("Parser thread panicked"))?;
+
+        let imported = parse_result.map_err(|diags| {
             let clean_path = item.path.to_string_lossy().replace("\\\\?\\", "");
+
             let msg = diags
                 .first()
                 .map(|_| "Parse error")
                 .unwrap_or("Parse error");
+
             anyhow!("{}:{}: {}", clean_path, 0, msg)
         })?;
+
+        let fid = files.add(item.path.to_string_lossy().to_string(), content);
 
         // Merge exports from this module into the root based on how it was imported.
         match &item.import_type {
@@ -705,10 +753,29 @@ fn compute_transitive_import_digests(
             .unwrap_or_default()
             .into();
 
+    let mut iteration: usize = 0;
+    let safety_cap: usize = 20_000;
+
     while let Some(item) = queue.pop_front() {
-        let path_str = item.path.to_string_lossy().to_string();
+        iteration += 1;
+
+        // Normalize/canonicalize path for robust deduplication across platforms.
+        let canonical = std::fs::canonicalize(&item.path).unwrap_or(item.path.clone());
+        #[cfg(windows)]
+        let path_str = canonical
+            .to_string_lossy()
+            .to_lowercase()
+            .replace('\\', "/");
+        #[cfg(not(windows))]
+        let path_str = canonical.to_string_lossy().to_string();
+
         if !visited.insert(path_str.clone()) {
             continue;
+        }
+
+        // Safety cap to avoid runaway processing and possible stack/exhaustion scenarios
+        if iteration > safety_cap {
+            break;
         }
 
         // Digest file contents if available
@@ -718,13 +785,44 @@ fn compute_transitive_import_digests(
 
             // Parse to discover further imports
             if let Ok(content_str) = String::from_utf8(bytes) {
-                let fid = files.add(path_str.clone(), content_str);
-                if let Ok(parsed) = veil_syntax::parse_ast(files, fid) {
-                    // Resolve imports from this module, using this module's path as base
-                    if let Ok(next_level) = resolve_imports_only(&parsed.imports, &item.path) {
-                        for n in next_level {
-                            queue.push_back(n);
+                let path_for_thread = item.path.clone();
+                let content_for_thread = content_str.clone();
+                let parse_spawn = std::thread::Builder::new()
+                    .name("veil-digest-parse".into())
+                    .stack_size(16 * 1024 * 1024)
+                    .spawn(move || {
+                        let mut tmp_files = Files::<String>::new();
+                        let tfid = tmp_files.add(
+                            path_for_thread.to_string_lossy().to_string(),
+                            content_for_thread,
+                        );
+                        veil_syntax::parse_ast(&tmp_files, tfid)
+                    });
+
+                match parse_spawn {
+                    Ok(handle) => {
+                        match handle.join() {
+                            Ok(parse_result) => {
+                                if let Ok(parsed) = parse_result {
+                                    // Resolve imports from this module, using this module's path as base
+                                    if let Ok(next_level) =
+                                        resolve_imports_only(&parsed.imports, &item.path)
+                                    {
+                                        for n in next_level {
+                                            queue.push_back(n);
+                                        }
+                                    }
+                                } else {
+                                    // Parsing returned errors; skip transitive resolution for this module.
+                                }
+                            }
+                            Err(_) => {
+                                // Thread panicked while parsing; log and continue.
+                            }
                         }
+                    }
+                    Err(e) => {
+                        // Failed to spawn parser thread; log and continue.
                     }
                 }
             }
@@ -1103,12 +1201,60 @@ pub fn process_build(
         verbose,
     };
 
-    let program_ir = pm
-        .run_cached(&BuildIrPass, key_seed.as_bytes(), &build_input, &mut pcx)
-        .unwrap_or_else(|_| {
-            // Fallback to AST path to avoid breaking builds
-            ir::lower_from_ast(&program)
+    // Run the cached pass inside a dedicated thread with an increased stack size.
+    // We move ownership of the PassManager and PassCx into the thread and retrieve
+    // them back after the run so the outer scope can continue using them.
+    let build_input_clone = build_input.clone();
+    let key_seed_clone = key_seed.as_bytes().to_vec();
+    let spawn_res = std::thread::Builder::new()
+        .name("veil-pass-run".into())
+        .stack_size(16 * 1024 * 1024)
+        .spawn(move || {
+            let run_result = pm.run_cached(
+                &BuildIrPass,
+                key_seed_clone.as_slice(),
+                &build_input_clone,
+                &mut pcx,
+            );
+            (run_result, pm, pcx)
         });
+
+    let (run_result, mut pm, mut pcx) = match spawn_res {
+        Ok(handle) => match handle.join() {
+            Ok(tuple) => tuple,
+            Err(_) => {
+                // Thread panicked; fall back to computing IR from AST in this thread.
+                // pass thread panicked, falling back
+                let fallback = ir::lower_from_ast(&program);
+                // reconstruct variables for continued use (we cannot recover pm/pcx here)
+                // Create a noop PassManager and PassCx for subsequent code to use conservatively.
+                let pm = PassManager::with_fs_cache(
+                    &build_dir,
+                    veil_compiler::default_fingerprint(),
+                    verbose,
+                );
+                let pcx = PassCx::new(&build_dir, verbose);
+                (Ok(fallback), pm, pcx)
+            }
+        },
+        Err(e) => {
+            // failed to spawn pass thread, falling back
+            // Spawn failed: fall back synchronously
+            let fallback = ir::lower_from_ast(&program);
+            let pm = PassManager::with_fs_cache(
+                &build_dir,
+                veil_compiler::default_fingerprint(),
+                verbose,
+            );
+            let pcx = PassCx::new(&build_dir, verbose);
+            (Ok(fallback), pm, pcx)
+        }
+    };
+
+    let program_ir = match run_result {
+        Ok(ir) => ir,
+        Err(_) => ir::lower_from_ast(&program),
+    };
 
     let stats = pcx.take_stats();
     if verbose || pass_timings || cache_stats {
