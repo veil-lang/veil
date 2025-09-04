@@ -401,11 +401,18 @@ impl IrCBackend {
                             let _ = writeln!(out, "    return {};", val_ref(*v));
                         } else if f.name == "main" {
                             // Main function should return 0 instead of void
+
                             let _ = writeln!(out, "    return 0;");
+                        } else if f.ret != TypeIR::Void {
+                            // Synthesize a default value for non-void functions that omitted an explicit return expression
+
+                            let _ =
+                                writeln!(out, "    return {};", self.default_return_expr(&f.ret));
                         } else {
                             let _ = writeln!(out, "    return;");
                         }
                     }
+
                     veil_ir::TerminatorIR::Branch {
                         cond,
                         then_bb,
@@ -419,6 +426,7 @@ impl IrCBackend {
                             else_bb.0
                         );
                     }
+
                     veil_ir::TerminatorIR::Jump { bb } => {
                         let _ = writeln!(out, "    goto bb{};", bb.0);
                     }
@@ -477,19 +485,43 @@ impl IrCBackend {
 
     fn type_to_c(&self, ty: &TypeIR) -> String {
         use TypeIR::*;
+
         match ty {
             Void => "void".to_string(),
+
             I32 => "int".to_string(),
+
             I64 => "int64_t".to_string(),
+
             F32 => "float".to_string(),
+
             F64 => "double".to_string(),
+
             Bool => "bool".to_string(),
+
             String => "const char*".to_string(),
+
             Ptr(inner) => format!("{}*", self.type_to_c(inner)),
+
             Opaque(_name) => {
                 // Use void* for now; future IR may carry canonical struct names.
+
                 "void*".to_string()
             }
+        }
+    }
+
+    /// Produce a default C literal/expression for a given IR type when a user function
+    /// with non-void return type omits an explicit return value.
+    fn default_return_expr(&self, ty: &TypeIR) -> &'static str {
+        use TypeIR::*;
+        match ty {
+            Void => "",
+            I32 | I64 => "0",
+            F32 | F64 => "0.0",
+            Bool => "false",
+            String => "\"\"",
+            Ptr(_) | Opaque(_) => "NULL",
         }
     }
 }
