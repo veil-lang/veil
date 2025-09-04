@@ -132,8 +132,40 @@ impl IrCBackend {
                     }
                 };
 
-            let escape_c_str =
-                |s: &str| -> String { s.replace('\\', "\\\\").replace('\"', "\\\"") };
+            let escape_c_str = |s: &str| -> String {
+                let mut out = String::with_capacity(s.len());
+                let mut chars = s.chars().peekable();
+                while let Some(c) = chars.next() {
+                    match c {
+                        // Convert actual control chars to C escapes
+                        '\n' => out.push_str("\\n"),
+                        '\t' => out.push_str("\\t"),
+                        '\r' => out.push_str("\\r"),
+                        '\"' => out.push_str("\\\""),
+                        '\\' => {
+                            if let Some(&next) = chars.peek() {
+                                match next {
+                                    // Preserve known escapes (don't double-escape)
+                                    'n' | 't' | 'r' | '\\' | '\"' | '0' => {
+                                        out.push('\\');
+                                        out.push(next);
+                                        let _ = chars.next();
+                                    }
+                                    _ => {
+                                        // Unknown escape: escape the backslash itself
+                                        out.push_str("\\\\");
+                                    }
+                                }
+                            } else {
+                                // Trailing backslash
+                                out.push_str("\\\\");
+                            }
+                        }
+                        _ => out.push(c),
+                    }
+                }
+                out
+            };
 
             let local_cty = |lid: veil_ir::LocalId| -> String {
                 if let Some(loc) = f.locals.iter().find(|ll| ll.id == lid) {
