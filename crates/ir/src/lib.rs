@@ -611,6 +611,52 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
             }
             K::Call { func, args } => {
                 if let K::Variable(name) = &*func.kind {
+                    // Special-case: lower print/println(template) directly to printf(fmt, args...)
+                    if (name == "print" || name == "println") && args.len() == 1 {
+                        if let K::Template { parts } = &*args[0].kind {
+                            // Build a printf format string and collect expr parts
+                            let mut fmt = String::new();
+                            let mut exprs: Vec<&hir::HirExpr> = Vec::new();
+                            for p in parts {
+                                match p {
+                                    hir::HirTemplateStringPart::String(s) => fmt.push_str(s),
+                                    hir::HirTemplateStringPart::Expr(e) => {
+                                        // Minimal support: integer expressions -> %d
+                                        fmt.push_str("%d");
+                                        exprs.push(e);
+                                    }
+                                }
+                            }
+                            if name == "println" {
+                                fmt.push_str("\\n");
+                            }
+                            // Emit const format string
+                            let fmt_id =
+                                emit(blocks, *cur_bb, next_val, InstIR::ConstStr { value: fmt });
+                            // Build argv: fmt first, then evaluated exprs
+                            let mut argv = Vec::new();
+                            argv.push(fmt_id);
+                            for e in exprs {
+                                if let Some(v) =
+                                    lower_expr(e, blocks, cur_bb, next_val, locals, local_slots)
+                                {
+                                    argv.push(v);
+                                }
+                            }
+                            // Call printf(fmt, ...)
+                            return Some(emit(
+                                blocks,
+                                *cur_bb,
+                                next_val,
+                                InstIR::Call {
+                                    callee: "printf".to_string(),
+                                    args: argv,
+                                },
+                            ));
+                        }
+                    }
+
+                    // Default lowering for other calls
                     let mut argv = Vec::new();
                     for a in args {
                         if let Some(v) =
