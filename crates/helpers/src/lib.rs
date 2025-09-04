@@ -7,6 +7,7 @@
 
 use anyhow::Result;
 use codespan::{FileId, Files};
+use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Extract a "line:col" string from a codespan diagnostic for a specific file.
@@ -295,6 +296,24 @@ pub fn prepare_windows_clang_args(
 
     let msvc_libs = discover_msvc_lib_paths();
 
+    // Check if MinGW headers are actually available by testing a common header path
+    let have_mingw_headers = if let Ok(clang_output) = std::process::Command::new("clang")
+        .args(&[
+            "-target",
+            "x86_64-w64-windows-gnu",
+            "-v",
+            "-E",
+            "-xc",
+            if cfg!(windows) { "nul" } else { "/dev/null" },
+        ])
+        .output()
+    {
+        let stderr = String::from_utf8_lossy(&clang_output.stderr);
+        stderr.contains("x86_64-w64-mingw32") && !stderr.contains("ignoring nonexistent directory")
+    } else {
+        false
+    };
+
     let mut args = vec![
         opt_flag,
         c_file.to_str().unwrap().into(),
@@ -302,15 +321,24 @@ pub fn prepare_windows_clang_args(
         output.to_str().unwrap().into(),
     ];
 
+    let have_msvc = !msvc_libs.is_empty() || have_link || have_lld_link;
+
     let use_msvc = match prefer.as_str() {
         "msvc" => true,
-        "gnu" => false,
-        _ => !msvc_libs.is_empty() || have_link || have_lld_link,
+        "gnu" => {
+            if !have_mingw_headers && have_msvc {
+                true
+            } else {
+                false
+            }
+        }
+        _ => have_msvc && (!have_mingw || !have_mingw_headers),
     };
+
     let use_gnu = match prefer.as_str() {
-        "gnu" => true,
+        "gnu" => have_mingw_headers,
         "msvc" => false,
-        _ => !use_msvc && have_mingw,
+        _ => !use_msvc && have_mingw && have_mingw_headers,
     };
 
     if use_msvc {
@@ -328,7 +356,7 @@ pub fn prepare_windows_clang_args(
             args.push("-Xlinker".to_string());
             args.push(format!("/LIBPATH:{}", lib_path.to_string_lossy()));
         }
-    } else {
+    } else if use_gnu {
         args.insert(1, "-target".to_string());
         args.insert(2, "x86_64-w64-windows-gnu".to_string());
         if which::which("ld.lld").is_ok() || which::which("lld").is_ok() {

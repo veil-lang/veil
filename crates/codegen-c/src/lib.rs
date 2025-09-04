@@ -399,8 +399,11 @@ impl IrCBackend {
                     veil_ir::TerminatorIR::Return { value } => {
                         if let Some(v) = value {
                             let _ = writeln!(out, "    return {};", val_ref(*v));
+                        } else if f.name == "main" {
+                            // Main function should return 0 instead of void
+                            let _ = writeln!(out, "    return 0;");
                         } else {
-                            out.push_str("    return;\n");
+                            let _ = writeln!(out, "    return;");
                         }
                     }
                     veil_ir::TerminatorIR::Branch {
@@ -443,8 +446,12 @@ impl IrCBackend {
     fn function_signature(&self, name: &str, param_tys: &[TypeIR], ret: &TypeIR) -> String {
         let mut s = String::new();
 
-        // Return type
-        s.push_str(&self.type_to_c(ret));
+        // Return type - special case main function to return int
+        if name == "main" {
+            s.push_str("int");
+        } else {
+            s.push_str(&self.type_to_c(ret));
+        }
         s.push(' ');
 
         // Name
