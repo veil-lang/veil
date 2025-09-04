@@ -876,9 +876,60 @@ pub fn parse_ast_with_warnings(
                     let s = content[1..content.len().saturating_sub(1)].to_string();
                     Expr::Str(s, info(sp))
                 } else if content.starts_with('`') && content.ends_with('`') {
-                    // Template string - for now treat as regular string
-                    let s = content[1..content.len().saturating_sub(1)].to_string();
-                    Expr::Str(s, info(sp))
+                    // Manually split template string to capture parts even when Pest uses atomic rule
+                    let body = &content[1..content.len().saturating_sub(1)];
+                    let mut parts = Vec::new();
+                    let mut buf = String::new();
+                    let mut i = 0usize;
+                    while i < body.len() {
+                        let ch = body.as_bytes()[i] as char;
+                        if ch == '{' {
+                            // flush pending literal
+                            if !buf.is_empty() {
+                                parts.push(TemplateStrPart::Literal(buf.clone()));
+                                buf.clear();
+                            }
+                            // find matching }
+                            let mut j = i + 1;
+                            let mut depth = 1i32;
+                            while j < body.len() {
+                                let cj = body.as_bytes()[j] as char;
+                                if cj == '{' {
+                                    depth += 1;
+                                } else if cj == '}' {
+                                    depth -= 1;
+                                    if depth == 0 {
+                                        break;
+                                    }
+                                }
+                                j += 1;
+                            }
+                            if depth == 0 {
+                                let expr_src = &body[i + 1..j];
+                                if let Ok(mut pairs) =
+                                    ast_grammar::AstParser::parse(R::expr, expr_src)
+                                {
+                                    if let Some(p) = pairs.next() {
+                                        parts.push(TemplateStrPart::Expression(Box::new(
+                                            parse_expr(p),
+                                        )));
+                                    }
+                                }
+                                i = j + 1;
+                            } else {
+                                // Unbalanced brace; treat as literal
+                                buf.push('{');
+                                i += 1;
+                            }
+                        } else {
+                            buf.push(ch);
+                            i += 1;
+                        }
+                    }
+                    if !buf.is_empty() {
+                        parts.push(TemplateStrPart::Literal(buf));
+                    }
+                    Expr::TemplateStr(parts, info(sp))
                 } else {
                     // Not a literal, must be a complex expression with children
                     if let Some(child) = pair.into_inner().next() {
