@@ -244,9 +244,17 @@ impl Resolver {
         );
         self.context.scope_stack.push_scope(root_scope);
 
-        // Resolve all items
+        // Two-pass resolution to handle forward references:
+        // Pass 1: Collect all declarations (function signatures, FFI functions, etc.)
         for item in &mut program.items {
-            if let Err(mut errors) = self.resolve_item(item) {
+            if let Err(mut errors) = self.collect_item_declaration(item) {
+                self.context.errors.append(&mut errors);
+            }
+        }
+
+        // Pass 2: Resolve function bodies and expressions
+        for item in &mut program.items {
+            if let Err(mut errors) = self.resolve_item_body(item) {
                 self.context.errors.append(&mut errors);
             }
         }
@@ -273,7 +281,35 @@ impl Resolver {
         }
     }
 
-    /// Resolve a top-level item
+    /// Collect item declarations (first pass)
+    fn collect_item_declaration(&mut self, item: &mut HirItem) -> ResolveResult<()> {
+        match &mut item.kind {
+            HirItemKind::Function(func) => self.collect_function_declaration(func),
+            HirItemKind::Struct(struct_def) => self.resolve_struct(struct_def),
+            HirItemKind::Enum(enum_def) => self.resolve_enum(enum_def),
+            HirItemKind::Impl(_) => Ok(()), // Handle in second pass
+            HirItemKind::FfiFunction(ffi_func) => self.resolve_ffi_function(ffi_func),
+            HirItemKind::FfiVariable(ffi_var) => self.resolve_ffi_variable(ffi_var),
+            HirItemKind::Test(_) => Ok(()), // Handle in second pass
+            HirItemKind::Import(import) => self.resolve_import(import),
+        }
+    }
+
+    /// Resolve item bodies (second pass)
+    fn resolve_item_body(&mut self, item: &mut HirItem) -> ResolveResult<()> {
+        match &mut item.kind {
+            HirItemKind::Function(func) => self.resolve_function_body(func),
+            HirItemKind::Struct(_) => Ok(()), // Already resolved
+            HirItemKind::Enum(_) => Ok(()),   // Already resolved
+            HirItemKind::Impl(impl_block) => self.resolve_impl(impl_block),
+            HirItemKind::FfiFunction(_) => Ok(()), // Already resolved
+            HirItemKind::FfiVariable(_) => Ok(()), // Already resolved
+            HirItemKind::Test(test) => self.resolve_test(test),
+            HirItemKind::Import(_) => Ok(()), // Already resolved
+        }
+    }
+
+    /// Resolve a top-level item (legacy single-pass method)
     fn resolve_item(&mut self, item: &mut HirItem) -> ResolveResult<()> {
         match &mut item.kind {
             HirItemKind::Function(func) => self.resolve_function(func),
@@ -339,6 +375,83 @@ impl Resolver {
 
         // Resolve return type
         self.resolve_type_annotation(&mut func.return_type)?;
+
+        // Resolve function body
+        self.resolve_block(&mut func.body)?;
+
+        // Pop function scope
+        self.context.scope_stack.pop_scope();
+
+        Ok(())
+    }
+
+    /// Collect function declaration (first pass)
+    fn collect_function_declaration(&mut self, func: &mut HirFunction) -> ResolveResult<()> {
+        // Resolve parameter types first
+        for param in &mut func.params {
+            self.resolve_type_annotation(&mut param.ty)?;
+        }
+
+        // Resolve return type
+        self.resolve_type_annotation(&mut func.return_type)?;
+
+        // Create function type
+        let param_types: Vec<HirType> = func.params.iter().map(|p| p.ty.clone()).collect();
+        let function_type = HirType::Function(param_types, Box::new(func.return_type.clone()));
+
+        // Create symbol for function with type information
+        let symbol = Symbol::new(
+            self.context.symbol_table.next_symbol_id(),
+            func.name.clone(),
+            SymbolKind::Function,
+            self.context.current_module(),
+            func.id,
+        )
+        .with_generics(func.generic_params.clone())
+        .with_type(function_type);
+
+        // Define function symbol
+        let function_symbol_id = self.context.define_symbol(symbol).map_err(|e| vec![e])?;
+
+        // Map node to symbol
+        self.context
+            .node_to_symbol
+            .insert(func.id, function_symbol_id);
+
+        Ok(())
+    }
+
+    /// Resolve function body (second pass)
+    fn resolve_function_body(&mut self, func: &mut HirFunction) -> ResolveResult<()> {
+        // Create function scope
+        let func_scope = Scope::new(
+            self.context.scope_stack.next_scope_id(),
+            ScopeKind::Function,
+            self.context.current_module(),
+        )
+        .with_node(func.id);
+
+        self.context.scope_stack.push_scope(func_scope);
+
+        // Define generic parameters
+        for generic_param in &func.generic_params {
+            let param_symbol = Symbol::new(
+                self.context.symbol_table.next_symbol_id(),
+                generic_param.name.clone(),
+                SymbolKind::GenericParameter,
+                self.context.current_module(),
+                func.id,
+            );
+
+            if let Err(e) = self.context.define_symbol(param_symbol) {
+                self.context.add_error(e);
+            }
+        }
+
+        // Resolve parameters (types already resolved in declaration phase)
+        for param in &mut func.params {
+            self.resolve_parameter(param)?;
+        }
 
         // Resolve function body
         self.resolve_block(&mut func.body)?;
@@ -608,14 +721,27 @@ impl Resolver {
 
     /// Resolve an FFI function
     fn resolve_ffi_function(&mut self, ffi_func: &mut HirFfiFunction) -> ResolveResult<()> {
-        // Create symbol for FFI function
+        // Resolve parameter types first
+        for param in &mut ffi_func.params {
+            self.resolve_parameter(param)?;
+        }
+
+        // Resolve return type
+        self.resolve_type_annotation(&mut ffi_func.return_type)?;
+
+        // Create function type
+        let param_types: Vec<HirType> = ffi_func.params.iter().map(|p| p.ty.clone()).collect();
+        let function_type = HirType::Function(param_types, Box::new(ffi_func.return_type.clone()));
+
+        // Create symbol for FFI function with type information
         let symbol = Symbol::new(
             self.context.symbol_table.next_symbol_id(),
             ffi_func.name.clone(),
             SymbolKind::FfiFunction,
             self.context.current_module(),
             ffi_func.id,
-        );
+        )
+        .with_type(function_type);
 
         // Define FFI function symbol
         let ffi_symbol_id = self.context.define_symbol(symbol).map_err(|e| vec![e])?;
@@ -624,14 +750,6 @@ impl Resolver {
         self.context
             .node_to_symbol
             .insert(ffi_func.id, ffi_symbol_id);
-
-        // Resolve parameter types
-        for param in &mut ffi_func.params {
-            self.resolve_parameter(param)?;
-        }
-
-        // Resolve return type
-        self.resolve_type_annotation(&mut ffi_func.return_type)?;
 
         Ok(())
     }

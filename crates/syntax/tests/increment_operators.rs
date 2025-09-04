@@ -117,15 +117,12 @@ fn test_postfix_increment_in_assignment() {
     let expr = parse_expr_from_source(source);
 
     match expr {
-        Expr::BinOp(left, op, right, _) => {
+        Expr::Assign(left, right, _) => {
             // Left should be variable z
             match left.as_ref() {
                 Expr::Var(name, _) => assert_eq!(name, "z"),
                 _ => panic!("Expected variable z on left side"),
             }
-
-            // Operator should be assignment (represented as Eq in this parser)
-            assert!(matches!(op, veil_ast::BinOp::Eq));
 
             // Right should be postfix increment of x
             match right.as_ref() {
@@ -136,7 +133,7 @@ fn test_postfix_increment_in_assignment() {
                 _ => panic!("Expected postfix increment on right side"),
             }
         }
-        _ => panic!("Expected binary operation"),
+        _ => panic!("Expected assignment expression"),
     }
 }
 

@@ -475,9 +475,8 @@ pub fn parse_ast_with_warnings(
                                     parts.push(TemplateStrPart::Literal(p.as_str().to_string()))
                                 }
                                 R::template_interpolation => {
-                                    if let Some(e) =
-                                        p.into_inner().find(|x| matches!(x.as_rule(), R::expr))
-                                    {
+                                    let mut it = p.into_inner();
+                                    if let Some(e) = it.next() {
                                         parts.push(TemplateStrPart::Expression(Box::new(
                                             parse_expr(e),
                                         )));
@@ -504,8 +503,10 @@ pub fn parse_ast_with_warnings(
                     match c.as_rule() {
                         R::ident => name = c.as_str().to_string(),
                         R::argument_list => {
-                            for a in c.into_inner().filter(|x| matches!(x.as_rule(), R::expr)) {
-                                args.push(parse_expr(a));
+                            for a in c.into_inner() {
+                                if !matches!(a.as_rule(), R::COMMA) {
+                                    args.push(parse_expr(a));
+                                }
                             }
                         }
                         _ => {}
@@ -546,11 +547,10 @@ pub fn parse_ast_with_warnings(
                                     if let Some(al) = sub.next()
                                         && matches!(al.as_rule(), R::argument_list)
                                     {
-                                        for a in al
-                                            .into_inner()
-                                            .filter(|x| matches!(x.as_rule(), R::expr))
-                                        {
-                                            args.push(parse_expr(a));
+                                        for a in al.into_inner() {
+                                            if !matches!(a.as_rule(), R::COMMA) {
+                                                args.push(parse_expr(a));
+                                            }
                                         }
                                     }
                                     // Function/method call name resolution deferred; use "<method>." for field-based later if needed
@@ -769,7 +769,7 @@ pub fn parse_ast_with_warnings(
             R::array_lit => {
                 let mut elems = Vec::new();
                 for c in pair.into_inner() {
-                    if matches!(c.as_rule(), R::expr) {
+                    if !matches!(c.as_rule(), R::COMMA | R::LBRACK | R::RBRACK) {
                         elems.push(parse_expr(c));
                     }
                 }
@@ -1120,11 +1120,41 @@ pub fn parse_ast_with_warnings(
                 R::expr_stmt => {
                     // Parse expression statement directly
                     let span = Span::new(s.as_span().start() as u32, s.as_span().end() as u32);
-                    for inner in s.into_inner() {
-                        if matches!(inner.as_rule(), R::expr) {
-                            let expr = parse_expr(inner);
-                            out.push(ast::Stmt::Expr(expr, span));
-                            break;
+
+                    // Find the expression child (should be the first non-whitespace/semicolon child)
+                    for child in s.into_inner() {
+                        match child.as_rule() {
+                            // Skip whitespace and semicolons
+                            R::WS | R::SEMI => continue,
+                            // This should be our expression - handle any expression rule
+                            R::assignment_expr
+                            | R::pipeline_expr
+                            | R::logical_or_expr
+                            | R::logical_and_expr
+                            | R::equality_expr
+                            | R::relational_expr
+                            | R::bit_or_expr
+                            | R::bit_xor_expr
+                            | R::bit_and_expr
+                            | R::shift_expr
+                            | R::additive_expr
+                            | R::multiplicative_expr
+                            | R::power_expr
+                            | R::cast_expr
+                            | R::range_expr
+                            | R::unary_expr
+                            | R::postfix_expr
+                            | R::primary_expr => {
+                                let expr = parse_expr(child);
+                                out.push(ast::Stmt::Expr(expr, span));
+                                break;
+                            }
+                            _ => {
+                                // Fallback: try to parse as expression anyway
+                                let expr = parse_expr(child);
+                                out.push(ast::Stmt::Expr(expr, span));
+                                break;
+                            }
                         }
                     }
                 }

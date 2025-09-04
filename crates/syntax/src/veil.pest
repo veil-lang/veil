@@ -473,7 +473,7 @@ range_expr = {
 }
 
 unary_expr = {
-      ( BANG | PLUS | MINUS | AMP | STAR | KW_AWAIT | INC | DEC ) ~ S ~ unary_expr
+      ( INC | DEC | BANG | PLUS | MINUS | AMP | STAR | KW_AWAIT ) ~ S ~ unary_expr
     | postfix_expr
 }
 
