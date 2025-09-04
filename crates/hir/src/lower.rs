@@ -239,7 +239,7 @@ impl LoweringContext {
                         name: field.name.clone(),
                         symbol_id: None, // Will be filled during resolution
                         ty: ctx.lower_type(&field.ty),
-                        visibility: HirVisibility::Private,
+                        visibility: HirVisibility::Private, // Default to private, no field-level visibility in AST
                     }
                 })
                 .collect();
@@ -288,7 +288,7 @@ impl LoweringContext {
                                         name: field.name.clone(),
                                         symbol_id: None, // Will be filled during resolution
                                         ty: ctx.lower_type(&field.ty),
-                                        visibility: HirVisibility::Private,
+                                        visibility: HirVisibility::Private, // Default to private, no field-level visibility in AST
                                     }
                                 })
                                 .collect();
@@ -345,12 +345,12 @@ impl LoweringContext {
                 HirType::Unresolved(impl_block.target_type.clone())
             };
 
-            let trait_ref = None;
+            let _trait_ref: Option<HirType> = None;
 
             HirImpl {
                 id,
                 target_type,
-                trait_ref,
+                trait_ref: None, // AST ImplBlock doesn't support trait implementations yet
                 trait_symbol_id: None, // Will be filled during resolution
                 methods,
             }
@@ -435,10 +435,10 @@ impl LoweringContext {
                 let param_types = params.iter().map(|p| self.lower_type(p)).collect();
                 HirType::Function(param_types, Box::new(self.lower_type(ret)))
             }
-            ast::Type::Generic(name) => HirType::Generic(name.clone()),
+            ast::Type::Generic(name) => HirType::Generic(HirGenericRef::new(name.clone())),
             ast::Type::GenericInstance(name, args) => {
                 let arg_types = args.iter().map(|arg| self.lower_type(arg)).collect();
-                HirType::GenericInstance(name.clone(), arg_types)
+                HirType::GenericInstance(HirGenericRef::new(name.clone()), arg_types)
             }
             ast::Type::Struct(name) => HirType::Unresolved(name.clone()),
             ast::Type::Enum(name) => HirType::Unresolved(name.clone()),
@@ -472,8 +472,11 @@ impl LoweringContext {
                     hir_stmts.push(hir_stmt);
                 }
                 Err(err) => {
-                    // Collect lowering errors for better diagnostics
-                    eprintln!("Warning: Failed to lower statement: {:?}", err);
+                    // Log lowering errors for diagnostics - in production this would
+                    // be collected in a proper error reporting system
+                    if std::env::var("VEIL_DEBUG_LOWERING").is_ok() {
+                        eprintln!("Warning: Failed to lower statement: {:?}", err);
+                    }
                     continue;
                 }
             }

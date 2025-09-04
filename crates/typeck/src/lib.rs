@@ -237,9 +237,9 @@ impl TypeCheckContext {
             (Enum(left_name), Enum(right_name)) => left_name == right_name,
 
             // Generic compatibility
-            (Generic(left_name), Generic(right_name)) => left_name == right_name,
-            (GenericInstance(left_name, left_args), GenericInstance(right_name, right_args)) => {
-                left_name == right_name
+            (Generic(left_ref), Generic(right_ref)) => left_ref.name == right_ref.name,
+            (GenericInstance(left_ref, left_args), GenericInstance(right_ref, right_args)) => {
+                left_ref.name == right_ref.name
                     && left_args.len() == right_args.len()
                     && left_args
                         .iter()
@@ -567,18 +567,18 @@ impl TypeChecker {
     /// Validate a HIR type for trait-related rules (dyn Trait)
     fn validate_type(&mut self, ty: &HirType, at_node: NodeId) {
         match ty {
-            HirType::DynTrait(name) => {
+            HirType::DynTrait(trait_ref) => {
                 // VE0100: dyn trait references must resolve to a trait symbol
                 let is_trait = self
                     .context
                     .symbol_table
-                    .find_by_name_and_kind(name, SymbolKind::Trait)
+                    .find_by_name_and_kind(&trait_ref.name, SymbolKind::Trait)
                     .is_some();
                 if !is_trait {
                     self.error_with_fix(
                         at_node,
                         Some("VE0100"),
-                        format!("unknown trait '{}'", name),
+                        format!("unknown trait '{}'", trait_ref.name),
                         "Ensure the trait is declared and imported, or fix the name",
                     );
                 }
@@ -1157,7 +1157,7 @@ mod tests {
                 id: NodeId::new(101),
                 name: "x".to_string(),
                 symbol_id: None,
-                ty: HirType::DynTrait("Foo".to_string()),
+                ty: HirType::DynTrait(veil_hir::HirTraitRef::new("Foo".to_string())),
             }],
             return_type: HirType::Void,
             body: veil_hir::HirBlock {

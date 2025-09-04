@@ -70,8 +70,8 @@ pub enum HirVisibility {
     Public,
     PublicCrate,
     PublicSuper,
-    PublicIn(String),           // TODO: Replace with resolved path
-    PublicInResolved(ModuleId), // Resolved version
+    PublicIn(String),           // Path string, will be resolved to PublicInResolved
+    PublicInResolved(ModuleId), // Resolved version after symbol resolution
 }
 
 /// HIR generic parameter
@@ -154,7 +154,7 @@ pub enum HirEnumVariantData {
 pub struct HirImpl {
     pub id: NodeId,
     pub target_type: HirType,
-    pub trait_ref: Option<HirType>, // TODO: Replace with SymbolId after resolution
+    pub trait_ref: Option<HirType>, // Trait reference as HIR type
     pub trait_symbol_id: Option<SymbolId>, // Resolved trait symbol ID
     pub methods: Vec<HirFunction>,
 }
@@ -234,13 +234,13 @@ pub enum HirType {
     Enum(String),
     Range,
     /// Generic types
-    Generic(String), // TODO: Replace with proper generic representation
-    GenericInstance(String, Vec<HirType>), // TODO: Replace with proper representation
+    Generic(HirGenericRef),
+    GenericInstance(HirGenericRef, Vec<HirType>),
     /// Union and intersection types (v2.0 features)
     Union(Vec<HirType>),
     Intersection(Vec<HirType>),
     /// Dynamic trait objects
-    DynTrait(String), // TODO: Replace with proper trait reference
+    DynTrait(HirTraitRef),
 }
 
 impl HirType {
@@ -301,7 +301,43 @@ pub enum HirStmtKind {
     Continue,
 }
 
-/// HIR expression
+/// Reference to a generic type parameter
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HirGenericRef {
+    pub name: String,
+    pub scope_id: Option<NodeId>, // ID of the scope that defines this generic
+    pub resolved_index: Option<usize>, // Index in the generic parameter list
+}
+
+impl HirGenericRef {
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+            scope_id: None,
+            resolved_index: None,
+        }
+    }
+}
+
+/// Reference to a trait for dynamic dispatch
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HirTraitRef {
+    pub name: String,
+    pub symbol_id: Option<SymbolId>, // Resolved trait symbol
+    pub type_args: Vec<HirType>,     // Type arguments for the trait
+}
+
+impl HirTraitRef {
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+            symbol_id: None,
+            type_args: Vec::new(),
+        }
+    }
+}
+
+/// HIR expressions
 #[derive(Debug, Clone, PartialEq)]
 pub struct HirExpr {
     pub id: NodeId,

@@ -278,12 +278,16 @@ impl TypeChecker {
                                 }
                             }
                         }
-                        HirType::Intersection(_parts) => {
-                            // TODO(M5): Intersection exhaustiveness is complex; warn for now.
-                            self.warning(
-                                "Exhaustiveness checking for intersection types is not fully implemented"
-                                    .to_string(),
-                            );
+                        HirType::Intersection(parts) => {
+                            // Intersection type exhaustiveness checking is complex and requires
+                            // analysis of all component types. For now, we provide a specific warning.
+                            let type_names: Vec<String> =
+                                parts.iter().map(|t| format!("{:?}", t)).collect();
+                            self.warning(format!(
+                                "Exhaustiveness checking for intersection type {} is not yet fully supported. \
+                                 Ensure all cases are handled manually.",
+                                type_names.join(" & ")
+                            ));
                         }
                         _ => {}
                     }

@@ -1,5 +1,44 @@
-/# prelude for Veil standard library
-/# This file is automatically imported by all Veil programs
-/# Contains essential types and functions available by default
-/# on other standard library modules that may not exist yet
-/# Core types are built into the compiler and don't need explicit definitions here
+/# Veil Standard Library Prelude
+/# This module provides commonly used functions and types that are
+/# automatically imported into every Veil program.
+
+/# Basic utility functions
+export fn panic(message: str) -> void {
+    /# Built-in panic function - implementation provided by runtime
+    print(message);
+}
+
+export fn assert(condition: bool, message: str) -> void {
+    if !condition {
+        panic(message);
+    }
+}
+
+/# Math utilities
+export fn abs(n: i32) -> i32 {
+    if n < 0 {
+        return -n;
+    }
+    return n;
+}
+
+export fn max(a: i32, b: i32) -> i32 {
+    if a > b {
+        return a;
+    }
+    return b;
+}
+
+export fn min(a: i32, b: i32) -> i32 {
+    if a < b {
+        return a;
+    }
+    return b;
+}
+
+/# Type aliases for convenience
+/# export type usize = u64;
+/# export type isize = i64;
+
+/# Runtime intrinsics
+foreign fn print(message: str) -> void;
