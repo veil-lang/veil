@@ -559,7 +559,17 @@ fn merge_imports_into_program(
     // Parse entry already done; now resolve imports and merge
     let resolved = resolve_imports_only(&root_program.imports, entry_path)?;
 
-    for item in resolved {
+    // Recursively process imports and re-exports (export import ...)
+    let mut queue: std::collections::VecDeque<ResolvedImport> = resolved.into();
+    let mut visited: std::collections::HashSet<std::path::PathBuf> =
+        std::collections::HashSet::new();
+
+    while let Some(item) = queue.pop_front() {
+        // Avoid re-processing the same module path
+        if !visited.insert(item.path.clone()) {
+            continue;
+        }
+
         let content = fs::read_to_string(&item.path)
             .with_context(|| format!("Failed to read module {}", item.path.display()))?;
         let fid = files.add(item.path.to_string_lossy().to_string(), content);
@@ -572,49 +582,99 @@ fn merge_imports_into_program(
             anyhow!("{}:{}: {}", clean_path, 0, msg)
         })?;
 
-        // Public functions
-        for f in imported.functions.iter() {
-            if matches!(f.visibility, ast::Visibility::Public) {
-                root_program.functions.push(f.clone());
+        // Merge exports from this module into the root based on how it was imported.
+        match &item.import_type {
+            // Re-export specific specifiers
+            ImportType::Specifiers { specifiers } => {
+                // Functions
+                for spec in specifiers {
+                    if let Some(func) = imported.functions.iter().find(|f| {
+                        matches!(f.visibility, ast::Visibility::Public) && f.name == spec.name
+                    }) {
+                        let mut fcl = func.clone();
+                        if let Some(alias) = &spec.alias {
+                            fcl.name = alias.clone();
+                        }
+                        root_program.functions.push(fcl);
+                    }
+                }
+                // Structs
+                for spec in specifiers {
+                    if let Some(st) = imported.structs.iter().find(|s| {
+                        matches!(s.visibility, ast::Visibility::Public) && s.name == spec.name
+                    }) {
+                        let mut scl = st.clone();
+                        root_program.structs.push(scl);
+                    }
+                }
+                // Note: enums and other items can be added here similarly if needed.
+            }
+            // Import all public items
+            ImportType::All { .. } => {
+                // Public functions
+                for f in imported.functions.iter() {
+                    if matches!(f.visibility, ast::Visibility::Public) {
+                        root_program.functions.push(f.clone());
+                    }
+                }
+                // Public structs
+                for s in imported.structs.iter() {
+                    if matches!(s.visibility, ast::Visibility::Public) {
+                        root_program.structs.push(s.clone());
+                    }
+                }
+                // Impl blocks whose target is builtin or exported struct in the same module
+                for ib in imported.impls.iter() {
+                    let is_builtin_type = ib.target_type.contains("[]")
+                        || matches!(
+                            ib.target_type.as_str(),
+                            "string"
+                                | "i32"
+                                | "i64"
+                                | "f32"
+                                | "f64"
+                                | "bool"
+                                | "i8"
+                                | "i16"
+                                | "u8"
+                                | "u16"
+                                | "u32"
+                                | "u64"
+                        );
+
+                    let target_is_exported = is_builtin_type
+                        || imported.structs.iter().any(|s| {
+                            let target_name: &str = match ib.target_type_parsed.as_ref() {
+                                Some(ast::Type::Struct(n)) => n.as_str(),
+                                Some(ast::Type::GenericInstance(n, _)) => n.as_str(),
+                                _ => ib.target_type.as_str(),
+                            };
+                            s.name == target_name && matches!(s.visibility, ast::Visibility::Public)
+                        });
+
+                    if target_is_exported {
+                        root_program.impls.push(ib.clone());
+                    }
+                }
             }
         }
-        // Public structs
-        for s in imported.structs.iter() {
-            if matches!(s.visibility, ast::Visibility::Public) {
-                root_program.structs.push(s.clone());
-            }
-        }
-        // Impl blocks whose target is builtin or exported struct in the same module
-        for ib in imported.impls.iter() {
-            let is_builtin_type = ib.target_type.contains("[]")
-                || matches!(
-                    ib.target_type.as_str(),
-                    "string"
-                        | "i32"
-                        | "i64"
-                        | "f32"
-                        | "f64"
-                        | "bool"
-                        | "i8"
-                        | "i16"
-                        | "u8"
-                        | "u16"
-                        | "u32"
-                        | "u64"
-                );
 
-            let target_is_exported = is_builtin_type
-                || imported.structs.iter().any(|s| {
-                    let target_name: &str = match ib.target_type_parsed.as_ref() {
-                        Some(ast::Type::Struct(n)) => n.as_str(),
-                        Some(ast::Type::GenericInstance(n, _)) => n.as_str(),
-                        _ => ib.target_type.as_str(),
-                    };
-                    s.name == target_name && matches!(s.visibility, ast::Visibility::Public)
-                });
+        // Follow re-exports (export import ...) from this imported module
+        let export_imports: Vec<ast::ImportDeclaration> = imported
+            .imports
+            .iter()
+            .filter_map(|imp| match imp {
+                ast::ImportDeclaration::ExportImportAll { .. }
+                | ast::ImportDeclaration::ExportImportSpecifiers { .. } => Some(imp.clone()),
+                _ => None,
+            })
+            .collect();
 
-            if target_is_exported {
-                root_program.impls.push(ib.clone());
+        if !export_imports.is_empty() {
+            // Resolve re-exported imports relative to this module's path
+            let next = resolve_imports_only(&export_imports, &item.path)?;
+            for n in next {
+                queue.push_back(n);
             }
         }
 

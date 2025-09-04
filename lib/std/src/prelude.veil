@@ -3,15 +3,21 @@
 /# automatically imported into every Veil program.
 
 /# Runtime intrinsics
-foreign fn print(message: str) -> void;
-
-/# Basic utility functions
-export fn panic(message: str) -> void {
-    /# Built-in panic function - implementation provided by runtime
-    print(message);
+#{ header: "stdio.h" }
+foreign fn printf(fmt: string, arg: string) -> i32;
+export fn print(s: string) -> void {
+    printf("%s", s);
+}
+export fn println(s: string) -> void {
+    printf("%s\n", s);
 }
 
-export fn assert(condition: bool, message: str) -> void {
+/# Basic utility functions
+export fn panic(message: string) -> void {
+    println(message);
+}
+
+export fn assert(condition: bool, message: string) -> void {
     if !condition {
         panic(message);
     }
