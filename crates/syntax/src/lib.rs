@@ -37,7 +37,7 @@ use veil_diagnostics::{Diagnostic, Label};
 #[grammar_inline = r##"
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 COMMENT    = _{ LINE_COMMENT | BLOCK_COMMENT }
-LINE_COMMENT  = @{ "//" ~ (!"\n" ~ ANY)* ~ ("\n" | EOI) }
+LINE_COMMENT  = @{ "/#" ~ (!"\n" ~ ANY)* ~ ("\n" | EOI) }
 BLOCK_COMMENT = @{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
 
 ident_continue = _{ ASCII_ALPHANUMERIC | "_" }
@@ -413,6 +413,31 @@ pub fn parse_ast_with_warnings(
         };
 
         match pair.as_rule() {
+            R::int_lit => {
+                let txt = pair.as_str();
+                // Prefer i32 if it doesn't fit i32 parsing
+                if let Ok(v) = txt.parse::<i32>() {
+                    Expr::Int(v, info(sp))
+                } else {
+                    let v = if let Some(stripped) = txt.strip_prefix("0x") {
+                        i64::from_str_radix(stripped, 16).unwrap_or(0)
+                    } else if let Some(stripped) = txt.strip_prefix("0b") {
+                        i64::from_str_radix(stripped, 2).unwrap_or(0)
+                    } else {
+                        txt.parse::<i64>().unwrap_or(0)
+                    };
+                    Expr::Int64(v, info(sp))
+                }
+            }
+            R::float_lit => Expr::F64(pair.as_str().parse().unwrap_or(0.0), info(sp)),
+            R::str_lit => {
+                // Strip quotes
+                let s = pair.as_str();
+                let content = s[1..s.len().saturating_sub(1)].to_string();
+                Expr::Str(content, info(sp))
+            }
+            R::bool_lit => Expr::Bool(pair.as_str() == "true", info(sp)),
+            R::none_lit => Expr::None(info(sp)),
             R::literal => {
                 let inner = pair.into_inner().next().unwrap();
                 match inner.as_rule() {
@@ -597,16 +622,12 @@ pub fn parse_ast_with_warnings(
                 }
             }
             R::cast_expr => {
-                // left (as T)*
+                // range_expr (as T)*
                 let mut t = None;
                 let mut left = None;
                 for c in pair.into_inner() {
                     match c.as_rule() {
-                        R::unary_expr
-                        | R::postfix_expr
-                        | R::primary_expr
-                        | R::literal
-                        | R::var_ref => {
+                        R::range_expr => {
                             if left.is_none() {
                                 left = Some(parse_expr(c));
                             }
@@ -618,7 +639,7 @@ pub fn parse_ast_with_warnings(
                 match (left, t) {
                     (Some(e), Some(ty)) => ast::Expr::Cast(Box::new(e), ty, info(sp)),
                     (Some(e), None) => e,
-                    (None, _) => ast::Expr::Void(info(sp)),
+                    _ => ast::Expr::Void(info(sp)),
                 }
             }
             R::power_expr
@@ -637,7 +658,8 @@ pub fn parse_ast_with_warnings(
                 // Fold left to binary ops based on child sequence
                 // We rely on grammar to group; we pick first op we find and nest accordingly.
                 let mut it = pair.into_inner();
-                let mut lhs = parse_expr(it.next().unwrap());
+                let first_child = it.next().unwrap();
+                let mut lhs = parse_expr(first_child);
                 while let Some(op_or_rhs) = it.next() {
                     match op_or_rhs.as_rule() {
                         R::PLUS
@@ -711,32 +733,37 @@ pub fn parse_ast_with_warnings(
                 lhs
             }
             R::range_expr => {
-                // Handle .., ..=, ..>, ..< or a..b / a..=b
-                let mut inner = pair.into_inner().peekable();
-                if let Some(first) = inner.peek() {
-                    match first.as_rule() {
-                        R::RANGE => {
-                            // ".." variants handled by concrete tokens in grammar; fallback infinite
-                            ast::Expr::InfiniteRange(RangeType::Infinite, info(sp))
-                        }
-                        R::RANGE_EQ => ast::Expr::InfiniteRange(RangeType::Infinite, info(sp)),
-                        R::RANGE_GT => ast::Expr::InfiniteRange(RangeType::InfiniteUp, info(sp)),
-                        R::RANGE_LT => ast::Expr::InfiniteRange(RangeType::InfiniteDown, info(sp)),
-                        _ => {
-                            // expr .. expr or expr ..= expr
-                            let start = parse_expr(inner.next().unwrap());
-                            let op = inner.next().unwrap(); // RANGE or RANGE_EQ
-                            let end = parse_expr(inner.next().unwrap());
-                            let rt = if matches!(op.as_rule(), R::RANGE_EQ) {
-                                RangeType::Inclusive
-                            } else {
-                                RangeType::Exclusive
-                            };
-                            ast::Expr::Range(Box::new(start), Box::new(end), rt, info(sp))
+                // Handle .., ..=, ..>, ..< or a..b / a..=b or just unary_expr
+                let inner = pair.into_inner().collect::<Vec<_>>();
+                match inner.len() {
+                    1 => {
+                        // Single child - either a standalone range token or unary_expr
+                        let child = &inner[0];
+                        match child.as_rule() {
+                            R::RANGE => ast::Expr::InfiniteRange(RangeType::Infinite, info(sp)),
+                            R::RANGE_EQ => ast::Expr::InfiniteRange(RangeType::Infinite, info(sp)),
+                            R::RANGE_GT => {
+                                ast::Expr::InfiniteRange(RangeType::InfiniteUp, info(sp))
+                            }
+                            R::RANGE_LT => {
+                                ast::Expr::InfiniteRange(RangeType::InfiniteDown, info(sp))
+                            }
+                            _ => parse_expr(child.clone()), // unary_expr case
                         }
                     }
-                } else {
-                    ast::Expr::InfiniteRange(RangeType::Infinite, info(sp))
+                    3 => {
+                        // Three children: expr, range_op, expr
+                        let start = parse_expr(inner[0].clone());
+                        let op = &inner[1];
+                        let end = parse_expr(inner[2].clone());
+                        let rt = if matches!(op.as_rule(), R::RANGE_EQ) {
+                            RangeType::Inclusive
+                        } else {
+                            RangeType::Exclusive
+                        };
+                        ast::Expr::Range(Box::new(start), Box::new(end), rt, info(sp))
+                    }
+                    _ => ast::Expr::Void(info(sp)), // Unexpected case
                 }
             }
             R::array_lit => {
@@ -831,13 +858,45 @@ pub fn parse_ast_with_warnings(
                 }
                 ast::Expr::Loop(body, info(sp))
             }
-            R::primary_expr | R::expr | R::postfix_op | R::argument_list => {
-                // Recurse through wrappers
-                let mut last = ast::Expr::Void(info(sp));
-                for c in pair.into_inner() {
-                    last = parse_expr(c);
+            R::primary_expr => {
+                // Primary expressions can be literals (flattened) or complex expressions with children
+                let content = pair.as_str();
+
+                // Check if it's a literal by trying to parse it
+                if let Ok(v) = content.parse::<i32>() {
+                    Expr::Int(v, info(sp))
+                } else if let Ok(v) = content.parse::<f64>() {
+                    Expr::F64(v, info(sp))
+                } else if content == "true" || content == "false" {
+                    Expr::Bool(content == "true", info(sp))
+                } else if content == "none" || content == "None" {
+                    Expr::None(info(sp))
+                } else if content.starts_with('"') && content.ends_with('"') {
+                    // String literal
+                    let s = content[1..content.len().saturating_sub(1)].to_string();
+                    Expr::Str(s, info(sp))
+                } else if content.starts_with('`') && content.ends_with('`') {
+                    // Template string - for now treat as regular string
+                    let s = content[1..content.len().saturating_sub(1)].to_string();
+                    Expr::Str(s, info(sp))
+                } else {
+                    // Not a literal, must be a complex expression with children
+                    if let Some(child) = pair.into_inner().next() {
+                        parse_expr(child)
+                    } else {
+                        // Try as variable reference
+                        Expr::Var(content.to_string(), info(sp))
+                    }
                 }
-                last
+            }
+            R::expr | R::postfix_op | R::argument_list => {
+                // Recurse through wrappers - take the first (and usually only) child
+                if let Some(child) = pair.into_inner().next() {
+                    parse_expr(child)
+                } else {
+                    // If no children found, this shouldn't happen in valid grammar
+                    ast::Expr::Void(info(sp))
+                }
             }
             _ => ast::Expr::Void(info(sp)),
         }
@@ -897,7 +956,7 @@ pub fn parse_ast_with_warnings(
                     match c.as_rule() {
                         R::ident => name = c.as_str().to_string(),
                         R::ty => ty = Some(parse_type(c)),
-                        R::expr => expr = parse_expr(c),
+                        R::expr | R::assignment_expr => expr = parse_expr(c),
                         _ => {}
                     }
                 }
@@ -922,7 +981,7 @@ pub fn parse_ast_with_warnings(
             R::return_stmt => {
                 let mut expr = None;
                 for c in pair.into_inner() {
-                    if matches!(c.as_rule(), R::expr) {
+                    if matches!(c.as_rule(), R::expr | R::assignment_expr) {
                         expr = Some(parse_expr(c))
                     }
                 }
@@ -1044,7 +1103,18 @@ pub fn parse_ast_with_warnings(
         let mut out = Vec::new();
         for s in block.into_inner() {
             match s.as_rule() {
-                R::stmt => {
+                R::let_stmt
+                | R::var_stmt
+                | R::return_stmt
+                | R::defer_stmt
+                | R::while_stmt
+                | R::for_stmt
+                | R::loop_stmt
+                | R::break_stmt
+                | R::continue_stmt
+                | R::if_stmt
+                | R::match_stmt
+                | R::block => {
                     out.push(parse_stmt(s));
                 }
                 R::expr_stmt => {
@@ -1058,31 +1128,8 @@ pub fn parse_ast_with_warnings(
                         }
                     }
                 }
-                R::return_stmt => {
-                    // Parse return statement
-                    let span = Span::new(s.as_span().start() as u32, s.as_span().end() as u32);
-                    let mut expr = None;
-                    for inner in s.into_inner() {
-                        if matches!(inner.as_rule(), R::expr) {
-                            expr = Some(parse_expr(inner));
-                            break;
-                        }
-                    }
-                    // Use a default void literal expression if no expression provided
-                    let return_expr = expr.unwrap_or_else(|| {
-                        ast::Expr::Int(
-                            0,
-                            ast::ExprInfo {
-                                span,
-                                ty: ast::Type::Void,
-                                is_tail: false,
-                            },
-                        )
-                    });
-                    out.push(ast::Stmt::Return(return_expr, span));
-                }
                 _ => {
-                    // Skip non-statement rules like LBRACE, RBRACE
+                    // Skip non-statement rules like LBRACE, RBRACE, S
                 }
             }
         }

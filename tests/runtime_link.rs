@@ -69,7 +69,7 @@ int64_t iter_next(void* it) { (void)it; return 0; }
         &input,
         r#"
 fn main() -> void {
-    let a: i32 = 6 // 3;
+    let a: i32 = 42;
     return;
 }
 "#,

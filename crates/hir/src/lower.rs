@@ -532,7 +532,13 @@ impl LoweringContext {
                     init: None,
                 }
             }
-            ast::Stmt::Return(expr, _) => HirStmtKind::Return(Some(self.lower_expr(expr)?)),
+            ast::Stmt::Return(expr, _) => {
+                // Check if this is a void expression (empty return)
+                match expr {
+                    ast::Expr::Void(_) => HirStmtKind::Return(None),
+                    _ => HirStmtKind::Return(Some(self.lower_expr(expr)?)),
+                }
+            }
             ast::Stmt::Break(expr, _) => {
                 HirStmtKind::Break(expr.as_ref().map(|e| self.lower_expr(e)).transpose()?)
             }
@@ -811,7 +817,7 @@ impl LoweringContext {
             ast::BinOp::Sub => HirBinaryOp::Sub,
             ast::BinOp::Mul => HirBinaryOp::Mul,
             ast::BinOp::Div => HirBinaryOp::Div,
-            ast::BinOp::IDiv => HirBinaryOp::Div,
+            ast::BinOp::IDiv => HirBinaryOp::IDiv,
             ast::BinOp::Mod => HirBinaryOp::Mod,
             ast::BinOp::And => HirBinaryOp::And,
             ast::BinOp::Or => HirBinaryOp::Or,
