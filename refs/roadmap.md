@@ -1,10 +1,6 @@
 # Veil Roadmap (pre-0.3 → 1.0)
 
 This roadmap organizes the migration to the v2.0 language spec into concrete, verifiable milestones. Each milestone includes goals, scope, checklists, acceptance criteria, and deprecation notes. It pairs with:
-
-- refs/migration-plan.md — Subsystem checklist and gap analysis
-- refs/architecture-refactor.md — Target architecture and pass boundaries
-
 Status notation:
 
 - [ ] To do
@@ -40,7 +36,7 @@ Checklist
 - [ ] Division rule diagnostics with fix-its (/→// or cast).
 - [ ] Tokens: const/pub/str/ch/:: wired in lexer and parseable (no codegen change).
 - [ ] Minimal tests: prelude, division, tokens smoke tests.
-- [ ] Pest grammar and adapter scaffolding at src/parser/grammar/veil.pest and src/parser/pest_adapter.rs; make Pest the default parser; add smoke tests and AST golden fixtures.
+- [ ] Pest grammar and adapter at src/parser/grammar/veil.pest and src/parser/pest_adapter.rs; make Pest the default parser; add smoke tests and AST golden fixtures.
 - [ ] Parser: Add increment/decrement operators (++, --) with postfix support.
 
 Acceptance Criteria

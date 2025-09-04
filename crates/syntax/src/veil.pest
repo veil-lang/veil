@@ -113,6 +113,8 @@ TY_F64B = @{ "f64" ~ !ident_continue }
 // Multi-char operators and tokens
 ELLIPSIS   = { "..." }
 POW        = { "**" }
+INC        = { "++" }
+DEC        = { "--" }
 ARROW      = { "->" }
 FATARROW   = { "=>" }
 EQEQ       = { "==" }
@@ -175,7 +177,7 @@ token = {
   | KW_FOREIGN | KW_TYPE | KW_PUB | KW_ASYNC | KW_AWAIT
   | TY_BOOL | TY_STRING | TY_STR | TY_VOID | TY_ANY | TY_U8A | TY_U8B | TY_U16A | TY_U16B | TY_U32A | TY_U32B | TY_U64A | TY_U64B
   | TY_I8A | TY_I8B | TY_I16A | TY_I16B | TY_I32A | TY_I32B | TY_I64A | TY_I64B | TY_F32A | TY_F32B | TY_F64A | TY_F64B
-  | ELLIPSIS | POW | ARROW | FATARROW | EQEQ | NOTEQ | GTE | LTE | ANDAND | OROR | SHL | SHR | IDIV
+  | ELLIPSIS | POW | INC | DEC | ARROW | FATARROW | EQEQ | NOTEQ | GTE | LTE | ANDAND | OROR | SHL | SHR | IDIV
   | RANGE_EQ | RANGE_GT | RANGE_LT | RANGE
   | PLUSEQ | MINUSEQ | MULEQ | IDIVEQ | DIVEQ | MODEQ | POWEQ | SHLEQ | SHREQ | ANDEQ | XOREQ | OREQ
   | LPAREN | RPAREN | LBRACE | RBRACE | LBRACK | RBRACK | COMMA | SEMI | COLON | DOT | EQ | PLUS | MINUS
@@ -471,7 +473,7 @@ range_expr = {
 }
 
 unary_expr = {
-      ( BANG | PLUS | MINUS | AMP | STAR | KW_AWAIT ) ~ S ~ unary_expr
+      ( BANG | PLUS | MINUS | AMP | STAR | KW_AWAIT | INC | DEC ) ~ S ~ unary_expr
     | postfix_expr
 }
 
@@ -483,6 +485,8 @@ postfix_op = {
     | LBRACK ~ S ~ expr ~ S ~ RBRACK
     | LPAREN ~ S ~ argument_list? ~ S ~ RPAREN
     | QUESTION
+    | INC
+    | DEC
 }
 
 primary_expr = {

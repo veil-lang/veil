@@ -461,6 +461,10 @@ pub enum HirUnaryOp {
     Not,
     Minus,
     Plus,
+    PreInc,
+    PostInc,
+    PreDec,
+    PostDec,
 }
 
 /// HIR binary operators

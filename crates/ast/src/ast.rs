@@ -516,6 +516,10 @@ pub enum UnOp {
     Neg,
     Plus,
     Not,
+    PreInc,
+    PostInc,
+    PreDec,
+    PostDec,
 }
 
 #[derive(Debug, Clone)]
@@ -560,6 +564,24 @@ impl fmt::Display for BinOp {
                 BinOp::LtEq => "<=",
                 BinOp::And => "&&",
                 BinOp::Or => "||",
+            }
+        )
+    }
+}
+
+impl fmt::Display for UnOp {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                UnOp::Neg => "-",
+                UnOp::Plus => "+",
+                UnOp::Not => "!",
+                UnOp::PreInc => "++",
+                UnOp::PostInc => "++",
+                UnOp::PreDec => "--",
+                UnOp::PostDec => "--",
             }
         )
     }

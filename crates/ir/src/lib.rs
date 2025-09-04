@@ -641,6 +641,10 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                     Not => InstIR::Not { value: v },
                     Minus => InstIR::Neg { value: v },
                     Plus => InstIR::Pos { value: v },
+                    PreInc => InstIR::Pos { value: v }, // TODO: Implement proper pre-increment
+                    PostInc => InstIR::Pos { value: v }, // TODO: Implement proper post-increment
+                    PreDec => InstIR::Neg { value: v }, // TODO: Implement proper pre-decrement
+                    PostDec => InstIR::Neg { value: v }, // TODO: Implement proper post-decrement
                 };
                 Some(emit(blocks, *cur_bb, next_val, inst))
             }

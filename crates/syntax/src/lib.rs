@@ -547,6 +547,12 @@ pub fn parse_ast_with_warnings(
                                 R::QUESTION => {
                                     // Optional chaining or result propagation not modeled; keep as identity
                                 }
+                                R::INC => {
+                                    expr = Expr::UnaryOp(UnOp::PostInc, Box::new(expr), info(sp));
+                                }
+                                R::DEC => {
+                                    expr = Expr::UnaryOp(UnOp::PostDec, Box::new(expr), info(sp));
+                                }
                                 _ => {}
                             }
                         }
@@ -570,6 +576,16 @@ pub fn parse_ast_with_warnings(
                     ),
                     R::MINUS => ast::Expr::UnaryOp(
                         UnOp::Neg,
+                        Box::new(parse_expr(inner.next().unwrap())),
+                        info(sp),
+                    ),
+                    R::INC => ast::Expr::UnaryOp(
+                        UnOp::PreInc,
+                        Box::new(parse_expr(inner.next().unwrap())),
+                        info(sp),
+                    ),
+                    R::DEC => ast::Expr::UnaryOp(
+                        UnOp::PreDec,
                         Box::new(parse_expr(inner.next().unwrap())),
                         info(sp),
                     ),
@@ -1027,8 +1043,47 @@ pub fn parse_ast_with_warnings(
     fn parse_block_stmts(block: Pair<'_, R>) -> Vec<ast::Stmt> {
         let mut out = Vec::new();
         for s in block.into_inner() {
-            if matches!(s.as_rule(), R::stmt) {
-                out.push(parse_stmt(s));
+            match s.as_rule() {
+                R::stmt => {
+                    out.push(parse_stmt(s));
+                }
+                R::expr_stmt => {
+                    // Parse expression statement directly
+                    let span = Span::new(s.as_span().start() as u32, s.as_span().end() as u32);
+                    for inner in s.into_inner() {
+                        if matches!(inner.as_rule(), R::expr) {
+                            let expr = parse_expr(inner);
+                            out.push(ast::Stmt::Expr(expr, span));
+                            break;
+                        }
+                    }
+                }
+                R::return_stmt => {
+                    // Parse return statement
+                    let span = Span::new(s.as_span().start() as u32, s.as_span().end() as u32);
+                    let mut expr = None;
+                    for inner in s.into_inner() {
+                        if matches!(inner.as_rule(), R::expr) {
+                            expr = Some(parse_expr(inner));
+                            break;
+                        }
+                    }
+                    // Use a default void literal expression if no expression provided
+                    let return_expr = expr.unwrap_or_else(|| {
+                        ast::Expr::Int(
+                            0,
+                            ast::ExprInfo {
+                                span,
+                                ty: ast::Type::Void,
+                                is_tail: false,
+                            },
+                        )
+                    });
+                    out.push(ast::Stmt::Return(return_expr, span));
+                }
+                _ => {
+                    // Skip non-statement rules like LBRACE, RBRACE
+                }
             }
         }
         out
@@ -1586,6 +1641,21 @@ pub fn parse_ast_with_warnings(
                 ffi_variables: Vec::new(),
                 tests: Vec::new(),
             };
+
+            // Auto-inject prelude import unless we're parsing the prelude itself
+            let file_name = files.name(file_id).to_string_lossy();
+            let is_prelude_file = file_name.ends_with("prelude.veil")
+                || file_name.contains("std/prelude")
+                || file_name.contains("std\\prelude");
+
+            if !is_prelude_file {
+                // Inject automatic import std/prelude
+                program.imports.push(ast::ImportDeclaration::ImportAll {
+                    module_path: "std/prelude".to_string(),
+                    module_type: ast::ModuleType::Standard,
+                    alias: None,
+                });
+            }
 
             if let Some(program_pair) = pairs.next() {
                 debug_assert!(matches!(program_pair.as_rule(), R::program));

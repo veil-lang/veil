@@ -969,6 +969,17 @@ impl TypeChecker {
                     Ok(operand_type.clone())
                 }
             }
+            PreInc | PostInc | PreDec | PostDec => {
+                if self.is_numeric_type(operand_type) {
+                    Ok(operand_type.clone())
+                } else {
+                    self.error(format!(
+                        "Increment/decrement operation on non-numeric type: {:?}",
+                        operand_type
+                    ));
+                    Ok(operand_type.clone())
+                }
+            }
         }
     }
 

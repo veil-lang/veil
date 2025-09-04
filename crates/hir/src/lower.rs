@@ -822,7 +822,7 @@ impl LoweringContext {
             ast::BinOp::Lt => HirBinaryOp::Lt,
             ast::BinOp::LtEq => HirBinaryOp::Le,
             ast::BinOp::Pow => HirBinaryOp::Pow,
-            ast::BinOp::Pow2 => HirBinaryOp::Pow, // Map Pow2 to Pow for now
+            ast::BinOp::Pow2 => HirBinaryOp::Pow, // Treat Pow2 same as Pow
         }
     }
 
@@ -831,6 +831,10 @@ impl LoweringContext {
             ast::UnOp::Not => HirUnaryOp::Not,
             ast::UnOp::Neg => HirUnaryOp::Minus,
             ast::UnOp::Plus => HirUnaryOp::Plus,
+            ast::UnOp::PreInc => HirUnaryOp::PreInc,
+            ast::UnOp::PostInc => HirUnaryOp::PostInc,
+            ast::UnOp::PreDec => HirUnaryOp::PreDec,
+            ast::UnOp::PostDec => HirUnaryOp::PostDec,
         }
     }
 }

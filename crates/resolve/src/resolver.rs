@@ -755,6 +755,31 @@ impl Resolver {
     fn resolve_type_annotation(&mut self, ty: &mut HirType) -> ResolveResult<()> {
         match ty {
             HirType::Unresolved(name) => {
+                // Check for primitive types first
+                let primitive_type = match name.as_str() {
+                    "i8" => Some(HirType::I8),
+                    "i16" => Some(HirType::I16),
+                    "i32" => Some(HirType::I32),
+                    "i64" => Some(HirType::I64),
+                    "u8" => Some(HirType::U8),
+                    "u16" => Some(HirType::U16),
+                    "u32" => Some(HirType::U32),
+                    "u64" => Some(HirType::U64),
+                    "f32" => Some(HirType::F32),
+                    "f64" => Some(HirType::F64),
+                    "bool" => Some(HirType::Bool),
+                    "string" => Some(HirType::String),
+                    "char" => Some(HirType::Char),
+                    "void" => Some(HirType::Void),
+                    "never" => Some(HirType::Never),
+                    _ => None,
+                };
+
+                if let Some(primitive) = primitive_type {
+                    *ty = primitive;
+                    return Ok(());
+                }
+
                 // Try to resolve the type name
                 match self.context.resolve_type(name) {
                     Ok(symbol_id) => {
@@ -763,7 +788,6 @@ impl Resolver {
                         {
                             self.context.add_error(error);
                         }
-                        // Keep as unresolved for now - full resolution happens in type checker
                     }
                     Err(error) => {
                         self.context.add_error(error);
