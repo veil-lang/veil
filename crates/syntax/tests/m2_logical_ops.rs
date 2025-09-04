@@ -1,8 +1,5 @@
 use codespan::Files;
 use pest::Parser;
-use veil_diagnostics::prelude::*;
-use veil_diagnostics::term;
-use veil_diagnostics::termcolor::{ColorChoice, StandardStream};
 use veil_syntax;
 
 #[test]

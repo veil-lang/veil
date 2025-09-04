@@ -11,4 +11,4 @@ name = "veil_codegen_c"
 path = "src/lib.rs"
 
 [dependencies]
-veil-ir = { path = "../ir", features = ["extended_ir_ops"] }
+veil-ir = { path = "../ir" }

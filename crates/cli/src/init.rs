@@ -157,68 +157,6 @@ fn main() {
 }
 
 // Re-route the include_str! used above to our inline definitions
-#[doc(hidden)]
-#[allow(non_upper_case_globals)]
-static include_str__templates_gitignore_txt: &str = "target
-build
-*.exe
-*.o
-*.obj
-*.dll
-*.so
-*.dylib
-*.pdb
-.DS_Store
-";
-#[doc(hidden)]
-#[allow(non_upper_case_globals)]
-static include_str__templates_main_veil_txt: &str = r#"// Entry point for Veil program
-// Prelude is auto-imported; you can use print and other standard tools directly.
-
-fn main() {
-    print(`Hello, Veil!`);
-}
-"#;
-
-// Replace include_str! macro usages through function wrappers
-#[inline(always)]
-fn include_str__templates_gitignore_txt_wrapper() -> &'static str {
-    include_str__templates_gitignore_txt
-}
-#[inline(always)]
-fn include_str__templates_main_veil_txt_wrapper() -> &'static str {
-    include_str__templates_main_veil_txt
-}
-
-// Shadow the original include_str! macro usage by redefining the functions they call
-#[allow(non_snake_case)]
-fn include_str__templates_gitignore_txt_alias() -> &'static str {
-    include_str__templates_gitignore_txt_wrapper()
-}
-#[allow(non_snake_case)]
-fn include_str__templates_main_veil_txt_alias() -> &'static str {
-    include_str__templates_main_veil_txt_wrapper()
-}
-
-// Finally, provide the exact names referenced above:
-#[allow(non_upper_case_globals)]
-const _: () = {
-    // Replace include_str!("./templates/gitignore.txt") and include_str!("./templates/main.veil.txt")
-    // by ensuring the functions that reference them are backed by our inline strings.
-};
-
-#[allow(unused_macros)]
-macro_rules! include_str {
-    ("./templates/gitignore.txt") => {
-        include_str__templates_gitignore_txt_alias()
-    };
-    ("./templates/main.veil.txt") => {
-        include_str__templates_main_veil_txt_alias()
-    };
-    ($other:expr) => {
-        compile_error!("Unsupported include_str! path in init.rs template")
-    };
-}
 
 mod time {
     // Minimal, local RFC3339 formatter wrapper using the `time` crate API signature

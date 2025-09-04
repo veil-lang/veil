@@ -159,13 +159,13 @@ Veil achieves deterministic, garbage-collector-free memory safety through a nove
 - **Generational References (Compile-Time Cycle Prevention)**: To defeat ARC's classic nemesis—reference cycles—the compiler performs a static analysis called Generational Referencing. It assigns a "generation" number to each scope; nested scopes receive higher numbers. The compiler then enforces a simple rule: a reference cannot be stored in an object belonging to an older (long-lived) generation if it points to an object in a younger (short-lived) generation. This makes the most common cycle patterns a compile-time error.
 
 ```veil
-// Example of a compile-time cycle rejection
-const long_lived_obj = new MyObject(); // Generation 1
+/# Example of a compile-time cycle rejection
+const long_lived_obj = new MyObject(); /# Generation 1
 
 spawn {
-    const short_lived_obj = new MyObject(); // Generation 2
-    // ERROR: Cannot assign a reference from a younger generation (2)
-    // to an object in an older generation (1).
+    const short_lived_obj = new MyObject(); /# Generation 2
+    /# ERROR: Cannot assign a reference from a younger generation (2)
+    /# to an object in an older generation (1).
     long_lived_obj.child = short_lived_obj;
 }
 ```
@@ -185,21 +185,21 @@ Veil makes asynchronous programming sane and safe by building structured concurr
 - **spawn { ... }**: Creates a concurrency "nursery" managed by the built-in runtime. This block will not exit until all concurrent tasks started within it have completed, either successfully or with an error. This simple guarantee eliminates leaked tasks (like goroutines) and makes concurrent code easy to reason about. If any task within the spawn block fails with an error, all other tasks within that same block are immediately signaled for cancellation.
 
 ```veil
-// Structured Concurrency guarantees all tasks complete or are cancelled.
+/# Structured Concurrency guarantees all tasks complete or are cancelled.
 async fn run_jobs() -> Result<ProcessedData, Error> {
     spawn {
-        const data_future = fetch_from_db(); // Task 1
-        const api_future = call_external_api(); // Task 2
+        const data_future = fetch_from_db(); /# Task 1
+        const api_future = call_external_api(); /# Task 2
 
-        // `await` retrieves the result, propagating errors with `?`
+        /# `await` retrieves the result, propagating errors with `?`
         const data = await data_future?;
         const api_data = await api_future?;
 
-        // This code only runs if both futures succeed.
+        /# This code only runs if both futures succeed.
         return Ok(process(data, api_data));
     }
-    // This point is unreachable until both futures resolve.
-    // If one fails, the other is cancelled and the error is returned.
+    /# This point is unreachable until both futures resolve.
+    /# If one fails, the other is cancelled and the error is returned.
 }
 ```
 
@@ -216,29 +216,29 @@ While structured concurrency manages what tasks run and when they finish, it doe
 ```veil
 import std::sync::Mutex;
 
-// This example is 100% safe from data races and runs on Veil's built-in async runtime.
+/# This example is 100% safe from data races and runs on Veil's built-in async runtime.
 async fn run_shared_counter() {
-    const counter = Mutex::new(0); // Wrap the shared state in a Mutex.
+    const counter = Mutex::new(0); /# Wrap the shared state in a Mutex.
 
     spawn {
-        // Spawn 1,000 tasks to increment the counter.
+        /# Spawn 1,000 tasks to increment the counter.
         for _ in 0..1000 {
             increment(&counter);
         }
     }
 
     const final_value = await counter.lock();
-    print("Final count: {final_value}"); // Guaranteed to print "1000".
+    print("Final count: {final_value}"); /# Guaranteed to print "1000".
 }
 
 async fn increment(m: &Mutex<int>) {
-    // `await` the lock. This pauses the task until it gains exclusive access.
+    /# `await` the lock. This pauses the task until it gains exclusive access.
     const guard = await m.lock();
 
-    // The guard object gives us safe, mutable access to the data.
+    /# The guard object gives us safe, mutable access to the data.
     *guard += 1;
 
-} // The `guard` goes out of scope here, and the mutex is automatically unlocked.
+} /# The `guard` goes out of scope here, and the mutex is automatically unlocked.
 ```
 
 ### 2.4 Built-in Async Runtime
@@ -250,21 +250,21 @@ Veil includes a high-performance async runtime built directly into the language,
 The Veil async runtime is designed for maximum performance and seamless integration:
 
 ```veil
-// The runtime is automatically initialized - no setup required
+/# The runtime is automatically initialized - no setup required
 async fn main() {
-    // Your async code runs immediately on the built-in runtime
+    /# Your async code runs immediately on the built-in runtime
     const result = await fetch_data();
     print("Data: {result}");
 }
 
-// Multiple concurrent tasks are efficiently scheduled
+/# Multiple concurrent tasks are efficiently scheduled
 async fn concurrent_example() {
     spawn {
         const task1 = fetch_user_data();
         const task2 = fetch_product_data();
         const task3 = fetch_analytics_data();
 
-        // All tasks run concurrently on the work-stealing scheduler
+        /# All tasks run concurrently on the work-stealing scheduler
         const (users, products, analytics) = await (task1, task2, task3);
 
         process_combined_data(users, products, analytics);
@@ -282,15 +282,15 @@ The runtime uses a sophisticated work-stealing thread pool optimized for async w
 - **Adaptive**: Dynamically adjusts to workload characteristics
 
 ```veil
-// Runtime configuration (optional - sane defaults provided)
+/# Runtime configuration (optional - sane defaults provided)
 async fn configure_runtime() {
-    // Access runtime configuration if needed
+    /# Access runtime configuration if needed
     const config = runtime::Config {
         worker_threads: 8,
         max_blocking_threads: 512,
-        thread_stack_size: 2 * 1024 * 1024, // 2MB
-        enable_io_uring: true, // Linux
-        enable_completion_ports: true, // Windows
+        thread_stack_size: 2 * 1024 * 1024, /# 2MB
+        enable_io_uring: true, /# Linux
+        enable_completion_ports: true, /# Windows
     };
 
     runtime::set_config(config);
@@ -306,7 +306,7 @@ import std::net;
 import std::fs;
 
 async fn io_examples() {
-    // Network I/O - automatically uses epoll/kqueue/io_uring
+    /# Network I/O - automatically uses epoll/kqueue/io_uring
     const listener = await net::TcpListener::bind("127.0.0.1:8080")?;
 
     spawn {
@@ -318,7 +318,7 @@ async fn io_examples() {
         }
     }
 
-    // File I/O - non-blocking and efficient
+    /# File I/O - non-blocking and efficient
     const data = await fs::read_to_string("large_file.txt")?;
     const processed = process_data(data);
     await fs::write("output.txt", processed)?;
@@ -329,7 +329,7 @@ async fn handle_connection(stream: net::TcpStream) {
 
     loop {
         match await stream.read(&buffer) {
-            Ok(0) => break, // Connection closed
+            Ok(0) => break, /# Connection closed
             Ok(n) => {
                 const response = generate_response(&buffer[..n]);
                 await stream.write_all(response.as_bytes())?;
@@ -351,10 +351,10 @@ High-precision timers are built into the runtime:
 import std::time;
 
 async fn timer_examples() {
-    // High-precision sleep
+    /# High-precision sleep
     await time::sleep(time::Duration::from_millis(100));
 
-    // Timeout for operations
+    /# Timeout for operations
     const result = await time::timeout(
         time::Duration::from_secs(5),
         slow_operation()
@@ -365,7 +365,7 @@ async fn timer_examples() {
         Err(time::TimeoutError) => print("Operation timed out"),
     }
 
-    // Periodic timers
+    /# Periodic timers
     const mut interval = time::interval(time::Duration::from_secs(1));
     spawn {
         loop {
@@ -386,7 +386,7 @@ import std::sync::channel;
 async fn channel_example() {
     const (tx, rx) = channel::unbounded::<string>();
 
-    // Producer task
+    /# Producer task
     spawn {
         for i in 0..10 {
             await tx.send(`Message {i}`);
@@ -395,22 +395,22 @@ async fn channel_example() {
         tx.close();
     };
 
-    // Consumer task
+    /# Consumer task
     spawn {
         while const msg = await rx.recv() {
             match msg {
                 Some(data) => print("Received: {data}"),
-                None => break, // Channel closed
+                None => break, /# Channel closed
             }
         }
     };
 }
 
-// Multi-producer, single-consumer
+/# Multi-producer, single-consumer
 async fn mpsc_example() {
     const (tx, rx) = channel::bounded::<WorkItem>(100);
 
-    // Multiple producers
+    /# Multiple producers
     for worker_id in 0..4 {
         const sender = tx.clone();
         spawn {
@@ -421,7 +421,7 @@ async fn mpsc_example() {
         };
     }
 
-    // Single consumer
+    /# Single consumer
     spawn {
         var completed = 0;
         while const item = await rx.recv() {
@@ -454,17 +454,17 @@ async fn runtime_monitoring() {
     print("Thread utilization: {stats.thread_utilization}%");
     print("I/O events/sec: {stats.io_events_per_sec}");
 
-    // Memory statistics
+    /# Memory statistics
     print("Async stack memory: {stats.async_stack_memory} bytes");
     print("Channel buffer memory: {stats.channel_buffer_memory} bytes");
 
-    // Performance counters
+    /# Performance counters
     print("Context switches: {stats.context_switches}");
     print("Work steals: {stats.work_steals}");
     print("I/O operations: {stats.io_operations}");
 }
 
-// Task-local storage
+/# Task-local storage
 async fn task_local_example() {
     runtime::task_local! {
         static REQUEST_ID: string = "unknown";
@@ -474,7 +474,7 @@ async fn task_local_example() {
         *id = generate_request_id();
     });
 
-    await process_request(); // Can access REQUEST_ID in any spawned task
+    await process_request(); /# Can access REQUEST_ID in any spawned task
 }
 ```
 
@@ -488,18 +488,18 @@ The runtime is designed for zero-cost abstractions where async overhead is minim
 - **Memory Pool**: Built-in memory pools for common async allocations
 
 ```veil
-// This async function has near-zero overhead
+/# This async function has near-zero overhead
 async fn lightweight_async(x: i32) -> i32 {
-    x * 2 // Compiles to a simple state machine
+    x * 2 /# Compiles to a simple state machine
 }
 
-// Complex async operations are still efficient
+/# Complex async operations are still efficient
 async fn complex_async() -> Result<Data, Error> {
     const step1 = await fetch_data()?;
     const step2 = await transform_data(step1)?;
     const step3 = await store_data(step2)?;
     Ok(step3)
-} // Compiles to optimized state machine with minimal allocations
+} /# Compiles to optimized state machine with minimal allocations
 ```
 
 The built-in runtime ensures that Veil async code achieves optimal performance without the complexity of choosing and configuring external async libraries. The tight integration with structured concurrency provides both safety and performance guarantees that external runtimes cannot match.
@@ -528,10 +528,10 @@ The `comptime` environment is sandboxed and cannot perform I/O. Execution is als
 
 ```veil
 var counter = 0;
-const a = ++counter;  // counter becomes 1, a is 1
-const b = counter++;  // b is 1, counter becomes 2
-const c = --counter;  // counter becomes 1, c is 1
-const d = counter--;  // d is 1, counter becomes 0
+const a = ++counter;  /# counter becomes 1, a is 1
+const b = counter++;  /# b is 1, counter becomes 2
+const c = --counter;  /# counter becomes 1, c is 1
+const d = counter--;  /# d is 1, counter becomes 0
 ```
 
 - **Immutability by Default**: const creates immutable bindings, which is the default for all variables. This encourages a safer, more functional style of programming. var is used for explicit mutability when state changes are necessary, making these locations easy to spot and reason about.
@@ -550,21 +550,21 @@ const d = counter--;  // d is 1, counter becomes 0
 Veil drastically reduces boilerplate by building data format handling into the standard library. The process is seamless, type-safe, and highly performant.
 
 ```veil
-// Define a struct, and it can be used for serialization.
-// The `[Serializable]` attribute automatically generates the necessary code.
+/# Define a struct, and it can be used for serialization.
+/# The `[Serializable]` attribute automatically generates the necessary code.
 [Serializable]
 struct User { name: str, id: int }
 
-// One-line, type-safe parsing. The `?` operator propagates any
-// parsing errors (e.g., missing field, wrong type).
+/# One-line, type-safe parsing. The `?` operator propagates any
+/# parsing errors (e.g., missing field, wrong type).
 fn parse_user(raw_json_string: str) -> Result<User, json::Error> {
     const user = json::parse<User>(raw_json_string)?;
     return Ok(user);
 }
 
-// One-line serialization.
+/# One-line serialization.
 const user = User { name: "Alice", id: 42 };
-const json_string = json::stringify(user); // -> `{"name": "Alice", "id": 42}`
+const json_string = json::stringify(user); /# -> `{"name": "Alice", "id": 42}`
 ```
 
 ### 3.4 Ergonomic Control Flow
@@ -580,25 +580,25 @@ Veil provides a comprehensive error handling system built around the Result<T, E
 #### 3.5.1 Result Type and Basic Error Handling
 
 ```veil
-// Result type is built into the language
+/# Result type is built into the language
 enum Result<T, E> {
     Ok(T),
     Err(E),
 }
 
-// The ? operator for error propagation
+/# The ? operator for error propagation
 fn parse_number(s: str) -> Result<i32, ParseError> {
     const trimmed = s.trim();
     if trimmed.is_empty() {
         return Err(ParseError::Empty);
     }
 
-    // ? automatically converts and propagates errors
+    /# ? automatically converts and propagates errors
     const num = trimmed.parse::<i32>()?;
     Ok(num)
 }
 
-// Custom error types
+/# Custom error types
 enum ParseError {
     Empty,
     InvalidFormat(str),
@@ -615,23 +615,23 @@ impl Error for ParseError {
     }
 }
 
-// Error trait for common functionality
+/# Error trait for common functionality
 trait Error: Display + Debug + Send + Sync {
     fn message(&self) -> str;
     fn source(&self) -> Option<&dyn Error> { None }
     fn backtrace(&self) -> Option<&Backtrace> { None }
 }
 
-// Result methods for error handling
+/# Result methods for error handling
 impl<T, E> Result<T, E> {
     fn is_ok(&self) -> bool;
     fn is_err(&self) -> bool;
     fn ok(self) -> Option<T>;
     fn err(self) -> Option<E>;
-    fn unwrap(self) -> T where E: Debug;  // Panics on Err
+    fn unwrap(self) -> T where E: Debug;  /# Panics on Err
     fn unwrap_or(self, default: T) -> T;
     fn unwrap_or_else<F>(self, f: F) -> T where F: FnOnce(E) -> T;
-    fn expect(self, msg: &str) -> T where E: Debug;  // Panics with custom message
+    fn expect(self, msg: &str) -> T where E: Debug;  /# Panics with custom message
     fn map<U, F>(self, f: F) -> Result<U, E> where F: FnOnce(T) -> U;
     fn map_err<F, O>(self, f: F) -> Result<T, O> where F: FnOnce(E) -> O;
     fn and_then<U, F>(self, f: F) -> Result<U, E> where F: FnOnce(T) -> Result<U, E>;
@@ -641,7 +641,7 @@ impl<T, E> Result<T, E> {
 #### 3.5.2 Error Chaining and Context
 
 ```veil
-// Error chaining for providing context
+/# Error chaining for providing context
 trait Context<T, E> {
     fn context(self, msg: &str) -> Result<T, ContextError<E>>;
     fn with_context<F>(self, f: F) -> Result<T, ContextError<E>>
@@ -665,7 +665,7 @@ where
     }
 }
 
-// Usage examples
+/# Usage examples
 fn read_config_file() -> Result<Config, ConfigError> {
     const content = std::fs::read_to_string("config.toml")
         .context("Failed to read configuration file")?;
@@ -676,7 +676,7 @@ fn read_config_file() -> Result<Config, ConfigError> {
     Ok(config)
 }
 
-// Error with context and source chain
+/# Error with context and source chain
 struct ContextError<E> {
     message: string,
     source: E,
@@ -696,7 +696,7 @@ impl<E: Error> Error for ContextError<E> {
 #### 3.5.3 Application-Level Error Types
 
 ```veil
-// Application error enum combining multiple error types
+/# Application error enum combining multiple error types
 enum AppError {
     Io(io::Error),
     Parse(ParseError),
@@ -730,7 +730,7 @@ impl Error for AppError {
     }
 }
 
-// Automatic conversion from specific errors
+/# Automatic conversion from specific errors
 impl From<io::Error> for AppError {
     fn from(err: io::Error) -> Self {
         AppError::Io(err)
@@ -743,14 +743,14 @@ impl From<ParseError> for AppError {
     }
 }
 
-// Application result type alias
+/# Application result type alias
 type AppResult<T> = Result<T, AppError>;
 ```
 
 #### 3.5.4 Error Handling Patterns
 
 ```veil
-// Pattern 1: Early return with ?
+/# Pattern 1: Early return with ?
 fn process_data(input: &str) -> AppResult<ProcessedData> {
     const parsed = parse_input(input)?;
     const validated = validate_data(&parsed)?;
@@ -759,7 +759,7 @@ fn process_data(input: &str) -> AppResult<ProcessedData> {
     Ok(stored)
 }
 
-// Pattern 2: Collecting multiple errors
+/# Pattern 2: Collecting multiple errors
 fn validate_user(user: &User) -> Result<(), [ValidationError]> {
     var errors = [];
 
@@ -782,23 +782,23 @@ fn validate_user(user: &User) -> Result<(), [ValidationError]> {
     }
 }
 
-// Pattern 3: Error recovery and fallbacks
+/# Pattern 3: Error recovery and fallbacks
 fn fetch_with_fallback(primary_url: &str, fallback_url: &str) -> AppResult<Data> {
     match fetch_data(primary_url) {
         Ok(data) => Ok(data),
         Err(NetworkError::Timeout) => {
-            // Retry with fallback for timeout errors
+            /# Retry with fallback for timeout errors
             fetch_data(fallback_url)
         },
         Err(NetworkError::NotFound) => {
-            // Return default data for 404 errors
+            /# Return default data for 404 errors
             Ok(Data::default())
         },
-        Err(err) => Err(err.into()), // Propagate other errors
+        Err(err) => Err(err.into()), /# Propagate other errors
     }
 }
 
-// Pattern 4: Async error handling
+/# Pattern 4: Async error handling
 async fn async_operation() -> AppResult<ProcessedData> {
     const data = fetch_remote_data().await?;
     const processed = async_process(data).await?;
@@ -806,7 +806,7 @@ async fn async_operation() -> AppResult<ProcessedData> {
     Ok(stored)
 }
 
-// Pattern 5: Error handling in loops
+/# Pattern 5: Error handling in loops
 fn process_batch(items: &[Item]) -> Result<[ProcessedItem], BatchError> {
     var results = [];
     var errors = [];
@@ -831,20 +831,20 @@ fn process_batch(items: &[Item]) -> Result<[ProcessedItem], BatchError> {
 **Panics are for unrecoverable errors and programming bugs:**
 
 ```veil
-// Panic functions
-fn panic(msg: &str) -> !;  // Never returns
+/# Panic functions
+fn panic(msg: &str) -> !;  /# Never returns
 fn assert(condition: bool, msg: &str);
-fn debug_assert(condition: bool, msg: &str);  // Only in debug builds
+fn debug_assert(condition: bool, msg: &str);  /# Only in debug builds
 fn unreachable() -> !;
 
-// Panic with formatting
+/# Panic with formatting
 macro panic! {
-    // panic!("Invalid state: {}", state);
+    /# panic!("Invalid state: {}", state);
 }
 
-// Panic hooks for custom handling
+/# Panic hooks for custom handling
 fn set_panic_hook(hook: Box<dyn Fn(&PanicInfo) + Send + Sync>) {
-    // Custom panic behavior - logging, cleanup, etc.
+    /# Custom panic behavior - logging, cleanup, etc.
 }
 
 struct PanicInfo {
@@ -853,30 +853,30 @@ struct PanicInfo {
     backtrace: Backtrace,
 }
 
-// Catching panics (use sparingly)
+/# Catching panics (use sparingly)
 fn catch_unwind<F, R>(f: F) -> Result<R, Box<dyn Any + Send>>
 where
     F: FnOnce() -> R + UnwindSafe,
 {
-    // Implementation catches panics and returns them as errors
+    /# Implementation catches panics and returns them as errors
 }
 
-// Result unwrapping methods (panic on Err)
-const value = result.unwrap();  // Panics if Err with generic message
-const value = result.expect("Expected valid configuration");  // Custom panic message
-const value = result.unwrap_or_default();  // Use default value if Err
-const value = result.unwrap_or_else(|| compute_fallback());  // Compute fallback if Err
+/# Result unwrapping methods (panic on Err)
+const value = result.unwrap();  /# Panics if Err with generic message
+const value = result.expect("Expected valid configuration");  /# Custom panic message
+const value = result.unwrap_or_default();  /# Use default value if Err
+const value = result.unwrap_or_else(|| compute_fallback());  /# Compute fallback if Err
 
-// When to use panic vs Result:
-// - Use Result for expected error conditions
-// - Use panic for programming errors and invariant violations
-// - Use assert for debugging and contract validation
+/# When to use panic vs Result:
+/# - Use Result for expected error conditions
+/# - Use panic for programming errors and invariant violations
+/# - Use assert for debugging and contract validation
 ```
 
 #### 3.5.6 Error Handling Best Practices
 
-```veil
-// 1. Use specific error types
+`````veil
+/# 1. Use specific error types
 enum DatabaseError {
     ConnectionFailed(str),
     QueryTimeout,
@@ -884,7 +884,7 @@ enum DatabaseError {
     SerializationFailure,
 }
 
-// 2. Provide helpful error messages
+/# 2. Provide helpful error messages
 impl Error for DatabaseError {
     fn message(&self) -> str {
         match self {
@@ -900,7 +900,7 @@ impl Error for DatabaseError {
     }
 }
 
-// 3. Use Result type aliases for common patterns
+/# 3. Use Result type aliases for common patterns
 type DatabaseResult<T> = Result<T, DatabaseError>;
 ````Backtrace:\n{}", backtrace);
     }
@@ -922,7 +922,7 @@ d by ({}): {}", depth, source.message());
     Ok(processed)
 }
 
-// 6. Error logging and monitoring
+/# 6. Error logging and monitoring
 fn log_error<E: Error>(error: &E, operation: &str) {
     error!("Operation 'validated)
         .with_context(|| format!("Processing failed for
@@ -938,7 +938,7 @@ fn complexFailed(err.to_string()),
     }
 }
 
-// 5. Use context for error tr
+/# 5. Use context for error tr
             _ => DatabaseError::Connectionrap_or("unknown").to_string(),
                 }
             },rap_or("unknown").to_string(),
@@ -950,7 +950,7 @@ fn complexFailed(err.to_string()),
         match err {
             sqlx::Errortype ApiResult<T> = Result<T, ApiError>;
 
-// 4. Implement error conversions judiciously
+/# 4. Implement error conversions judiciously
 impl
 
 ### 3.6 Trait System
@@ -958,54 +958,54 @@ impl
 Traits define shared behavior and enable powerful generic programming patterns.
 
 ````veil
-// Basic trait definition
+/# Basic trait definition
 trait Display {
     fn fmt(self) -> string;
 
-    // Default implementation
+    /# Default implementation
     fn show(self) {
         print(self.fmt());
     }
 }
 
-// Trait implementation
+/# Trait implementation
 impl Display for User {
     fn fmt(self) -> string {
         return `User(name: {self.name}, id: {self.id})`;
     }
 }
 
-// Generic constraints
+/# Generic constraints
 fn print_item<T>(item: T) where T: Display {
     item.show();
 }
 
-// Multiple trait bounds
+/# Multiple trait bounds
 fn serialize<T>(item: T) -> string
 where T: Display & Serializable {
-    // Can use both Display and Serializable methods
+    /# Can use both Display and Serializable methods
     return item.fmt() + "|" + item.to_json();
 }
 
-// Associated types
+/# Associated types
 trait Iterator {
     type Item;
 
     fn next(self) -> Option<Self::Item>;
 
     fn collect<C>(self) -> C where C: FromIterator<Self::Item> {
-        // Default implementation using other methods
+        /# Default implementation using other methods
     }
 }
 
-// Trait objects for dynamic dispatch
+/# Trait objects for dynamic dispatch
 fn process_displays(items: [&Display]) {
     for item in items {
-        item.show();  // Dynamic dispatch
+        item.show();  /# Dynamic dispatch
     }
 }
 
-// Operator overloading through traits
+/# Operator overloading through traits
 trait Add<Rhs = Self> {
     type Output;
     fn add(self, rhs: Rhs) -> Self::Output;
@@ -1017,7 +1017,7 @@ impl Add for Point {
         Point { x: self.x + other.x, y: self.y + other.y }
     }
 }
-```
+`````
 
 ### 3.7 Module System & Visibility
 
@@ -1026,15 +1026,15 @@ Veil provides a hierarchical module system with fine-grained visibility control 
 #### 3.7.1 Module Declaration and Structure
 
 ```veil
-// File-based modules: each .veil file is a module
-// Directory-based modules: directories with mod.veil files
+/# File-based modules: each .veil file is a module
+/# Directory-based modules: directories with mod.veil files
 
-// lib.veil (crate root)
-pub mod network;     // References network.veil or network/mod.veil
-pub mod database;    // References database.veil or database/mod.veil
-pub mod utils;       // References utils.veil or utils/mod.veil
+/# lib.veil (crate root)
+pub mod network;     /# References network.veil or network/mod.veil
+pub mod database;    /# References database.veil or database/mod.veil
+pub mod utils;       /# References utils.veil or utils/mod.veil
 
-// Inline module declaration
+/# Inline module declaration
 mod internal {
     pub fn helper() { }
 
@@ -1043,9 +1043,9 @@ mod internal {
     }
 }
 
-// Module paths follow filesystem structure
-// network/tcp.veil becomes network::tcp
-// network/protocols/http.veil becomes network::protocols::http
+/# Module paths follow filesystem structure
+/# network/tcp.veil becomes network::tcp
+/# network/protocols/http.veil becomes network::protocols::http
 ```
 
 #### 3.7.2 Visibility Modifiers
@@ -1053,22 +1053,22 @@ mod internal {
 Veil's visibility system provides precise control over API boundaries:
 
 ```veil
-// Public visibility - accessible from anywhere
+/# Public visibility - accessible from anywhere
 pub struct PublicStruct {
-    pub field: i32,           // Public field
-    pub(crate) internal: i32, // Visible within current crate
-    pub(super) parent: i32,   // Visible to parent module only
-    pub(in network) scoped: i32, // Visible within 'network' module tree
-    private_field: i32,       // Private (default) - module-local only
+    pub field: i32,           /# Public field
+    pub(crate) internal: i32, /# Visible within current crate
+    pub(super) parent: i32,   /# Visible to parent module only
+    pub(in network) scoped: i32, /# Visible within 'network' module tree
+    private_field: i32,       /# Private (default) - module-local only
 }
 
-pub fn public_function() { }          // Public API
-pub(crate) fn crate_function() { }    // Internal to crate
-pub(super) fn parent_function() { }   // Parent module only
-pub(in network) fn network_function() { } // Scoped visibility
-fn private_function() { }             // Module-local
+pub fn public_function() { }          /# Public API
+pub(crate) fn crate_function() { }    /# Internal to crate
+pub(super) fn parent_function() { }   /# Parent module only
+pub(in network) fn network_function() { } /# Scoped visibility
+fn private_function() { }             /# Module-local
 
-// Visibility applies to all items
+/# Visibility applies to all items
 pub enum Status { Active, Inactive }
 pub trait Processor { fn process(&self); }
 pub type Result = std::result::Result<(), Error>;
@@ -1077,23 +1077,23 @@ pub type Result = std::result::Result<(), Error>;
 #### 3.7.3 Import System
 
 ```veil
-// Basic imports
+/# Basic imports
 use std::collections::HashMap;
 use network::tcp::Connection;
 
-// Import with aliasing
+/# Import with aliasing
 use std::collections::HashMap as Map;
 use very::long::module::name as short;
 use network::tcp::{Connection as TcpConn, Error as TcpError};
 
-// Multiple imports from same module
+/# Multiple imports from same module
 use std::collections::{HashMap, HashSet, BTreeMap};
 
-// Glob imports (use sparingly in production code)
+/# Glob imports (use sparingly in production code)
 use std::prelude::*;
-use math::constants::*; // Import all constants
+use math::constants::*; /# Import all constants
 
-// Nested imports for clean organization
+/# Nested imports for clean organization
 use network::{
     tcp::{Connection, Listener},
     udp::{Socket, Packet},
@@ -1104,51 +1104,51 @@ use network::{
 #### 3.7.4 Re-exports and Public APIs
 
 ```veil
-// Re-exports create clean public APIs
-pub use internal::tcp::Connection;      // Re-export as public
-pub use internal::errors::NetworkError; // Expose internal error type
+/# Re-exports create clean public APIs
+pub use internal::tcp::Connection;      /# Re-export as public
+pub use internal::errors::NetworkError; /# Expose internal error type
 
-// Selective re-exports
+/# Selective re-exports
 pub use database::{
-    Connection as DbConnection,  // Rename to avoid conflicts
-    Transaction,                 // Keep original name
-    // Note: Other database items remain private
+    Connection as DbConnection,  /# Rename to avoid conflicts
+    Transaction,                 /# Keep original name
+    /# Note: Other database items remain private
 };
 
-// Module-level re-exports in mod.veil
-// network/mod.veil
+/# Module-level re-exports in mod.veil
+/# network/mod.veil
 pub mod tcp;
 pub mod udp;
-pub use tcp::{Connection, Listener};  // Convenience re-exports
+pub use tcp::{Connection, Listener};  /# Convenience re-exports
 pub use udp::Socket;
 
-// This allows users to write either:
-// use mylib::network::tcp::Connection;  // Direct path
-// use mylib::network::Connection;       // Via re-export
+/# This allows users to write either:
+/# use mylib::network::tcp::Connection;  /# Direct path
+/# use mylib::network::Connection;       /# Via re-export
 ```
 
 #### 3.7.5 Conditional Compilation and Feature Gates
 
 ```veil
-// Feature-gated imports
+/# Feature-gated imports
 #[cfg(feature = "networking")]
 use std::net;
 
 #[cfg(feature = "async")]
 use std::sync::channel;
 
-// Platform-specific modules
+/# Platform-specific modules
 #[cfg(target_os = "linux")]
 mod linux_specific;
 
 #[cfg(target_os = "windows")]
 mod windows_specific;
 
-// Conditional re-exports
+/# Conditional re-exports
 #[cfg(feature = "serde")]
 pub use serde_integration::*;
 
-// Complex conditions
+/# Complex conditions
 #[cfg(all(feature = "networking", not(target_arch = "wasm32")))]
 mod native_networking;
 ```
@@ -1156,36 +1156,36 @@ mod native_networking;
 #### 3.7.6 Module Organization Best Practices
 
 ```veil
-// Recommended crate structure:
-// src/
-//   lib.veil           // Crate root
-//   error.veil         // Error types
-//   prelude.veil       // Common imports
-//   config/
-//     mod.veil         // Configuration module root
-//     parser.veil      // Config parsing
-//     validation.veil  // Config validation
-//   network/
-//     mod.veil         // Network module root
-//     tcp.veil         // TCP implementation
-//     udp.veil         // UDP implementation
-//     protocols/
-//       mod.veil       // Protocols submodule
-//       http.veil      // HTTP implementation
-//       websocket.veil // WebSocket implementation
+/# Recommended crate structure:
+/# src/
+/#   lib.veil           /# Crate root
+/#   error.veil         /# Error types
+/#   prelude.veil       /# Common imports
+/#   config/
+/#     mod.veil         /# Configuration module root
+/#     parser.veil      /# Config parsing
+/#     validation.veil  /# Config validation
+/#   network/
+/#     mod.veil         /# Network module root
+/#     tcp.veil         /# TCP implementation
+/#     udp.veil         /# UDP implementation
+/#     protocols/
+/#       mod.veil       /# Protocols submodule
+/#       http.veil      /# HTTP implementation
+/#       websocket.veil /# WebSocket implementation
 
-// lib.veil - clean public API
+/# lib.veil - clean public API
 pub mod config;
 pub mod network;
 pub mod error;
 pub mod prelude;
 
-// Re-export commonly used types
+/# Re-export commonly used types
 pub use error::{Error, Result};
 pub use config::Config;
 
-// Prelude module for convenient imports
-// prelude.veil
+/# Prelude module for convenient imports
+/# prelude.veil
 pub use crate::{Error, Result, Config};
 pub use crate::network::{Connection, Listener};
 ```
@@ -1193,32 +1193,34 @@ pub use crate::network::{Connection, Listener};
 #### 3.7.7 Module Resolution Rules
 
 1. **Absolute paths**: Start from crate root
+
    ```veil
-   use crate::network::tcp::Connection;  // From crate root
+   use crate::network::tcp::Connection;  /# From crate root
    ```
 
 2. **Relative paths**: Relative to current module
+
    ```veil
-   use super::utils;        // Parent module's utils
-   use self::internal;      // Current module's internal submodule
+   use super::utils;        /# Parent module's utils
+   use self::internal;      /# Current module's internal submodule
    ```
 
 3. **External crates**: Reference dependencies
    ```veil
-   use tokio::net::TcpStream;     // External crate
-   use serde::{Serialize, Deserialize}; // External with multiple items
+   use tokio::net::TcpStream;     /# External crate
+   use serde::{Serialize, Deserialize}; /# External with multiple items
    ```
 
 #### 3.7.8 Advanced Module Patterns
 
 ```veil
-// Module facade pattern
+/# Module facade pattern
 pub mod api {
-    // Clean, stable public API
+    /# Clean, stable public API
     pub use crate::internal::core::{Process, Result};
     pub use crate::internal::utils::Helper;
 
-    // Hide implementation details
+    /# Hide implementation details
     use crate::internal::complex_impl;
 
     pub fn high_level_operation() -> Result<()> {
@@ -1226,13 +1228,13 @@ pub mod api {
     }
 }
 
-// Plugin architecture with modules
+/# Plugin architecture with modules
 pub trait Plugin {
     fn name(&self) -> &str;
     fn execute(&self) -> Result<(), PluginError>;
 }
 
-// Plugins as modules
+/# Plugins as modules
 mod plugins {
     pub mod auth;
     pub mod logging;
@@ -1241,7 +1243,7 @@ mod plugins {
     pub use self::{auth::AuthPlugin, logging::LogPlugin, metrics::MetricsPlugin};
 }
 
-// Type aliasing across modules
+/# Type aliasing across modules
 pub mod types {
     use std::collections::HashMap;
 
@@ -1256,34 +1258,34 @@ pub mod types {
 Veil supports closures with explicit capture semantics and async closures.
 
 ```veil
-// Closure syntax
+/# Closure syntax
 const add = |a: i32, b: i32| -> i32 { a + b };
-const simple = |x| x * 2;  // Type inference
+const simple = |x| x * 2;  /# Type inference
 
-// Capture modes
+/# Capture modes
 fn closure_examples() {
     var counter = 0;
     const data = [1, 2, 3];
 
-    // Move capture
+    /# Move capture
     const moved = move |x| {
-        // Takes ownership of captured variables
-        data.len() + x  // data is moved into closure
+        /# Takes ownership of captured variables
+        data.len() + x  /# data is moved into closure
     };
 
-    // Reference capture (default)
+    /# Reference capture (default)
     const borrowed = |x| {
-        counter += 1;  // Borrows counter mutably
+        counter += 1;  /# Borrows counter mutably
         x + counter
     };
 
-    // Explicit capture list
+    /# Explicit capture list
     const explicit = [counter, &data] |x| {
         counter + data.len() + x
     };
 }
 
-// Async closures - run on Veil's built-in async runtime
+/# Async closures - run on Veil's built-in async runtime
 const async_processor = async |data: Vec<Data>| -> Result<Processed, Error> {
     const results = [];
     for item in data {
@@ -1293,7 +1295,7 @@ const async_processor = async |data: Vec<Data>| -> Result<Processed, Error> {
     Ok(results)
 };
 
-// Higher-order functions
+/# Higher-order functions
 fn map<T, U>(slice: [T], f: fn(T) -> U) -> [U] {
     const result = [];
     for item in slice {
@@ -1302,9 +1304,9 @@ fn map<T, U>(slice: [T], f: fn(T) -> U) -> [U] {
     result
 }
 
-// Function pointers vs closures
-type FnPtr = fn(i32) -> i32;        // Function pointer
-type Closure = |i32| -> i32;        // Closure type
+/# Function pointers vs closures
+type FnPtr = fn(i32) -> i32;        /# Function pointer
+type Closure = |i32| -> i32;        /# Closure type
 ```
 
 ### 3.9 Unsafe Operations
@@ -1314,26 +1316,26 @@ Unsafe blocks allow low-level operations while maintaining safety boundaries. Ve
 #### 3.9.1 Unsafe Block Fundamentals
 
 ```veil
-// Unsafe blocks contain operations that bypass safety checks
+/# Unsafe blocks contain operations that bypass safety checks
 fn basic_unsafe_example() {
     unsafe {
         const ptr = malloc(1024);
-        *ptr = 42;  // Raw pointer dereference
+        *ptr = 42;  /# Raw pointer dereference
         free(ptr);
     }
-    // Safety is restored outside the unsafe block
+    /# Safety is restored outside the unsafe block
 }
 
-// Unsafe functions must be called within unsafe blocks
+/# Unsafe functions must be called within unsafe blocks
 unsafe fn raw_memory_copy(src: rawptr, dst: rawptr, len: usize) {
-    // Platform-specific memory copy implementation
-    // Caller must ensure memory regions are valid and non-overlapping
+    /# Platform-specific memory copy implementation
+    /# Caller must ensure memory regions are valid and non-overlapping
 }
 
 fn safe_wrapper(data: [u8]) {
     const dest = allocate_buffer(data.len());
     unsafe {
-        // Safety: both pointers are valid, regions don't overlap
+        /# Safety: both pointers are valid, regions don't overlap
         raw_memory_copy(data.as_ptr(), dest.as_mut_ptr(), data.len());
     }
 }
@@ -1342,34 +1344,34 @@ fn safe_wrapper(data: [u8]) {
 #### 3.9.2 Raw Pointer Operations
 
 ```veil
-// Raw pointer types
+/# Raw pointer types
 fn pointer_operations() {
     const x = 42;
-    const ptr: *const i32 = &x;     // Immutable raw pointer
+    const ptr: *const i32 = &x;     /# Immutable raw pointer
     var y = 100;
-    const mut_ptr: *mut i32 = &mut y; // Mutable raw pointer
+    const mut_ptr: *mut i32 = &mut y; /# Mutable raw pointer
 
     unsafe {
-        // Dereferencing requires unsafe
+        /# Dereferencing requires unsafe
         const value = *ptr;
         *mut_ptr = 200;
 
-        // Pointer arithmetic
+        /# Pointer arithmetic
         const next_ptr = ptr.offset(1);
         const byte_ptr = ptr as *const u8;
 
-        // Null pointer checks (recommended)
+        /# Null pointer checks (recommended)
         if !ptr.is_null() {
             const safe_value = *ptr;
         }
     }
 }
 
-// Raw pointer creation from addresses
+/# Raw pointer creation from addresses
 fn from_address() {
     unsafe {
-        const ptr = 0x1000 as *mut u8;  // Dangerous - arbitrary address
-        // Only use if you know the address is valid
+        const ptr = 0x1000 as *mut u8;  /# Dangerous - arbitrary address
+        /# Only use if you know the address is valid
     }
 }
 ```
@@ -1377,7 +1379,7 @@ fn from_address() {
 #### 3.9.3 Union Types
 
 ```veil
-// Unions share memory between fields - accessing is unsafe
+/# Unions share memory between fields - accessing is unsafe
 union Value {
     int: i32,
     float: f32,
@@ -1388,22 +1390,22 @@ fn union_example() {
     var val = Value { int: 0x42424242 };
 
     unsafe {
-        // Reading any field requires unsafe
+        /# Reading any field requires unsafe
         const as_int = val.int;
-        const as_float = val.float;       // Reinterpret bits as float
-        const first_byte = val.bytes[0];  // Access byte representation
+        const as_float = val.float;       /# Reinterpret bits as float
+        const first_byte = val.bytes[0];  /# Access byte representation
     }
 
-    // Writing to union fields is safe
+    /# Writing to union fields is safe
     val.float = 3.14;
 
     unsafe {
-        // But reading is still unsafe
+        /# But reading is still unsafe
         const reinterpreted = val.int;
     }
 }
 
-// Tagged unions for safer alternatives
+/# Tagged unions for safer alternatives
 enum SafeValue {
     Int(i32),
     Float(f32),
@@ -1414,7 +1416,7 @@ enum SafeValue {
 #### 3.9.4 Foreign Function Interface (FFI)
 
 ```veil
-// External function declarations
+/# External function declarations
 extern "C" {
     fn malloc(size: usize) -> rawptr;
     fn free(ptr: rawptr);
@@ -1422,19 +1424,19 @@ extern "C" {
     fn memcpy(dest: rawptr, src: rawptr, n: usize) -> rawptr;
 }
 
-// Calling external functions requires unsafe
+/# Calling external functions requires unsafe
 fn ffi_example() {
     unsafe {
         const ptr = malloc(1024);
         if !ptr.is_null() {
-            // Use the allocated memory
+            /# Use the allocated memory
             *(ptr as *mut i32) = 42;
             free(ptr);
         }
     }
 }
 
-// Safe wrappers for FFI functions
+/# Safe wrappers for FFI functions
 fn safe_malloc(size: usize) -> Option<rawptr> {
     unsafe {
         const ptr = malloc(size);
@@ -1446,7 +1448,7 @@ fn safe_malloc(size: usize) -> Option<rawptr> {
     }
 }
 
-// C string handling
+/# C string handling
 fn c_string_length(c_str: *const u8) -> usize {
     unsafe {
         strlen(c_str)
@@ -1457,13 +1459,13 @@ fn c_string_length(c_str: *const u8) -> usize {
 #### 3.9.5 Unsafe Traits and Implementations
 
 ```veil
-// Marking traits as unsafe
+/# Marking traits as unsafe
 unsafe trait RawData {
     fn as_raw_ptr(&self) -> *const u8;
     fn raw_len(&self) -> usize;
 }
 
-// Implementing unsafe traits requires unsafe
+/# Implementing unsafe traits requires unsafe
 unsafe impl RawData for [u8] {
     fn as_raw_ptr(&self) -> *const u8 {
         self.as_ptr()
@@ -1474,12 +1476,12 @@ unsafe impl RawData for [u8] {
     }
 }
 
-// Using unsafe trait methods
+/# Using unsafe trait methods
 fn process_raw_data<T: RawData>(data: &T) {
     unsafe {
         const ptr = data.as_raw_ptr();
         const len = data.raw_len();
-        // Process raw memory
+        /# Process raw memory
     }
 }
 ```
@@ -1487,18 +1489,18 @@ fn process_raw_data<T: RawData>(data: &T) {
 #### 3.9.6 Memory Layout and Transmutation
 
 ```veil
-// Transmuting between types of same size
+/# Transmuting between types of same size
 fn transmute_example() {
     const x: f32 = 3.14;
 
     unsafe {
-        // Reinterpret bits as different type
+        /# Reinterpret bits as different type
         const bits: u32 = std::mem::transmute(x);
         const back: f32 = std::mem::transmute(bits);
     }
 }
 
-// Controlling memory layout
+/# Controlling memory layout
 #[repr(C)]
 struct CCompatible {
     a: u32,
@@ -1509,20 +1511,20 @@ struct CCompatible {
 #[repr(packed)]
 struct PackedStruct {
     a: u32,
-    b: u8,    // No padding
-    c: u16,   // May be misaligned
+    b: u8,    /# No padding
+    c: u16,   /# May be misaligned
 }
 
-// Accessing packed struct fields requires unsafe
+/# Accessing packed struct fields requires unsafe
 fn packed_access(packed: &PackedStruct) {
-    const a = packed.a;  // Safe - naturally aligned
+    const a = packed.a;  /# Safe - naturally aligned
 
     unsafe {
-        // Potentially misaligned access
+        /# Potentially misaligned access
         const c = packed.c;
     }
 
-    // Safe alternative - copy to aligned location
+    /# Safe alternative - copy to aligned location
     const c_safe = { packed.c };
 }
 ```
@@ -1530,29 +1532,29 @@ fn packed_access(packed: &PackedStruct) {
 #### 3.9.7 Unsafe Guidelines and Best Practices
 
 ```veil
-// 1. Minimize unsafe code scope
+/# 1. Minimize unsafe code scope
 fn good_practice() {
-    // Safe code...
+    /# Safe code...
 
     const result = unsafe {
-        // Minimal unsafe block
+        /# Minimal unsafe block
         dangerous_operation()
     };
 
-    // More safe code...
+    /# More safe code...
 }
 
-// 2. Document safety requirements
-/// # Safety
-///
-/// `ptr` must point to valid memory of at least `len` bytes.
-/// The memory must be properly aligned for type `T`.
-/// The caller must ensure no other code accesses this memory concurrently.
+/# 2. Document safety requirements
+/#/ # Safety
+/#/
+/#/ `ptr` must point to valid memory of at least `len` bytes.
+/#/ The memory must be properly aligned for type `T`.
+/#/ The caller must ensure no other code accesses this memory concurrently.
 unsafe fn read_raw<T>(ptr: *const T, len: usize) -> [T] {
-    // Implementation...
+    /# Implementation...
 }
 
-// 3. Provide safe wrappers
+/# 3. Provide safe wrappers
 struct SafeBuffer {
     data: rawptr,
     len: usize,
@@ -1592,14 +1594,14 @@ impl Drop for SafeBuffer {
     }
 }
 
-// 4. Use assertions to document assumptions
+/# 4. Use assertions to document assumptions
 fn careful_unsafe_operation(slice: &[u8]) {
     assert!(!slice.is_empty(), "Slice must not be empty");
     assert!(slice.len() <= 1024, "Slice too large");
 
     unsafe {
-        // Now we can safely perform the operation
-        // based on our documented assumptions
+        /# Now we can safely perform the operation
+        /# based on our documented assumptions
         dangerous_slice_operation(slice.as_ptr(), slice.len());
     }
 }
@@ -1608,13 +1610,13 @@ fn careful_unsafe_operation(slice: &[u8]) {
 #### 3.9.8 Common Unsafe Patterns
 
 ```veil
-// Pattern: Safe initialization of uninitialized memory
+/# Pattern: Safe initialization of uninitialized memory
 fn init_array<T: Default>(count: usize) -> [T] {
     var result = [];
     result.reserve(count);
 
     unsafe {
-        // Initialize uninitialized memory
+        /# Initialize uninitialized memory
         for i in 0..count {
             const ptr = result.as_mut_ptr().offset(i as isize);
             ptr.write(T::default());
@@ -1625,7 +1627,7 @@ fn init_array<T: Default>(count: usize) -> [T] {
     result
 }
 
-// Pattern: Implementing custom collections
+/# Pattern: Implementing custom collections
 struct RingBuffer<T> {
     data: rawptr,
     capacity: usize,
@@ -1637,7 +1639,7 @@ impl<T> RingBuffer<T> {
     fn push(&mut self, value: T) -> Result<(), T> {
         const next_tail = (self.tail + 1) % self.capacity;
         if next_tail == self.head {
-            return Err(value); // Buffer full
+            return Err(value); /# Buffer full
         }
 
         unsafe {
@@ -1651,7 +1653,7 @@ impl<T> RingBuffer<T> {
 
     fn pop(&mut self) -> Option<T> {
         if self.head == self.tail {
-            return None; // Buffer empty
+            return None; /# Buffer empty
         }
 
         unsafe {
@@ -1664,21 +1666,22 @@ impl<T> RingBuffer<T> {
 }
 ```
 
-// Transmutation between types
+/# Transmutation between types
 fn transmute_example() {
-    const value: i32 = 42;
-    unsafe {
-        const float_bits: f32 = transmute(value);
-    }
+const value: i32 = 42;
+unsafe {
+const float_bits: f32 = transmute(value);
+}
 }
 
-// Raw pointer arithmetic
+/# Raw pointer arithmetic
 fn pointer_arithmetic(ptr: *i32, offset: isize) -> *i32 {
-    unsafe {
-        ptr.offset(offset)
-    }
+unsafe {
+ptr.offset(offset)
 }
-```
+}
+
+````
 
 ### 3.10 Advanced Type Features
 
@@ -1687,12 +1690,12 @@ Advanced type system features for sophisticated type-level programming, enabling
 #### 3.10.1 Type Aliases and Newtype Pattern
 
 ```veil
-// Simple type aliases for readability
+/# Simple type aliases for readability
 type UserId = u64;
 type Result<T> = std::result::Result<T, AppError>;
 type JsonValue = std::collections::HashMap<string, Value>;
 
-// Newtype pattern for type safety
+/# Newtype pattern for type safety
 struct Meters(f64);
 struct Seconds(f64);
 struct Feet(f64);
@@ -1708,22 +1711,22 @@ impl Meters {
     }
 }
 
-// This prevents mixing incompatible units
+/# This prevents mixing incompatible units
 fn calculate_speed(distance: Meters, time: Seconds) -> f64 {
-    distance.0 / time.0  // Explicit access to inner value
+    distance.0 / time.0  /# Explicit access to inner value
 }
 
-// Compiler prevents errors like:
-// calculate_speed(42.0, 10.0);  // Error: expected Meters and Seconds
-```
+/# Compiler prevents errors like:
+/# calculate_speed(42.0, 10.0);  /# Error: expected Meters and Seconds
+````
 
 #### 3.10.2 Associated Types and Type Families
 
 ```veil
-// Traits with associated types
+/# Traits with associated types
 trait Iterator {
-    type Item;          // Associated type
-    type Error = ();    // Associated type with default
+    type Item;          /# Associated type
+    type Error = ();    /# Associated type with default
 
     fn next(&mut self) -> Option<Self::Item>;
     fn collect<C: FromIterator<Self::Item>>(self) -> C;
@@ -1736,16 +1739,16 @@ trait IntoIterator {
     fn into_iter(self) -> Self::IntoIter;
 }
 
-// Generic implementation using associated types
+/# Generic implementation using associated types
 impl<T> Iterator for VecIterator<T> {
     type Item = T;
 
     fn next(&mut self) -> Option<T> {
-        // Implementation
+        /# Implementation
     }
 }
 
-// Collection trait with multiple associated types
+/# Collection trait with multiple associated types
 trait Collection {
     type Item;
     type Index;
@@ -1769,34 +1772,34 @@ impl<T> Collection for [T] {
 #### 3.10.3 Higher-Kinded Types and Generic Constraints
 
 ```veil
-// Generic constraints with where clauses
+/# Generic constraints with where clauses
 fn process_data<T, E>(data: [T]) -> Result<ProcessedData, E>
 where
     T: Clone + Send + Sync,
     E: Error + Send + 'static,
 {
-    // Complex processing with multiple constraints
+    /# Complex processing with multiple constraints
 }
 
-// Multiple bounds on a single type
+/# Multiple bounds on a single type
 fn advanced_processing<T>(items: [T]) -> [T]
 where
     T: Clone + PartialOrd + Hash + Display + Send + Sync,
 {
-    // Implementation using all these traits
+    /# Implementation using all these traits
 }
 
-// Associated type constraints
+/# Associated type constraints
 fn collect_results<I>(iter: I) -> Result<[I::Item], I::Error>
 where
     I: Iterator,
     I::Item: Clone,
     I::Error: Display,
 {
-    // Implementation
+    /# Implementation
 }
 
-// Higher-kinded type simulation
+/# Higher-kinded type simulation
 trait Functor<F<_>> {
     fn map<A, B, Func>(self, f: Func) -> F<B>
     where
@@ -1804,7 +1807,7 @@ trait Functor<F<_>> {
         Func: Fn(A) -> B;
 }
 
-// Phantom types for compile-time state tracking
+/# Phantom types for compile-time state tracking
 struct State<T> {
     _phantom: PhantomData<T>,
 }
@@ -1818,14 +1821,14 @@ impl State<Unauthenticated> {
     }
 
     fn authenticate(self, credentials: Credentials) -> Result<State<Authenticated>, AuthError> {
-        // Authentication logic
+        /# Authentication logic
         Ok(State { _phantom: PhantomData })
     }
 }
 
 impl State<Authenticated> {
     fn access_secure_resource(&self) -> SecureData {
-        // Only available on authenticated state
+        /# Only available on authenticated state
     }
 }
 ```
@@ -1833,7 +1836,7 @@ impl State<Authenticated> {
 #### 3.10.4 Variance and Lifetime Parameters
 
 ```veil
-// Lifetime parameters for borrowed data
+/# Lifetime parameters for borrowed data
 struct BorrowedData<'a> {
     data: &'a [u8],
     metadata: &'a str,
@@ -1844,7 +1847,7 @@ impl<'a> BorrowedData<'a> {
         BorrowedData { data, metadata }
     }
 
-    // Multiple lifetime parameters
+    /# Multiple lifetime parameters
     fn combine<'b>(&self, other: &'b BorrowedData<'b>) -> CombinedData<'a, 'b> {
         CombinedData {
             first: self,
@@ -1853,36 +1856,36 @@ impl<'a> BorrowedData<'a> {
     }
 }
 
-// Variance annotations
-struct Container<+T> {  // Covariant in T
+/# Variance annotations
+struct Container<+T> {  /# Covariant in T
     value: T,
 }
 
-struct Function<-T, +R> {  // Contravariant in T, covariant in R
+struct Function<-T, +R> {  /# Contravariant in T, covariant in R
     func: fn(T) -> R,
 }
 
-// Lifetime bounds and constraints
+/# Lifetime bounds and constraints
 fn process_with_lifetime<'a, T>(data: &'a T) -> ProcessedData<'a>
 where
-    T: 'a + Clone + Send,  // T must live at least as long as 'a
+    T: 'a + Clone + Send,  /# T must live at least as long as 'a
 {
-    // Implementation
+    /# Implementation
 }
 
-// Higher-ranked trait bounds (HRTB)
+/# Higher-ranked trait bounds (HRTB)
 fn apply_to_all<F>(f: F)
 where
-    F: for<'a> Fn(&'a str) -> &'a str,  // F works for any lifetime
+    F: for<'a> Fn(&'a str) -> &'a str,  /# F works for any lifetime
 {
-    // Implementation
+    /# Implementation
 }
 ```
 
 #### 3.10.5 Type-Level Programming and Const Generics
 
 ```veil
-// Const generics for compile-time constants
+/# Const generics for compile-time constants
 struct FixedArray<T, const N: usize> {
     data: [T; N],
 }
@@ -1893,33 +1896,33 @@ impl<T, const N: usize> FixedArray<T, N> {
         T: Default,
     {
         FixedArray {
-            data: [T::default(); N],  // Array of size N
+            data: [T::default(); N],  /# Array of size N
         }
     }
 
     fn len(&self) -> usize {
-        N  // Compile-time constant
+        N  /# Compile-time constant
     }
 }
 
-// Type-level arithmetic with const generics
+/# Type-level arithmetic with const generics
 fn matrix_multiply<const M: usize, const N: usize, const P: usize>(
     a: [[f64; N]; M],
     b: [[f64; P]; N],
 ) -> [[f64; P]; M] {
-    // Matrix multiplication with compile-time size checking
+    /# Matrix multiplication with compile-time size checking
 }
 
-// Const generic constraints
+/# Const generic constraints
 fn process_small_array<T, const N: usize>(arr: [T; N]) -> ProcessedArray<T, N>
 where
-    [(); N]: Sized,  // Ensure N is a valid array size
-    const { N <= 1024 }: bool,  // Compile-time assertion
+    [(); N]: Sized,  /# Ensure N is a valid array size
+    const { N <= 1024 }: bool,  /# Compile-time assertion
 {
-    // Only accepts arrays up to size 1024
+    /# Only accepts arrays up to size 1024
 }
 
-// Type-level computations
+/# Type-level computations
 trait TypeLevelAdd<Rhs> {
     type Output;
 }
@@ -1930,7 +1933,7 @@ impl<const N: usize, const M: usize> TypeLevelAdd<Peano<M>> for Peano<N> {
     type Output = Peano<{N + M}>;
 }
 
-// Type-level state machines
+/# Type-level state machines
 trait State {
     type Next: State;
     fn transition(self) -> Self::Next;
@@ -1954,36 +1957,36 @@ impl State for Processing {
 #### 3.10.6 Advanced Trait Patterns
 
 ```veil
-// Object-safe traits for dynamic dispatch
+/# Object-safe traits for dynamic dispatch
 trait Drawable {
     fn draw(&self);
     fn bounds(&self) -> Rectangle;
-    // Cannot have generic methods for object safety
+    /# Cannot have generic methods for object safety
 }
 
-// Trait objects
+/# Trait objects
 fn render_shapes(shapes: [&dyn Drawable]) {
     for shape in shapes {
-        shape.draw();  // Dynamic dispatch
+        shape.draw();  /# Dynamic dispatch
     }
 }
 
-// Blanket implementations
+/# Blanket implementations
 trait Display {
     fn fmt(&self) -> string;
 }
 
-// Implement Display for all types that implement Debug
+/# Implement Display for all types that implement Debug
 impl<T: Debug> Display for T {
     fn fmt(&self) -> string {
         format!("{:?}", self)
     }
 }
 
-// Trait aliases for convenience
+/# Trait aliases for convenience
 trait Printable = Display + Clone + Send;
 
-// Extension traits
+/# Extension traits
 trait SliceExt<T> {
     fn find_duplicates(&self) -> [&T];
     fn chunk_by<F>(&self, f: F) -> ChunkIterator<T, F>
@@ -1996,28 +1999,28 @@ where
     T: PartialEq,
 {
     fn find_duplicates(&self) -> [&T] {
-        // Implementation
+        /# Implementation
     }
 }
 
-// Marker traits for compile-time properties
-trait Send {}  // Type can be sent between threads
-trait Sync {}  // Type can be shared between threads
-trait Copy {}  // Type can be copied bitwise
+/# Marker traits for compile-time properties
+trait Send {}  /# Type can be sent between threads
+trait Sync {}  /# Type can be shared between threads
+trait Copy {}  /# Type can be copied bitwise
 
-// Auto traits (automatically implemented when safe)
+/# Auto traits (automatically implemented when safe)
 auto trait Send {}
 auto trait Sync {}
 
-// Negative reasoning with auto traits
+/# Negative reasoning with auto traits
 struct NotSend(*const u8);
-impl !Send for NotSend {}  // Explicitly not Send
+impl !Send for NotSend {}  /# Explicitly not Send
 ```
 
 #### 3.10.7 Type Erasure and Existential Types
 
 ```veil
-// Type erasure with trait objects
+/# Type erasure with trait objects
 struct AnyIterator<T> {
     iter: Box<dyn Iterator<Item = T>>,
 }
@@ -2038,19 +2041,19 @@ impl<T> Iterator for AnyIterator<T> {
     }
 }
 
-// Existential types (impl Trait)
+/# Existential types (impl Trait)
 fn make_iterator() -> impl Iterator<Item = i32> {
-    (0..10).map(|x| x * x)  // Return type is erased
+    (0..10).map(|x| x * x)  /# Return type is erased
 }
 
-// Existential types in argument position
+/# Existential types in argument position
 fn process_iterator(iter: impl Iterator<Item = string>) {
     for item in iter {
         println!("{}", item);
     }
 }
 
-// Associated type existentials
+/# Associated type existentials
 trait AsyncDatabase {
     type Connection: Send + Sync;
     type Error: Error + Send + Sync;
@@ -2058,11 +2061,11 @@ trait AsyncDatabase {
     async fn connect(&self) -> Result<Self::Connection, Self::Error>;
 }
 
-// Implementation hides concrete types
+/# Implementation hides concrete types
 struct PostgresDb;
 
 impl AsyncDatabase for PostgresDb {
-    type Connection = PgConnection;  // Concrete type hidden from users
+    type Connection = PgConnection;  /# Concrete type hidden from users
     type Error = PgError;
 }
 ```
@@ -2070,7 +2073,7 @@ impl AsyncDatabase for PostgresDb {
 #### 3.10.8 Dependent Types and Refinement Types
 
 ```veil
-// Refinement types with compile-time verification
+/# Refinement types with compile-time verification
 struct NonEmpty<T> {
     inner: [T],
 }
@@ -2085,7 +2088,7 @@ impl<T> NonEmpty<T> {
     }
 
     fn head(&self) -> &T {
-        &self.inner[0]  // Safe - guaranteed non-empty
+        &self.inner[0]  /# Safe - guaranteed non-empty
     }
 
     fn tail(&self) -> &[T] {
@@ -2093,7 +2096,7 @@ impl<T> NonEmpty<T> {
     }
 }
 
-// Index bounds checking with dependent types
+/# Index bounds checking with dependent types
 struct BoundedIndex<const MAX: usize> {
     value: usize,
 }
@@ -2108,19 +2111,19 @@ impl<const MAX: usize> BoundedIndex<MAX> {
     }
 
     fn get(&self) -> usize {
-        self.value  // Guaranteed < MAX
+        self.value  /# Guaranteed < MAX
     }
 }
 
-// Safe array access with bounded indices
+/# Safe array access with bounded indices
 fn safe_access<T, const N: usize>(
     array: &[T; N],
     index: BoundedIndex<N>,
 ) -> &T {
-    &array[index.get()]  // No bounds check needed
+    &array[index.get()]  /# No bounds check needed
 }
 
-// Liquid types for runtime verification
+/# Liquid types for runtime verification
 struct Positive(f64) where Self::0 > 0.0;
 struct Even(i32) where Self::0 % 2 == 0;
 
@@ -2134,70 +2137,74 @@ impl Positive {
     }
 
     fn sqrt(self) -> Positive {
-        Positive(self.0.sqrt())  // sqrt of positive is positive
+        Positive(self.0.sqrt())  /# sqrt of positive is positive
     }
 }
 ```
+
 }
 
-// Const generics
+/# Const generics
 struct FixedArray<T, const N: usize> {
-    data: [T; N],
+data: [T; N],
 }
 
 impl<T, const N: usize> FixedArray<T, N> {
-    fn new() -> Self {
-        FixedArray { data: [T::default(); N] }
-    }
+fn new() -> Self {
+FixedArray { data: [T::default(); N] }
+}
 
     fn len(self) -> usize { N }
+
 }
 
-// Generic array processing
+/# Generic array processing
 fn process_array<const SIZE: usize>(arr: [i32; SIZE]) -> [i32; SIZE] {
-    var result = [0; SIZE];
-    for i in 0..SIZE {
-        result[i] = arr[i] * 2;
-    }
-    result
+var result = [0; SIZE];
+for i in 0..SIZE {
+result[i] = arr[i] \* 2;
+}
+result
 }
 
-// Higher-kinded types for advanced generic programming
-trait Functor<F<_>> {
-    fn map<A, B>(self: F<A>, f: fn(A) -> B) -> F<B>;
+/# Higher-kinded types for advanced generic programming
+trait Functor<F<\_>> {
+fn map<A, B>(self: F<A>, f: fn(A) -> B) -> F<B>;
 }
 
-// Phantom types for compile-time state tracking
+/# Phantom types for compile-time state tracking
 struct Database<State> {
-    connection: Connection,
-    _state: PhantomData<State>,
+connection: Connection,
+\_state: PhantomData<State>,
 }
 
 struct Connected;
 struct Disconnected;
 
 impl Database<Disconnected> {
-    fn connect(self) -> Database<Connected> { }
+fn connect(self) -> Database<Connected> { }
 }
 
 impl Database<Connected> {
-    fn query(self, sql: string) -> QueryResult { }
+fn query(self, sql: string) -> QueryResult { }
 }
 
-// Associated const in traits
+/# Associated const in traits
 trait MathConstants {
-    const PI: f64;
-    const E: f64;
+const PI: f64;
+const E: f64;
 }
 
-// Generic associated types (GATs)
+/# Generic associated types (GATs)
 trait AsyncIterator {
-    type Item;
-    type Future<'a>: Future<Output = Option<Self::Item>>;
+type Item;
+type Future<'a>: Future<Output = Option<Self::Item>>;
 
     fn next<'a>(self) -> Self::Future<'a>;
+
 }
-```
+
+````
 
 ## 4. The ve Toolchain & Ecosystem
 
@@ -2215,7 +2222,7 @@ edition = "2024"
 authors = ["Your Name <email@example.com>"]
 license = "MIT"
 description = "A sample Veil application"
-repository = "https://github.com/user/my-app"
+repository = "https:/#github.com/user/my-app"
 keywords = ["web", "api", "async"]
 
 [dependencies]
@@ -2265,9 +2272,10 @@ path = "examples/demo.vl"
 
 [workspace]
 members = [".", "subcrate"]
-```
+````
 
 **Package commands:**
+
 - `ve new <project>`: Creates a new project with standard layout
 - `ve add <package>`: Adds dependency to ve.toml
 - `ve remove <package>`: Removes dependency
@@ -2337,32 +2345,37 @@ ve build --release --target x86_64-windows-msvc
 **Supported Compilation Targets**:
 
 **Tier 1 Platforms** (Guaranteed to work):
+
 - `x86_64-linux-gnu` - Linux 64-bit (GNU)
 - `x86_64-windows-msvc` - Windows 64-bit (MSVC)
 - `x86_64-darwin` - macOS 64-bit (Intel)
 - `aarch64-darwin` - macOS ARM64 (Apple Silicon)
 
 **Tier 2 Platforms** (Tested and supported):
+
 - `aarch64-linux-gnu` - ARM64 Linux
 - `i686-windows-msvc` - Windows 32-bit
 - `x86_64-linux-musl` - Linux 64-bit (musl libc)
 - `wasm32-wasi` - WebAssembly System Interface
 
 **Tier 3 Platforms** (Best effort):
+
 - `armv7-linux-gnueabi` - ARM Linux
 - `riscv64gc-linux-gnu` - RISC-V 64-bit
 - `s390x-linux-gnu` - IBM Z/Architecture
 - `powerpc64le-linux-gnu` - PowerPC 64-bit LE
 
 **Target Triple Format**: `<arch>-<vendor>-<sys>-<abi>`
+
 - **arch**: x86_64, aarch64, arm, i686, wasm32, riscv64gc, etc.
 - **vendor**: pc, apple, unknown, etc.
 - **sys**: linux, windows, darwin, wasi, etc.
 - **abi**: gnu, msvc, musl, etc.
 
 **Cross-Compilation Features**:
+
 ```veil
-// Platform-specific code selection
+/# Platform-specific code selection
 #[cfg(target_os = "windows")]
 fn get_home_dir() -> Option<PathBuf> {
     std::env::var("USERPROFILE").ok().map(PathBuf::from)
@@ -2375,16 +2388,17 @@ fn get_home_dir() -> Option<PathBuf> {
 
 #[cfg(target_arch = "wasm32")]
 fn platform_init() {
-    // WebAssembly-specific initialization
+    /# WebAssembly-specific initialization
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 fn platform_init() {
-    // Native platform initialization
+    /# Native platform initialization
 }
 ```
 
 **Toolchain Configuration** (ve.toml):
+
 ```toml
 [build]
 default-target = "x86_64-unknown-linux-gnu"
@@ -2406,7 +2420,7 @@ sysroot = "/opt/cross"
 Fine-grained conditional compilation based on target, features, and custom configs:
 
 ```veil
-// Target-based conditionals
+/# Target-based conditionals
 #[cfg(target_os = "linux")]
 fn linux_specific() { }
 
@@ -2416,27 +2430,27 @@ const CACHE_LINE_SIZE: usize = 64;
 #[cfg(target_pointer_width = "64")]
 type PointerSized = u64;
 
-// Feature-based conditionals
+/# Feature-based conditionals
 #[cfg(feature = "networking")]
 mod network {
     pub fn connect() { }
 }
 
-// Debug/Release conditionals
+/# Debug/Release conditionals
 #[cfg(debug_assertions)]
 fn debug_only_function() { }
 
 #[cfg(not(debug_assertions))]
 const OPTIMIZED: bool = true;
 
-// Custom configuration
+/# Custom configuration
 #[cfg(custom_config = "production")]
-const API_URL: &str = "https://api.production.com";
+const API_URL: &str = "https:/#api.production.com";
 
 #[cfg(custom_config = "development")]
-const API_URL: &str = "http://localhost:3000";
+const API_URL: &str = "http:/#localhost:3000";
 
-// Complex conditions
+/# Complex conditions
 #[cfg(all(unix, target_arch = "x86_64", feature = "simd"))]
 mod optimized_unix { }
 
@@ -2449,14 +2463,14 @@ fn desktop_only() { }
 Comprehensive attribute system for metadata, code generation, and compiler directives:
 
 ```veil
-// Derive attributes for automatic trait implementation
+/# Derive attributes for automatic trait implementation
 #[derive(Clone, Debug, PartialEq, Hash)]
 struct User {
     name: string,
     id: u64,
 }
 
-// Serialization attributes
+/# Serialization attributes
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ApiUser {
@@ -2470,7 +2484,7 @@ struct ApiUser {
     active: bool,
 }
 
-// Memory layout attributes
+/# Memory layout attributes
 #[repr(C)]
 struct CCompatible {
     x: i32,
@@ -2483,7 +2497,7 @@ struct PackedStruct {
     b: u32,
 }
 
-// Compiler optimization hints
+/# Compiler optimization hints
 #[inline(always)]
 fn always_inline() { }
 
@@ -2496,14 +2510,14 @@ fn error_path() { }
 #[hot]
 fn performance_critical() { }
 
-// Deprecation and versioning
+/# Deprecation and versioning
 #[deprecated(since = "1.2.0", note = "use new_function instead")]
 fn old_function() { }
 
 #[must_use = "this function returns a value that must be used"]
 fn important_result() -> Result<Data, Error> { }
 
-// Test attributes
+/# Test attributes
 #[test]
 fn basic_test() {
     assert_eq!(2 + 2, 4);
@@ -2520,7 +2534,7 @@ fn benchmark_function(b: &Bencher) {
     b.iter(|| expensive_computation());
 }
 
-// Custom attributes for macros/codegen
+/# Custom attributes for macros/codegen
 #[route(GET, "/users/{id}")]
 async fn get_user(id: u64) -> Response { }
 
@@ -2560,6 +2574,7 @@ Veil is committed to becoming self-hosted before version 1.0, demonstrating the 
    - Comprehensive test suite passing
 
 **Benefits of Self-Hosting**:
+
 - **Language Validation**: Proves Veil is suitable for large, complex systems
 - **Performance Testing**: The compiler serves as a comprehensive benchmark
 - **Feature Completeness**: Ensures all language features work in practice
@@ -2567,26 +2582,27 @@ Veil is committed to becoming self-hosted before version 1.0, demonstrating the 
 - **Community Confidence**: Demonstrates long-term viability
 
 **Self-Hosting Architecture**:
+
 ```veil
-// The self-hosted compiler structure
+/# The self-hosted compiler structure
 mod compiler {
-    pub mod lexer;      // Tokenization
-    pub mod parser;     // Syntax analysis
-    pub mod semantic;   // Type checking and analysis
-    pub mod codegen;    // Code generation
-    pub mod optimizer;  // Optimization passes
-    pub mod linker;     // Platform-specific linking
+    pub mod lexer;      /# Tokenization
+    pub mod parser;     /# Syntax analysis
+    pub mod semantic;   /# Type checking and analysis
+    pub mod codegen;    /# Code generation
+    pub mod optimizer;  /# Optimization passes
+    pub mod linker;     /# Platform-specific linking
 }
 
 mod toolchain {
-    pub mod build;      // Build system
-    pub mod package;    // Package manager
-    pub mod test;       // Test runner
-    pub mod format;     // Code formatter
-    pub mod lint;       // Static analysis
+    pub mod build;      /# Build system
+    pub mod package;    /# Package manager
+    pub mod test;       /# Test runner
+    pub mod format;     /# Code formatter
+    pub mod lint;       /# Static analysis
 }
 
-// Bootstrap process
+/# Bootstrap process
 fn main() -> Result<(), CompilerError> {
     const args = parse_command_line();
     const config = load_compiler_config()?;
@@ -2607,6 +2623,7 @@ fn main() -> Result<(), CompilerError> {
 
 **Contributing to Self-Hosting**:
 The self-hosting effort is a community-driven initiative. Key areas for contribution:
+
 - Compiler frontend (lexing, parsing, type checking)
 - Backend code generation for specific targets
 - Optimization passes and analysis
@@ -2656,7 +2673,7 @@ max-function-length = 50
 
 **In-code lint controls:**
 
-```veil
+````veil
 #[allow(unused_variables)]
 fn development_function() {
     const unused = 42;
@@ -2717,41 +2734,41 @@ The std library is curated to be powerful yet lean, providing a "batteries-inclu
 ### 6.1 std::sync::Mutex<T> API Reference
 
 ```veil
-// The Mutex<T> provides safe, exclusive access to shared data.
-// It is an essential tool for preventing data races in concurrent programs.
+/# The Mutex<T> provides safe, exclusive access to shared data.
+/# It is an essential tool for preventing data races in concurrent programs.
 impl<T> Mutex<T> {
-    // Creates a new Mutex wrapping the given data.
+    /# Creates a new Mutex wrapping the given data.
     fn new(data: T) -> Mutex<T>;
 
-    // Asynchronously acquires the lock, returning a guard.
-    // This function will pause the current task until the lock is available.
-    // It is an `async` function because the wait may be long, and the scheduler
-    // should run other tasks in the meantime.
+    /# Asynchronously acquires the lock, returning a guard.
+    /# This function will pause the current task until the lock is available.
+    /# It is an `async` function because the wait may be long, and the scheduler
+    /# should run other tasks in the meantime.
     async fn lock(self) -> MutexGuard<T>;
 
-    // Attempts to acquire the lock immediately without blocking.
-    // Returns an `Option<MutexGuard<T>>`. It returns `Some(guard)` if the lock
-    // was acquired, and `none` otherwise. This is useful for avoiding deadlocks
-    // or implementing more complex locking strategies.
+    /# Attempts to acquire the lock immediately without blocking.
+    /# Returns an `Option<MutexGuard<T>>`. It returns `Some(guard)` if the lock
+    /# was acquired, and `none` otherwise. This is useful for avoiding deadlocks
+    /# or implementing more complex locking strategies.
     fn try_lock(self) -> Option<MutexGuard<T>>;
 }
 
-// The MutexGuard provides access to the data and ensures the lock is released.
-// This is a RAII (Resource Acquisition Is Initialization) type.
+/# The MutexGuard provides access to the data and ensures the lock is released.
+/# This is a RAII (Resource Acquisition Is Initialization) type.
 impl<T> MutexGuard<T> {
-    // Allows mutable access to the wrapped data via dereferencing.
-    // e.g., `*guard = new_value;`
-    // The `*` operator is overloaded to provide this ergonomic access.
+    /# Allows mutable access to the wrapped data via dereferencing.
+    /# e.g., `*guard = new_value;`
+    /# The `*` operator is overloaded to provide this ergonomic access.
 }
-// When a MutexGuard<T> value goes out of scope, its destructor
-// is called, which automatically and safely unlocks the Mutex.
-// This means you can never forget to unlock a mutex.
-```
+/# When a MutexGuard<T> value goes out of scope, its destructor
+/# is called, which automatically and safely unlocks the Mutex.
+/# This means you can never forget to unlock a mutex.
+````
 
 ### 6.2 std::collections API Reference
 
 ```veil
-// HashMap<K, V> - Hash table implementation
+/# HashMap<K, V> - Hash table implementation
 impl<K, V> HashMap<K, V>
 where
     K: Hash + Eq,
@@ -2773,7 +2790,7 @@ where
     fn iter(&self) -> Iter<K, V>;
 }
 
-// HashSet<T> - Hash set implementation
+/# HashSet<T> - Hash set implementation
 impl<T> HashSet<T>
 where
     T: Hash + Eq,
@@ -2790,7 +2807,7 @@ where
     fn difference(&self, other: &HashSet<T>) -> Difference<T>;
 }
 
-// VecDeque<T> - Double-ended queue
+/# VecDeque<T> - Double-ended queue
 impl<T> VecDeque<T> {
     fn new() -> VecDeque<T>;
     fn with_capacity(capacity: usize) -> VecDeque<T>;
@@ -2809,7 +2826,7 @@ impl<T> VecDeque<T> {
 ### 6.3 std::io API Reference
 
 ```veil
-// Async I/O traits
+/# Async I/O traits
 trait AsyncRead {
     async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>;
     async fn read_to_end(&mut self, buf: &mut [u8]) -> io::Result<usize>;
@@ -2822,7 +2839,7 @@ trait AsyncWrite {
     async fn flush(&mut self) -> io::Result<()>;
 }
 
-// Buffered I/O
+/# Buffered I/O
 struct BufReader<R: AsyncRead> {
     inner: R,
     buffer: [u8],
@@ -2848,20 +2865,20 @@ impl<W: AsyncWrite> BufWriter<W> {
     async fn flush(&mut self) -> io::Result<()>;
 }
 
-// Standard streams
+/# Standard streams
 fn stdin() -> Stdin;
 fn stdout() -> Stdout;
 fn stderr() -> Stderr;
 
-// File operations are in std::fs
+/# File operations are in std::fs
 ```
 
 ### 6.4 std::fs API Reference
 
 ```veil
-// File operations
+/# File operations
 struct File {
-    // File handle
+    /# File handle
 }
 
 impl File {
@@ -2878,23 +2895,23 @@ impl File {
 impl AsyncRead for File { /* implementation */ }
 impl AsyncWrite for File { /* implementation */ }
 
-// Directory operations
+/# Directory operations
 async fn read_dir<P: AsRef<Path>>(path: P) -> io::Result<ReadDir>;
 async fn create_dir<P: AsRef<Path>>(path: P) -> io::Result<()>;
 async fn create_dir_all<P: AsRef<Path>>(path: P) -> io::Result<()>;
 async fn remove_dir<P: AsRef<Path>>(path: P) -> io::Result<()>;
 async fn remove_dir_all<P: AsRef<Path>>(path: P) -> io::Result<()>;
 
-// File metadata and permissions
+/# File metadata and permissions
 async fn metadata<P: AsRef<Path>>(path: P) -> io::Result<Metadata>;
 async fn symlink_metadata<P: AsRef<Path>>(path: P) -> io::Result<Metadata>;
 
-// File operations
+/# File operations
 async fn copy<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> io::Result<u64>;
 async fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> io::Result<()>;
 async fn remove_file<P: AsRef<Path>>(path: P) -> io::Result<()>;
 
-// Convenience functions
+/# Convenience functions
 async fn read<P: AsRef<Path>>(path: P) -> io::Result<[u8]>;
 async fn read_to_string<P: AsRef<Path>>(path: P) -> io::Result<string>;
 async fn write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, contents: C) -> io::Result<()>;
@@ -2903,9 +2920,9 @@ async fn write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, contents: C) -> io::Resu
 ### 6.5 std::net API Reference
 
 ```veil
-// TCP networking
+/# TCP networking
 struct TcpListener {
-    // TCP listener
+    /# TCP listener
 }
 
 impl TcpListener {
@@ -2915,7 +2932,7 @@ impl TcpListener {
 }
 
 struct TcpStream {
-    // TCP stream
+    /# TCP stream
 }
 
 impl TcpStream {
@@ -2929,9 +2946,9 @@ impl TcpStream {
 impl AsyncRead for TcpStream { /* implementation */ }
 impl AsyncWrite for TcpStream { /* implementation */ }
 
-// UDP networking
+/# UDP networking
 struct UdpSocket {
-    // UDP socket
+    /# UDP socket
 }
 
 impl UdpSocket {
@@ -2951,9 +2968,9 @@ impl UdpSocket {
 ### 6.6 std::time API Reference
 
 ```veil
-// Duration type
+/# Duration type
 struct Duration {
-    // Time duration
+    /# Time duration
 }
 
 impl Duration {
@@ -2974,9 +2991,9 @@ impl Duration {
     fn checked_div(&self, rhs: u32) -> Option<Duration>;
 }
 
-// Instant for measuring elapsed time
+/# Instant for measuring elapsed time
 struct Instant {
-    // Point in time
+    /# Point in time
 }
 
 impl Instant {
@@ -2985,9 +3002,9 @@ impl Instant {
     fn checked_duration_since(&self, earlier: Instant) -> Option<Duration>;
 }
 
-// SystemTime for wall clock time
+/# SystemTime for wall clock time
 struct SystemTime {
-    // System time
+    /# System time
 }
 
 impl SystemTime {
@@ -2997,12 +3014,12 @@ impl SystemTime {
     fn checked_sub(&self, duration: Duration) -> Option<SystemTime>;
 }
 
-// Async time utilities
+/# Async time utilities
 async fn sleep(duration: Duration);
 async fn timeout<F: Future>(duration: Duration, future: F) -> Result<F::Output, TimeoutError>;
 
 struct Interval {
-    // Periodic timer
+    /# Periodic timer
 }
 
 impl Interval {
@@ -3014,7 +3031,7 @@ impl Interval {
 ### 6.7 std::string API Reference
 
 ```veil
-// String manipulation
+/# String manipulation
 impl str {
     fn new() -> str;
     fn with_capacity(capacity: usize) -> str;
@@ -3058,20 +3075,20 @@ impl str {
     fn parse<F: FromStr>(&self) -> Result<F, F::Err>;
 }
 
-// String formatting
+/# String formatting
 fn format(args: fmt::Arguments) -> str;
 
 macro format! {
-    // String interpolation macro
-    // format!("Hello, {}!"str, name)
-    // format!("Value: {value}, Type: {type}"str)
+    /# String interpolation macro
+    /# format!("Hello, {}!"str, name)
+    /# format!("Value: {value}, Type: {type}"str)
 }
 ```
 
 ### 6.8 std::json API Reference
 
 ```veil
-// JSON serialization and deserialization
+/# JSON serialization and deserialization
 enum Value {
     Null,
     Bool(bool),
@@ -3099,7 +3116,7 @@ impl Value {
     fn get_mut(&mut self, key: &str) -> Option<&mut Value>;
 }
 
-// Serialization
+/# Serialization
 trait Serialize {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error>;
 }
@@ -3108,7 +3125,7 @@ trait Deserialize<'de> {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error>;
 }
 
-// JSON functions
+/# JSON functions
 fn to_string<T: Serialize>(value: &T) -> Result<str, Error>;
 fn to_string_pretty<T: Serialize>(value: &T) -> Result<str, Error>;
 fn to_vec<T: Serialize>(value: &T) -> Result<[u8], Error>;
@@ -3117,7 +3134,7 @@ fn from_str<T: Deserialize>(s: &str) -> Result<T, Error>;
 fn from_slice<T: Deserialize>(v: &[u8]) -> Result<T, Error>;
 fn from_reader<R: Read, T: Deserialize>(reader: R) -> Result<T, Error>;
 
-// Derive macros for automatic serialization
+/# Derive macros for automatic serialization
 #[derive(Serialize, Deserialize)]
 struct User {
     name: str,
@@ -3147,19 +3164,19 @@ A borrowed reference, denoted by &T, is a temporary, non-owning pointer to a val
 - **Lifetime Enforcement**: The compiler uses the same generational analysis to ensure a reference does not outlive the data it points to. A function cannot return a reference to a locally defined variable, and a struct cannot store a reference to an object that may be deallocated before the struct is.
 
 ```veil
-// A function that accepts a borrowed reference
+/# A function that accepts a borrowed reference
 fn calculate_length(s: &str) -> int {
-    // We can read from `s` but we don't own it.
-    // No ARC traffic is generated here.
+    /# We can read from `s` but we don't own it.
+    /# No ARC traffic is generated here.
     return s.len();
 }
 
 fn main() {
-    const my_string = "hello world".to_string(); // Owning reference
-    const length = calculate_length(&my_string); // Pass a borrow
+    const my_string = "hello world".to_string(); /# Owning reference
+    const length = calculate_length(&my_string); /# Pass a borrow
     print("Length is {length}");
 }
-} // `my_string` goes out of scope, its memory is freed.
+} /# `my_string` goes out of scope, its memory is freed.
 ```
 
 The use of &Mutex<int> in the concurrency examples indicates passing a non-owning, temporary reference to the Mutex itself, which is the correct and most efficient way to allow multiple tasks to access the same lock.
@@ -3177,24 +3194,24 @@ A weak reference, denoted by weak T, is a non-owning pointer that is used to bre
 - **Access**: To safely access the underlying object, a weak reference must be upgraded back into a strong one using the .upgrade() method. This returns an Option<T> (Some(T) if the object still exists, None otherwise).
 
 ```veil
-// Example: Breaking a Parent-Child reference
+/# Example: Breaking a Parent-Child reference
 ```
 
 cycle
 struct Node {
-parent: weak Node, // Parent reference is weak
-children: [Node], // Child references are strong
+parent: weak Node, /# Parent reference is weak
+children: [Node], /# Child references are strong
 }
 
 fn main() {
 const root = Node::new(parent: none);
 const child = Node::new(parent: root.downgrade());
 root.children.push(child);
-} // When `root` goes out of scope, its ARC count becomes 0 and it's freed.
-// Because the child's reference to the parent was weak, it did not
-// prevent the deallocation. The child is then also freed.
+} /# When `root` goes out of scope, its ARC count becomes 0 and it's freed.
+/# Because the child's reference to the parent was weak, it did not
+/# prevent the deallocation. The child is then also freed.
 
-```
+````
 ## 8. Operators and Precedence
 
 This section defines the full operator set and their precedence/associativity. Unless stated otherwise, operators are left-associative. No implicit numeric coercions are performed; operands must be of the same type family where applicable.
@@ -3204,9 +3221,9 @@ This section defines the full operator set and their precedence/associativity. U
 1. **() [] {} . func()** index/slice, member access, function call
 2. **\*\*** (exponentiation) — right-associative
 3. **Unary**: +x, -x, ~x (bitwise not), !x (logical not), &x (borrow), \*x (dereference), await x, ++x, --x (integers only)
-4. **Multiplicative**: \* / // %
-   - / requires floating-point operands; use // for integer division
-   - // is floor division (a == (a // b) \* b + (a % b))
+4. **Multiplicative**: \* / /# %
+   - / requires floating-point operands; use /# for integer division
+   - /# is floor division (a == (a /# b) \* b + (a % b))
 5. **Additive**: + -
 6. **Shifts**: << >>
 7. **Bitwise AND**: &
@@ -3221,16 +3238,16 @@ This section defines the full operator set and their precedence/associativity. U
 13. **Logical OR**: |
 14. **Pipeline**: |> (left-associative; lower than logical or, higher than assignment)
 15. **Assignment**: = (right-associative to enable a = b = c)
-    **Compound assignment**: += -= \*= /= //= %= \*\*= <<= >>= &= ^= |=
+    **Compound assignment**: += -= \*= /= /#= %= \*\*= <<= >>= &= ^= |=
 16. **Commas** for tuple/array literals and function arguments
 
 **Notes:**
 
 - ++/-- are allowed only on integer types (i8..i64, u8..u64) and require a var binding. Using them on const bindings or non-integer types is a compile-time error.
 
-- / requires float operands (f32 or f64). Use explicit as casts for conversions. Integer division must use //.
+- / requires float operands (f32 or f64). Use explicit as casts for conversions. Integer division must use /#.
 
-- % follows Euclidean semantics: a == (a // b) \* b + (a % b), and (a % b) has the sign of b.
+- % follows Euclidean semantics: a == (a /# b) \* b + (a % b), and (a % b) has the sign of b.
 
 - is/is not perform identity comparison on owning references (pointer identity under ARC). For value types, use ==/!=.
 
@@ -3243,7 +3260,7 @@ This section defines the full operator set and their precedence/associativity. U
 
 ### Comments
 
-- **Line comments**: // ... to end of line
+- **Line comments**: /# ... to end of line
 - **Block comments**: /* ... */ can span multiple lines. Nested block comments are not allowed.
 
 ### Documentation
@@ -3257,19 +3274,17 @@ This section defines the full operator set and their precedence/associativity. U
  * Some description...
  */
 fn foo() { ... }
-```
+````
 
 - Within documentation comments, Markdown headings (#, ##, ###) define sections and subsections. Content under a heading belongs to that section. If no headings are present, documentation is treated as a single section (Rust-like flat docgen).
 
 - **Cross-references** use wiki-style linking:
-  
   - [[module::Type]] or [[module::Type::method]] for items within the same package
   - [[lib::module::Type]] to link to items in another library; the generator resolves library names from ve.toml dependencies
 
 - Inline code and fences are supported; links and images follow standard Markdown.
 
 - **Docgen behavior**:
-  
   - If sectioned docs are present, the generator preserves the hierarchy in the output navigation.
   - If not, it falls back to Rust-like docgen that attaches the entire comment to the item.
   - Examples inside docs are runnable tests when wrapped in ```test fences (honored by ve test).
@@ -3316,9 +3331,9 @@ digit      ::= '0'..'9'
 
 **(summary, see Operators and Precedence section)**
 
-- **Arithmetic**: + - \* / // % \*\*
+- **Arithmetic**: + - \* / /# % \*\*
 - **Bitwise**: ~ & | ^
-- **Assignment**: = with compound ops (+=, -=, \*=, /=, //=, %=, \*\*=, <<=, >>=, &=, ^=, |=)
+- **Assignment**: = with compound ops (+=, -=, \*=, /=, /#=, %=, \*\*=, <<=, >>=, &=, ^=, |=)
 - **Comparison**: == != > < >= <=
 - **Logical**: ! & |
 - **Access**: . [] ()
@@ -3387,7 +3402,6 @@ metadata_value ::= string_literal | identifier | bool_literal
 ### 12.1 Primitive Types
 
 - **Integers**:
-  
   - **Signed**: i8 (1 byte: -128 to 127), i16 (2 bytes: -32,768 to 32,767), i32 (4 bytes: -2³¹ to 2³¹-1), i64 (8 bytes: -2⁶³ to 2⁶³-1), i128 (16 bytes: -2¹²⁷ to 2¹²⁷-1)
   - **Unsigned**: u8 (1 byte: 0 to 255), u16 (2 bytes: 0 to 65,535), u32 (4 bytes: 0 to 2³²-1), u64 (8 bytes: 0 to 2⁶⁴-1), u128 (16 bytes: 0 to 2¹²⁸-1)
   - **Architecture-dependent**: isize and usize (pointer-sized: 32-bit or 64-bit depending on target architecture)
@@ -3401,7 +3415,6 @@ metadata_value ::= string_literal | identifier | bool_literal
 - **String**: str (UTF-8 encoded, heap-allocated, growable)
 
 - **Special Types**:
-  
   - **void**: Zero-sized type, used for functions that don't return a value
   - **any**: Dynamic type container with runtime type information, similar to `void*` with RTTI. Supports explicit downcasting with runtime checks
   - **rawptr**: Raw pointer type for unsafe operations and FFI
@@ -3450,8 +3463,8 @@ none
 a + b
 a - b
 a * b
-a / b // float division
-a // b // integer floor division
+a / b /# float division
+a /# b /# integer floor division
 a % b
 a ** b
 ```
@@ -3535,10 +3548,10 @@ match value {
 }
 
 loop {
-    // infinite loop body
+    /# infinite loop body
 }
 
-// Labeled loops
+/# Labeled loops
 'outer: for i in 0..10 {
     'inner: for j in 0..10 {
         if condition { break 'outer; }
@@ -3546,14 +3559,14 @@ loop {
     }
 }
 
-// Try expressions
+/# Try expressions
 const result = try {
     const a = risky_operation()?;
     const b = another_operation(a)?;
     b * 2
 };
 
-// Async blocks
+/# Async blocks
 const future = async {
     const data = await fetch_data();
     process(data)
@@ -3638,7 +3651,7 @@ fn generic_func<T>(value: T) -> T {
 }
 
 fn variadic_func(...args: any) {
-    // handle variadic arguments
+    /# handle variadic arguments
 }
 ```
 
@@ -3702,10 +3715,10 @@ match value {
     1 => "one",
     2 => "two",
     42 => "the answer",
-    _ => "something else",  // Wildcard pattern
+    _ => "something else",  /# Wildcard pattern
 }
 
-// String literal patterns
+/# String literal patterns
 match text {
     "hello" => greet(),
     "goodbye" => farewell(),
@@ -3713,7 +3726,7 @@ match text {
     _ => handle_other(),
 }
 
-// Boolean patterns
+/# Boolean patterns
 match flag {
     true => enable_feature(),
     false => disable_feature(),
@@ -3725,23 +3738,23 @@ match flag {
 ```veil
 match result {
     Ok(value) => {
-        // 'value' is bound to the success value
+        /# 'value' is bound to the success value
         process_success(value)
     },
     Err(error) => {
-        // 'error' is bound to the error value
+        /# 'error' is bound to the error value
         handle_error(error)
     },
 }
 
-// Multiple bindings in tuple patterns
+/# Multiple bindings in tuple patterns
 match coordinates {
     (x, y) => {
         print("Point at ({}, {})", x, y);
     },
 }
 
-// Nested patterns with bindings
+/# Nested patterns with bindings
 match nested_result {
     Ok(Some(data)) => process_data(data),
     Ok(None) => handle_empty(),
@@ -3753,18 +3766,18 @@ match nested_result {
 
 ```veil
 match tuple {
-    (x, _) => x,  // Ignore second element
+    (x, _) => x,  /# Ignore second element
     _ => panic("unreachable"),
 }
 
-// Multiple wildcards
+/# Multiple wildcards
 match complex_tuple {
-    (first, _, _, last) => (first, last),  // Only care about first and last
+    (first, _, _, last) => (first, last),  /# Only care about first and last
 }
 
-// Placeholder with binding for debugging
+/# Placeholder with binding for debugging
 match result {
-    Ok(value @ _) => {  // Bind value but indicate we might not use it
+    Ok(value @ _) => {  /# Bind value but indicate we might not use it
         debug_print("Got value: {:?}", value);
         value
     },
@@ -3803,10 +3816,10 @@ match msg {
     },
 }
 
-// Partial destructuring with wildcards
+/# Partial destructuring with wildcards
 match msg {
-    Message::Move { x, y: _ } => handle_x_movement(x),  // Ignore y
-    Message::ChangeColor(r, _, _) => handle_red_component(r),  // Ignore g, b
+    Message::Move { x, y: _ } => handle_x_movement(x),  /# Ignore y
+    Message::ChangeColor(r, _, _) => handle_red_component(r),  /# Ignore g, b
     _ => handle_other_messages(),
 }
 ```
@@ -3824,14 +3837,14 @@ match point {
     Point { x, y } => format("point at ({}, {})", x, y),
 }
 
-// Shorthand field binding
+/# Shorthand field binding
 match person {
     Person { name, age: 18..=65, active: true } => {
-        // Destructure with range pattern and literal
+        /# Destructure with range pattern and literal
         welcome_adult_user(name)
     },
     Person { age, .. } if age < 18 => {
-        // Rest pattern (..) ignores remaining fields
+        /# Rest pattern (..) ignores remaining fields
         handle_minor()
     },
     Person { active: false, .. } => handle_inactive_user(),
@@ -3848,10 +3861,10 @@ match age {
     0..=12 => "child",
     13..=19 => "teenager",
     20..=64 => "adult",
-    65.. => "senior",  // Open-ended range
+    65.. => "senior",  /# Open-ended range
 }
 
-// Character ranges
+/# Character ranges
 match ch {
     'a'..='z' => "lowercase letter",
     'A'..='Z' => "uppercase letter",
@@ -3859,9 +3872,9 @@ match ch {
     _ => "other character",
 }
 
-// Multiple ranges
+/# Multiple ranges
 match score {
-    90..=100 | 85..=89 => "excellent",  // Multiple patterns with |
+    90..=100 | 85..=89 => "excellent",  /# Multiple patterns with |
     70..=84 => "good",
     60..=69 => "passing",
     0..=59 => "failing",
@@ -3877,19 +3890,19 @@ match array {
     [first, second] => format("two elements: {}, {}", first, second),
     [first, .., last] => format("first: {}, last: {}", first, last),
     [first, middle @ .., last] => {
-        // Bind middle slice
+        /# Bind middle slice
         format("first: {}, middle: {:?}, last: {}", first, middle, last)
     },
 }
 
-// Fixed-size array patterns
+/# Fixed-size array patterns
 match fixed_array {
     [1, 2, 3] => "the sequence 1, 2, 3",
     [x, y, z] if x + y == z => "sum pattern",
     [a, b, c] => format("array with {}, {}, {}", a, b, c),
 }
 
-// Head/tail patterns for lists
+/# Head/tail patterns for lists
 match list {
     [] => process_empty(),
     [head, ..tail] => {
@@ -3903,20 +3916,20 @@ match list {
 
 ```veil
 match &optional_value {
-    Some(ref inner) => process_borrowed(inner),  // Borrow inner value
+    Some(ref inner) => process_borrowed(inner),  /# Borrow inner value
     None => handle_none(),
 }
 
-// Dereference patterns
+/# Dereference patterns
 match boxed_value {
     box Some(value) => process_unboxed(value),
     box None => handle_boxed_none(),
 }
 
-// Reference patterns in function parameters
+/# Reference patterns in function parameters
 fn process_option(opt: &Option<i32>) {
     match opt {
-        Some(value) => print("Value: {}", value),  // Automatic dereference
+        Some(value) => print("Value: {}", value),  /# Automatic dereference
         None => print("No value"),
     }
 }
@@ -3936,14 +3949,14 @@ match point {
     Point { x: 0.0, y: 0.0 } => "origin",
 }
 
-// Complex guards with function calls
+/# Complex guards with function calls
 match user {
     User { name, age, .. } if is_admin(&name) => grant_admin_access(),
     User { age, .. } if age >= 18 && has_permission() => grant_user_access(),
     _ => deny_access(),
 }
 
-// Guards with bound variables
+/# Guards with bound variables
 match number {
     n if n % 2 == 0 && n > 10 => "large even number",
     n if n % 2 == 1 && n < 0 => "negative odd number",
@@ -3956,21 +3969,21 @@ match number {
 #### 16.4.1 If-Let Expressions
 
 ```veil
-// Convenient for single-pattern matching
+/# Convenient for single-pattern matching
 if let Some(value) = optional {
     process_value(value);
 } else {
     handle_none();
 }
 
-// Chaining if-let expressions
+/# Chaining if-let expressions
 if let Ok(data) = parse_data(input) {
     if let Some(processed) = process_data(data) {
         return Ok(processed);
     }
 }
 
-// If-let with guards
+/# If-let with guards
 if let Some(x) = maybe_number && x > 0 {
     print("Positive number: {}", x);
 }
@@ -3979,17 +3992,17 @@ if let Some(x) = maybe_number && x > 0 {
 #### 16.4.2 While-Let Loops
 
 ```veil
-// Process iterator until None
+/# Process iterator until None
 while let Some(item) = iterator.next() {
     process_item(item);
 }
 
-// Process results until error
+/# Process results until error
 while let Ok(data) = receive_data() {
     handle_data(data);
 }
 
-// Complex patterns in while-let
+/# Complex patterns in while-let
 while let Ok(Message::Data(payload)) = channel.recv() {
     process_payload(payload);
 }
@@ -3998,17 +4011,17 @@ while let Ok(Message::Data(payload)) = channel.recv() {
 #### 16.4.3 Function Parameters and Let Bindings
 
 ```veil
-// Destructuring in function parameters
+/# Destructuring in function parameters
 fn distance((x1, y1): (f64, f64), (x2, y2): (f64, f64)) -> f64 {
     ((x2 - x1).powi(2) + (y2 - y1).powi(2)).sqrt()
 }
 
-// Destructuring in let bindings
+/# Destructuring in let bindings
 const Point { x, y } = get_point();
 const (first, second, ..rest) = get_tuple();
 const [head, ..tail] = get_array();
 
-// Nested destructuring
+/# Nested destructuring
 const User {
     name,
     address: Address { street, city, .. },
@@ -4019,19 +4032,19 @@ const User {
 #### 16.4.4 For Loop Patterns
 
 ```veil
-// Destructuring in for loops
+/# Destructuring in for loops
 for (index, value) in array.iter().enumerate() {
     print("Item {}: {}", index, value);
 }
 
-// Destructuring complex structures
+/# Destructuring complex structures
 for User { name, age, .. } in users {
     if age >= 18 {
         print("Adult user: {}", name);
     }
 }
 
-// Pattern matching in for loop filters
+/# Pattern matching in for loop filters
 for Ok(data) in results.iter().filter_map(|r| r.as_ref().ok()) {
     process_data(data);
 }
@@ -4044,20 +4057,20 @@ for Ok(data) in results.iter().filter_map(|r| r.as_ref().ok()) {
 ```veil
 enum Status { Active, Inactive, Pending }
 
-// Compiler ensures all variants are covered
+/# Compiler ensures all variants are covered
 match status {
     Status::Active => handle_active(),
     Status::Inactive => handle_inactive(),
     Status::Pending => handle_pending(),
-    // No wildcard needed - all cases covered
+    /# No wildcard needed - all cases covered
 }
 
-// Exhaustiveness with nested patterns
+/# Exhaustiveness with nested patterns
 match result {
     Ok(Some(data)) => process_data(data),
     Ok(None) => handle_empty(),
     Err(error) => handle_error(error),
-    // Compiler verifies all Result<Option<T>, E> cases are handled
+    /# Compiler verifies all Result<Option<T>, E> cases are handled
 }
 ```
 
@@ -4066,17 +4079,17 @@ match result {
 ```veil
 match number {
     1..=10 => "small",
-    5..=15 => "medium",  // Warning: overlaps with previous pattern
-    11..=20 => "large",  // Warning: some cases already handled
+    5..=15 => "medium",  /# Warning: overlaps with previous pattern
+    11..=20 => "large",  /# Warning: some cases already handled
     _ => "other",
 }
 
-// Compiler detects unreachable patterns
+/# Compiler detects unreachable patterns
 match value {
     x if x > 0 => "positive",
     x if x < 0 => "negative",
     0 => "zero",
-    _ => "unreachable",  // Warning: all cases already handled
+    _ => "unreachable",  /# Warning: all cases already handled
 }
 ```
 
@@ -4085,16 +4098,16 @@ match value {
 #### 16.6.1 Optimization Strategies
 
 ```veil
-// Compiler optimizes common patterns efficiently
+/# Compiler optimizes common patterns efficiently
 match discriminant {
-    0 => action_0(),     // Jump table optimization
+    0 => action_0(),     /# Jump table optimization
     1 => action_1(),
     2 => action_2(),
     3 => action_3(),
     _ => default_action(),
 }
 
-// Decision tree optimization for complex patterns
+/# Decision tree optimization for complex patterns
 match (x, y) {
     (0, 0) => origin(),
     (0, _) => y_axis(),
@@ -4103,9 +4116,9 @@ match (x, y) {
     _ => general_case(),
 }
 
-// Efficient string matching
+/# Efficient string matching
 match command {
-    "quit" | "exit" => quit(),      // Optimized string comparison
+    "quit" | "exit" => quit(),      /# Optimized string comparison
     "help" | "?" => show_help(),
     "save" => save_file(),
     cmd if cmd.starts_with("load ") => load_file(&cmd[5..]),
@@ -4116,30 +4129,30 @@ match command {
 #### 16.6.2 Performance Best Practices
 
 ```veil
-// Order patterns by frequency (most common first)
+/# Order patterns by frequency (most common first)
 match request_type {
-    RequestType::Get => handle_get(),        // Most common
-    RequestType::Post => handle_post(),      // Second most common
-    RequestType::Put => handle_put(),        // Less common
-    RequestType::Delete => handle_delete(),  // Least common
+    RequestType::Get => handle_get(),        /# Most common
+    RequestType::Post => handle_post(),      /# Second most common
+    RequestType::Put => handle_put(),        /# Less common
+    RequestType::Delete => handle_delete(),  /# Least common
 }
 
-// Use guards sparingly for performance-critical code
+/# Use guards sparingly for performance-critical code
 match value {
-    // Prefer specific patterns over guards when possible
+    /# Prefer specific patterns over guards when possible
     0 => handle_zero(),
     1..=100 => handle_small(),
     101..=1000 => handle_medium(),
     _ => handle_large(),
 }
 
-// Rather than:
-// match value {
-//     n if n == 0 => handle_zero(),
-//     n if n <= 100 => handle_small(),
-//     n if n <= 1000 => handle_medium(),
-//     _ => handle_large(),
-// }
+/# Rather than:
+/# match value {
+/#     n if n == 0 => handle_zero(),
+/#     n if n <= 100 => handle_small(),
+/#     n if n <= 1000 => handle_medium(),
+/#     _ => handle_large(),
+/# }
 ```
 
 ## 17. Examples
@@ -4222,7 +4235,7 @@ fn process_user_data(json: str) -> Result<User, AppError> {
     const user = User::from_json(data)
         .map_err(AppError.ValidationError)?;
 
-    // Validate user data
+    /# Validate user data
     if user.email.is_empty() {
         return Err(AppError.ValidationError(
             ValidationError::new("Email cannot be empty")
@@ -4232,7 +4245,7 @@ fn process_user_data(json: str) -> Result<User, AppError> {
     Ok(user)
 }
 
-// Usage with error handling
+/# Usage with error handling
 fn main() -> Result<(), AppError> {
     const json_data = read_file("user.json")?;
     const user = process_user_data(json_data)?;
@@ -4314,7 +4327,7 @@ async fn route_request(request: HttpRequest) -> HttpResponse {
         ("GET", "/api/health") => HttpResponse::new(200, "OK"),
         ("POST", "/api/users") => create_user(request).await,
         ("GET", path) if path.starts_with("/api/users/") => {
-            const user_id = &path[11..];  // Extract user ID
+            const user_id = &path[11..];  /# Extract user ID
             get_user(user_id).await
         },
         _ => HttpResponse::new(404, "Not Found"),
@@ -4322,10 +4335,10 @@ async fn route_request(request: HttpRequest) -> HttpResponse {
 }
 
 async fn create_user(request: HttpRequest) -> HttpResponse {
-    // Parse JSON from request body
+    /# Parse JSON from request body
     match json::from_slice::<User>(&request.body) {
         Ok(user) => {
-            // Save user to database
+            /# Save user to database
             match save_user_to_db(user).await {
                 Ok(saved_user) => {
                     const response_body = json::to_string(&saved_user).unwrap();
@@ -4355,13 +4368,13 @@ async fn get_user(user_id: &str) -> HttpResponse {
 
 async fn main() -> io::Result<()> {
     const listener = TcpListener::bind("127.0.0.1:8080").await?;
-    println!("Server running on http://127.0.0.1:8080");
+    println!("Server running on http:/#127.0.0.1:8080");
 
     loop {
         const (stream, addr) = listener.accept().await?;
         println!("New connection from: {}", addr);
 
-        // Handle each connection concurrently
+        /# Handle each connection concurrently
         spawn {
             if let Err(e) = handle_request(stream).await {
                 eprintln!("Error handling request: {}", e);
@@ -4423,7 +4436,7 @@ impl ProcessingStats {
     }
 }
 
-// Data ingestion stage
+/# Data ingestion stage
 async fn data_ingester(
     file_path: &str,
     tx: channel::Sender<DataItem>
@@ -4445,12 +4458,12 @@ async fn data_ingester(
         line.clear();
     }
 
-    // Signal end of input
+    /# Signal end of input
     drop(tx);
     Ok(())
 }
 
-// Processing stage
+/# Processing stage
 async fn data_processor(
     rx: channel::Receiver<DataItem>,
     tx: channel::Sender<ProcessedItem>,
@@ -4482,14 +4495,14 @@ async fn data_processor(
 }
 
 async fn process_item(item: &DataItem) -> Result<str, ProcessingError> {
-    // Simulate complex processing
+    /# Simulate complex processing
     time::sleep(Duration::from_millis(10)).await;
 
     if item.content.is_empty() {
         return Err(ProcessingError::EmptyContent);
     }
 
-    // Transform the data
+    /# Transform the data
     const processed = item.content
         .to_uppercase()
         .chars()
@@ -4499,7 +4512,7 @@ async fn process_item(item: &DataItem) -> Result<str, ProcessingError> {
     Ok(format!("Processed: {}", processed))
 }
 
-// Output stage
+/# Output stage
 async fn result_writer(
     rx: channel::Receiver<ProcessedItem>,
     output_path: &str
@@ -4521,16 +4534,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     const num_processors = num_cpus::get();
     const stats = Arc::new(ProcessingStats::new());
 
-    // Create channels for pipeline stages
+    /# Create channels for pipeline stages
     const (input_tx, input_rx) = channel::bounded::<DataItem>(1000);
     const (output_tx, output_rx) = channel::bounded::<ProcessedItem>(1000);
 
-    // Start data ingestion
+    /# Start data ingestion
     const ingester_handle = spawn {
             data_ingester("input.txt", input_tx).await
         };
 
-    // Start multiple processors
+    /# Start multiple processors
     const processor_handles: Vec<_> = (0..num_processors)
         .map(|i| {
             const rx_clone = input_rx.clone();
@@ -4544,12 +4557,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         })
         .collect();
 
-    // Start result writer
+    /# Start result writer
     const writer_handle = spawn {
             result_writer(output_rx, "output.csv").await
         };
 
-    // Start stats reporting
+    /# Start stats reporting
     const stats_clone = stats.clone();
     const stats_handle = spawn {
         loop {
@@ -4558,27 +4571,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     };
 
-    // Wait for ingestion to complete
+    /# Wait for ingestion to complete
     ingester_handle.await?;
     println!("Data ingestion completed");
 
-    // Close input receiver to signal processors
+    /# Close input receiver to signal processors
     drop(input_rx);
 
-    // Wait for all processors to complete
+    /# Wait for all processors to complete
     for handle in processor_handles {
         handle.await;
     }
     println!("Data processing completed");
 
-    // Close output sender to signal writer
+    /# Close output sender to signal writer
     drop(output_tx);
 
-    // Wait for writer to complete
+    /# Wait for writer to complete
     writer_handle.await?;
     println!("Output writing completed");
 
-    // Print final stats
+    /# Print final stats
     stats.print_stats().await;
 
     Ok(())
@@ -4588,7 +4601,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 ### 17.7 Generic Data Structures
 
 ```veil
-// Generic tree structure with iterator support
+/# Generic tree structure with iterator support
 struct Tree<T> {
     root: Option<Box<TreeNode<T>>>,
     size: usize,
@@ -4656,7 +4669,7 @@ impl<T> Tree<T> {
     }
 }
 
-// Depth-first iterator
+/# Depth-first iterator
 struct DepthFirstIterator<T> {
     stack: Vec<&TreeNode<T>>,
 }
@@ -4677,7 +4690,7 @@ impl<T> Iterator for DepthFirstIterator<T> {
     fn next(&mut self) -> Option<&T> {
         const node = self.stack.pop()?;
 
-        // Add children in reverse order for correct DFS traversal
+        /# Add children in reverse order for correct DFS traversal
         for child in node.children.iter().rev() {
             self.stack.push(child);
         }
@@ -4686,7 +4699,7 @@ impl<T> Iterator for DepthFirstIterator<T> {
     }
 }
 
-// Breadth-first iterator
+/# Breadth-first iterator
 struct BreadthFirstIterator<T> {
     queue: VecDeque<&TreeNode<T>>,
 }
@@ -4707,7 +4720,7 @@ impl<T> Iterator for BreadthFirstIterator<T> {
     fn next(&mut self) -> Option<&T> {
         const node = self.queue.pop_front()?;
 
-        // Add all children to the queue
+        /# Add all children to the queue
         for child in &node.children {
             self.queue.push_back(child);
         }
@@ -4716,7 +4729,7 @@ impl<T> Iterator for BreadthFirstIterator<T> {
     }
 }
 
-// Cache implementation with LRU eviction
+/# Cache implementation with LRU eviction
 struct LruCache<K, V> {
     cache: HashMap<K, Box<CacheNode<K, V>>>,
     head: *mut CacheNode<K, V>,
@@ -4735,7 +4748,7 @@ impl<K: Hash + Eq + Clone, V> LruCache<K, V> {
     fn new(capacity: usize) -> Self {
         assert!(capacity > 0, "Cache capacity must be greater than 0");
 
-        // Create dummy head and tail nodes
+        /# Create dummy head and tail nodes
         const head = Box::into_raw(Box::new(CacheNode {
             key: unsafe { std::mem::zeroed() },
             value: unsafe { std::mem::zeroed() },
@@ -4766,7 +4779,7 @@ impl<K: Hash + Eq + Clone, V> LruCache<K, V> {
         if let Some(node_ptr) = self.cache.get(key) {
             const node = node_ptr.as_ref();
 
-            // Move to front
+            /# Move to front
             unsafe {
                 self.remove_node(node_ptr.as_ref());
                 self.add_to_front(node_ptr.as_ref());
@@ -4780,14 +4793,14 @@ impl<K: Hash + Eq + Clone, V> LruCache<K, V> {
 
     fn put(&mut self, key: K, value: V) {
         if let Some(existing) = self.cache.get_mut(&key) {
-            // Update existing node
+            /# Update existing node
             existing.value = value;
             unsafe {
                 self.remove_node(existing.as_ref());
                 self.add_to_front(existing.as_ref());
             }
         } else {
-            // Add new node
+            /# Add new node
             const new_node = Box::new(CacheNode {
                 key: key.clone(),
                 value,
@@ -4802,7 +4815,7 @@ impl<K: Hash + Eq + Clone, V> LruCache<K, V> {
                 self.add_to_front(&*node_ptr);
             }
 
-            // Check capacity
+            /# Check capacity
             if self.cache.len() > self.capacity {
                 self.evict_lru();
             }
@@ -4830,14 +4843,14 @@ impl<K: Hash + Eq + Clone, V> LruCache<K, V> {
 
             const key = (*lru).key.clone();
             self.cache.remove(&key);
-            Box::from_raw(lru); // Deallocate
+            Box::from_raw(lru); /# Deallocate
         }
     }
 }
 
-// Example usage
+/# Example usage
 fn main() {
-    // Tree example
+    /# Tree example
     var tree = Tree::new();
     tree.insert_root("root").unwrap();
     tree.add_child(&[], "child1").unwrap();
@@ -4854,16 +4867,16 @@ fn main() {
         println!("  {}", value);
     }
 
-    // Cache example
+    /# Cache example
     var cache = LruCache::new(2);
     cache.put("key1", "value1");
     cache.put("key2", "value2");
 
     println!("Get key1: {:?}", cache.get(&"key1"));
 
-    cache.put("key3", "value3"); // This evicts key2
-    println!("Get key2: {:?}", cache.get(&"key2")); // None
-    println!("Get key3: {:?}", cache.get(&"key3")); // Some("value3")
+    cache.put("key3", "value3"); /# This evicts key2
+    println!("Get key2: {:?}", cache.get(&"key2")); /# None
+    println!("Get key3: {:?}", cache.get(&"key3")); /# Some("value3")
 }
 ```
 
@@ -4919,29 +4932,29 @@ This section provides comprehensive guidance for writing high-performance Veil c
 #### 18.1.1 ARC Optimization Patterns
 
 ```veil
-// Minimize reference counting overhead
+/# Minimize reference counting overhead
 fn process_data(data: &[Item]) -> ProcessedData {
-    // Use borrowed references instead of cloning Arc<T>
-    // This avoids unnecessary reference count increments
+    /# Use borrowed references instead of cloning Arc<T>
+    /# This avoids unnecessary reference count increments
     let results = data.iter()
-        .map(|item| process_item(item))  // Borrow, don't clone
+        .map(|item| process_item(item))  /# Borrow, don't clone
         .collect();
 
     ProcessedData::new(results)
 }
 
-// Break reference cycles with weak references
+/# Break reference cycles with weak references
 struct Node {
     children: Vec<Arc<Node>>,
-    parent: Weak<Node>,  // Prevents cycles
+    parent: Weak<Node>,  /# Prevents cycles
 }
 
-// Use Cow (Clone on Write) for conditional cloning
+/# Use Cow (Clone on Write) for conditional cloning
 fn maybe_modify(data: Cow<'_, str>) -> Cow<'_, str> {
     if needs_modification(&data) {
-        Cow::Owned(data.to_uppercase())  // Clone only when needed
+        Cow::Owned(data.to_uppercase())  /# Clone only when needed
     } else {
-        data  // Return borrowed data unchanged
+        data  /# Return borrowed data unchanged
     }
 }
 ```
@@ -4949,47 +4962,47 @@ fn maybe_modify(data: Cow<'_, str>) -> Cow<'_, str> {
 #### 18.1.2 Memory Layout Optimization
 
 ```veil
-// Use repr(C) for predictable layout
+/# Use repr(C) for predictable layout
 #[repr(C)]
 struct OptimizedStruct {
-    // Order fields by size (largest first) to minimize padding
-    large_field: u64,     // 8 bytes
-    medium_field: u32,    // 4 bytes
-    small_field: u16,     // 2 bytes
-    tiny_field: u8,       // 1 byte
-    // Total: 15 bytes + 1 byte padding = 16 bytes
+    /# Order fields by size (largest first) to minimize padding
+    large_field: u64,     /# 8 bytes
+    medium_field: u32,    /# 4 bytes
+    small_field: u16,     /# 2 bytes
+    tiny_field: u8,       /# 1 byte
+    /# Total: 15 bytes + 1 byte padding = 16 bytes
 }
 
-// Use packed structs sparingly (can hurt performance)
+/# Use packed structs sparingly (can hurt performance)
 #[repr(packed)]
 struct PackedStruct {
     a: u32,
     b: u8,
-    c: u16,  // May be misaligned - slower access
+    c: u16,  /# May be misaligned - slower access
 }
 
-// Cache-friendly data structures
-struct SoA {  // Structure of Arrays - better for bulk operations
+/# Cache-friendly data structures
+struct SoA {  /# Structure of Arrays - better for bulk operations
     x_coords: Vec<f32>,
     y_coords: Vec<f32>,
     z_coords: Vec<f32>,
 }
 
-struct AoS {  // Array of Structures - better for individual access
+struct AoS {  /# Array of Structures - better for individual access
     points: Vec<Point3D>,
 }
 
-// Choose based on access patterns:
-// - Use SoA when processing all X coordinates together
-// - Use AoS when processing complete points together
+/# Choose based on access patterns:
+/# - Use SoA when processing all X coordinates together
+/# - Use AoS when processing complete points together
 ```
 
 #### 18.1.3 Allocation Strategies
 
 ```veil
-// Pre-allocate collections when size is known
+/# Pre-allocate collections when size is known
 fn process_large_dataset(items: &[Input]) -> Vec<Output> {
-    let mut results = Vec::with_capacity(items.len());  // Avoid reallocations
+    let mut results = Vec::with_capacity(items.len());  /# Avoid reallocations
 
     for item in items {
         results.push(process_item(item));
@@ -4998,7 +5011,7 @@ fn process_large_dataset(items: &[Input]) -> Vec<Output> {
     results
 }
 
-// Use object pools for frequently allocated objects
+/# Use object pools for frequently allocated objects
 struct ObjectPool<T> {
     objects: Mutex<Vec<T>>,
     factory: fn() -> T,
@@ -5012,16 +5025,16 @@ impl<T> ObjectPool<T> {
     }
 }
 
-// Use stack allocation for small, short-lived data
+/# Use stack allocation for small, short-lived data
 const SMALL_BUFFER_SIZE: usize = 1024;
 
 fn process_small_data(input: &[u8]) -> Result<ProcessedData, Error> {
     if input.len() <= SMALL_BUFFER_SIZE {
-        let mut buffer = [0u8; SMALL_BUFFER_SIZE];  // Stack allocated
-        // Process using stack buffer
+        let mut buffer = [0u8; SMALL_BUFFER_SIZE];  /# Stack allocated
+        /# Process using stack buffer
     } else {
-        let mut buffer = vec![0u8; input.len()];  // Heap allocated
-        // Process using heap buffer
+        let mut buffer = vec![0u8; input.len()];  /# Heap allocated
+        /# Process using heap buffer
     }
 }
 ```
@@ -5031,26 +5044,26 @@ fn process_small_data(input: &[u8]) -> Result<ProcessedData, Error> {
 #### 18.2.1 Runtime Configuration
 
 ```veil
-// Configure runtime for your workload
+/# Configure runtime for your workload
 async fn configure_runtime() {
     let config = runtime::Config {
-        // CPU-bound work: threads = CPU cores
+        /# CPU-bound work: threads = CPU cores
         worker_threads: num_cpus::get(),
 
-        // I/O-bound work: more threads than cores
-        // worker_threads: num_cpus::get() * 2,
+        /# I/O-bound work: more threads than cores
+        /# worker_threads: num_cpus::get() * 2,
 
-        // Blocking operation threads
+        /# Blocking operation threads
         max_blocking_threads: 512,
 
-        // Stack size for tasks (smaller = more tasks)
-        thread_stack_size: 2 * 1024 * 1024,  // 2MB
+        /# Stack size for tasks (smaller = more tasks)
+        thread_stack_size: 2 * 1024 * 1024,  /# 2MB
 
-        // Platform-specific optimizations
+        /# Platform-specific optimizations
         enable_io_uring: cfg!(target_os = "linux"),
         enable_completion_ports: cfg!(target_os = "windows"),
 
-        // Task queue configuration
+        /# Task queue configuration
         task_queue_size: 8192,
         steal_interval: Duration::from_micros(100),
     };
@@ -5062,16 +5075,16 @@ async fn configure_runtime() {
 #### 18.2.2 Task Scheduling Optimization
 
 ```veil
-// Use spawn_local for single-threaded contexts
+/# Use spawn_local for single-threaded contexts
 async fn single_threaded_work() {
-    // Avoids cross-thread synchronization overhead
+    /# Avoids cross-thread synchronization overhead
     spawn_local(async {
-        // Work that doesn't need to be Send
+        /# Work that doesn't need to be Send
         process_local_data().await
     }).await;
 }
 
-// Batch small async operations
+/# Batch small async operations
 async fn batch_operations(items: Vec<Item>) -> Vec<Result> {
     const BATCH_SIZE: usize = 100;
 
@@ -5089,12 +5102,12 @@ async fn batch_operations(items: Vec<Item>) -> Vec<Result> {
     results
 }
 
-// Use yield_now() for cooperative scheduling
+/# Use yield_now() for cooperative scheduling
 async fn cpu_intensive_work(data: &[u8]) {
     for (i, chunk) in data.chunks(1024).enumerate() {
         process_chunk(chunk);
 
-        // Yield periodically to allow other tasks to run
+        /# Yield periodically to allow other tasks to run
         if i % 100 == 0 {
             tokio::task::yield_now().await;
         }
@@ -5105,34 +5118,34 @@ async fn cpu_intensive_work(data: &[u8]) {
 #### 18.2.3 I/O Optimization
 
 ```veil
-// Use buffered I/O for better performance
+/# Use buffered I/O for better performance
 async fn efficient_file_processing(path: &Path) -> io::Result<ProcessedData> {
     let file = File::open(path).await?;
-    let mut reader = BufReader::with_capacity(64 * 1024, file);  // 64KB buffer
+    let mut reader = BufReader::with_capacity(64 * 1024, file);  /# 64KB buffer
 
     let mut processed = ProcessedData::new();
     let mut line = String::new();
 
     while reader.read_line(&mut line).await? > 0 {
         process_line(&line, &mut processed);
-        line.clear();  // Reuse string allocation
+        line.clear();  /# Reuse string allocation
     }
 
     Ok(processed)
 }
 
-// Use vectored I/O for multiple buffers
+/# Use vectored I/O for multiple buffers
 async fn write_multiple_buffers(
     writer: &mut impl AsyncWrite,
     buffers: &[&[u8]]
 ) -> io::Result<()> {
-    // More efficient than multiple write calls
+    /# More efficient than multiple write calls
     writer.write_vectored(buffers).await?;
     writer.flush().await?;
     Ok(())
 }
 
-// Connection pooling for network operations
+/# Connection pooling for network operations
 struct ConnectionPool {
     pool: Arc<Mutex<Vec<Connection>>>,
     max_size: usize,
@@ -5147,7 +5160,7 @@ impl ConnectionPool {
             }
         }
 
-        // Create new connection if pool is empty
+        /# Create new connection if pool is empty
         let conn = Connection::new().await?;
         Ok(PooledConnection::new(conn, self.pool.clone()))
     }
@@ -5159,7 +5172,7 @@ impl ConnectionPool {
 #### 18.3.1 Effective Use of comptime
 
 ```veil
-// Pre-compute expensive calculations
+/# Pre-compute expensive calculations
 comptime {
     const SINE_TABLE: [f64; 360] = {
         let mut table = [0.0; 360];
@@ -5171,45 +5184,45 @@ comptime {
 }
 
 fn fast_sine_degrees(degrees: u32) -> f64 {
-    SINE_TABLE[degrees as usize % 360]  // O(1) lookup
+    SINE_TABLE[degrees as usize % 360]  /# O(1) lookup
 }
 
-// Generate code based on configuration
+/# Generate code based on configuration
 comptime {
-    const FEATURES: [&str] = cfg_features!();  // Get enabled features
+    const FEATURES: [&str] = cfg_features!();  /# Get enabled features
 
     if FEATURES.contains("simd") {
-        // Generate SIMD-optimized code
+        /# Generate SIMD-optimized code
     } else {
-        // Generate scalar fallback
+        /# Generate scalar fallback
     }
 }
 
-// Type-level computations
+/# Type-level computations
 fn matrix_multiply<const M: usize, const N: usize, const P: usize>(
     a: [[f64; N]; M],
     b: [[f64; P]; N]
 ) -> [[f64; P]; M]
 where
-    [(); M * P]: Sized,  // Ensure result fits in memory
+    [(); M * P]: Sized,  /# Ensure result fits in memory
 {
     comptime {
         assert!(M <= 1000 && N <= 1000 && P <= 1000, "Matrix too large");
         assert!(M * P <= 100_000, "Result matrix too large");
     }
 
-    // Implementation with compile-time size checks
+    /# Implementation with compile-time size checks
 }
 ```
 
 #### 18.3.2 Code Generation Patterns
 
 ```veil
-// Generate optimized switch statements
+/# Generate optimized switch statements
 macro_rules! generate_dispatch {
     ($($variant:ident => $handler:expr),*) => {
         comptime {
-            // Generate jump table at compile time
+            /# Generate jump table at compile time
             const DISPATCH_TABLE: [fn(); COUNT] = [
                 $($handler),*
             ];
@@ -5223,16 +5236,16 @@ macro_rules! generate_dispatch {
     };
 }
 
-// Template specialization
+/# Template specialization
 trait Process<T> {
     fn process(&self, data: T) -> ProcessedData;
 }
 
-// Specialized implementation for numeric types
+/# Specialized implementation for numeric types
 impl Process<f64> for Processor {
     fn process(&self, data: f64) -> ProcessedData {
         comptime {
-            // Generate SIMD instructions for f64
+            /# Generate SIMD instructions for f64
             generate_simd_code!(f64)
         }
     }
@@ -5241,7 +5254,7 @@ impl Process<f64> for Processor {
 impl Process<String> for Processor {
     fn process(&self, data: String) -> ProcessedData {
         comptime {
-            // Generate string-specific optimizations
+            /# Generate string-specific optimizations
             generate_string_code!()
         }
     }
@@ -5253,14 +5266,14 @@ impl Process<String> for Processor {
 #### 18.4.1 Built-in Profiling Support
 
 ```veil
-// Function-level profiling
+/# Function-level profiling
 #[profile]
 fn expensive_function(data: &[u8]) -> ProcessedData {
-    // Automatically tracked by profiler
+    /# Automatically tracked by profiler
     process_data(data)
 }
 
-// Manual profiling scopes
+/# Manual profiling scopes
 fn complex_operation() {
     profile_scope!("initialization");
     let setup = initialize_data();
@@ -5272,7 +5285,7 @@ fn complex_operation() {
     cleanup_resources(processed);
 }
 
-// Async profiling
+/# Async profiling
 #[profile_async]
 async fn async_operation() -> Result<Data, Error> {
     let data = fetch_data().await?;
@@ -5280,10 +5293,10 @@ async fn async_operation() -> Result<Data, Error> {
     Ok(processed)
 }
 
-// Memory allocation tracking
+/# Memory allocation tracking
 #[track_allocations]
 fn memory_intensive_function() {
-    // Track all allocations within this function
+    /# Track all allocations within this function
     let large_vec = vec![0; 1_000_000];
     process_large_data(&large_vec);
 }
@@ -5292,17 +5305,17 @@ fn memory_intensive_function() {
 #### 18.4.2 Performance Testing
 
 ```veil
-// Benchmark tests
+/# Benchmark tests
 #[bench]
 fn bench_string_processing(b: &mut Bencher) {
     let data = generate_test_data();
 
     b.iter(|| {
-        black_box(process_strings(&data))  // Prevent optimization
+        black_box(process_strings(&data))  /# Prevent optimization
     });
 }
 
-// Comparative benchmarks
+/# Comparative benchmarks
 #[bench_group]
 mod string_benches {
     use super::*;
@@ -5323,14 +5336,14 @@ mod string_benches {
     }
 }
 
-// Memory usage benchmarks
+/# Memory usage benchmarks
 #[bench_memory]
 fn bench_memory_usage() {
     let _data = allocate_large_structure();
-    // Memory usage is tracked automatically
+    /# Memory usage is tracked automatically
 }
 
-// Async benchmarks
+/# Async benchmarks
 #[bench_async]
 async fn bench_async_operation(b: &mut AsyncBencher) {
     b.iter(|| async {
@@ -5343,7 +5356,7 @@ async fn bench_async_operation(b: &mut AsyncBencher) {
 #### 18.4.3 Performance Monitoring in Production
 
 ```veil
-// Runtime performance metrics
+/# Runtime performance metrics
 struct PerformanceMonitor {
     metrics: Arc<Mutex<MetricsCollector>>,
 }
@@ -5360,22 +5373,22 @@ impl PerformanceMonitor {
     }
 }
 
-// Automatic performance monitoring
+/# Automatic performance monitoring
 #[monitor_performance]
 async fn monitored_operation() -> Result<Data, Error> {
-    // Latency and error rates automatically tracked
+    /# Latency and error rates automatically tracked
     let data = fetch_data().await?;
     process_data(data).await
 }
 
-// Custom performance counters
+/# Custom performance counters
 static REQUESTS_PROCESSED: AtomicU64 = AtomicU64::new(0);
 static AVERAGE_LATENCY: AtomicU64 = AtomicU64::new(0);
 
 fn update_performance_metrics(latency: Duration) {
     REQUESTS_PROCESSED.fetch_add(1, Ordering::Relaxed);
 
-    // Update rolling average
+    /# Update rolling average
     let current_avg = AVERAGE_LATENCY.load(Ordering::Relaxed);
     let new_avg = (current_avg + latency.as_micros() as u64) / 2;
     AVERAGE_LATENCY.store(new_avg, Ordering::Relaxed);
@@ -5387,7 +5400,7 @@ fn update_performance_metrics(latency: Duration) {
 #### 18.5.1 CPU Architecture Optimizations
 
 ```veil
-// SIMD optimizations
+/# SIMD optimizations
 #[cfg(target_feature = "avx2")]
 fn simd_process_array(data: &[f32]) -> Vec<f32> {
     use std::arch::x86_64::*;
@@ -5408,25 +5421,25 @@ fn simd_process_array(data: &[f32]) -> Vec<f32> {
     result
 }
 
-// CPU cache optimization
-#[cold]  // Hint that this function is rarely called
+/# CPU cache optimization
+#[cold]  /# Hint that this function is rarely called
 fn handle_error_case() {
-    // Error handling code
+    /# Error handling code
 }
 
-#[hot]  // Hint that this function is frequently called
+#[hot]  /# Hint that this function is frequently called
 #[inline]
 fn fast_path_function() {
-    // Hot path code
+    /# Hot path code
 }
 
-// Branch prediction hints
+/# Branch prediction hints
 fn process_data(data: &[Item]) {
     for item in data {
-        if likely(item.is_valid()) {  // Hint: this branch is usually taken
+        if likely(item.is_valid()) {  /# Hint: this branch is usually taken
             process_valid_item(item);
         } else {
-            handle_invalid_item(item);  // Cold path
+            handle_invalid_item(item);  /# Cold path
         }
     }
 }
@@ -5435,22 +5448,22 @@ fn process_data(data: &[Item]) {
 #### 18.5.2 Memory System Optimization
 
 ```veil
-// Cache-line alignment for performance-critical structures
-#[repr(align(64))]  // Align to cache line boundary
+/# Cache-line alignment for performance-critical structures
+#[repr(align(64))]  /# Align to cache line boundary
 struct CacheAlignedData {
-    hot_data: [u64; 8],  // Frequently accessed data
+    hot_data: [u64; 8],  /# Frequently accessed data
 }
 
-// False sharing prevention
+/# False sharing prevention
 struct ThreadLocalData {
     #[cache_line_pad]
-    counter: AtomicU64,  // Prevent false sharing
+    counter: AtomicU64,  /# Prevent false sharing
 
     #[cache_line_pad]
     state: AtomicU32,
 }
 
-// Prefetching for predictable access patterns
+/# Prefetching for predictable access patterns
 fn process_linked_list(head: *const Node) {
     let mut current = head;
 
@@ -5458,7 +5471,7 @@ fn process_linked_list(head: *const Node) {
         while !current.is_null() {
             let node = &*current;
 
-            // Prefetch next node while processing current
+            /# Prefetch next node while processing current
             if !node.next.is_null() {
                 prefetch_read_data(node.next as *const u8);
             }
@@ -5469,12 +5482,12 @@ fn process_linked_list(head: *const Node) {
     }
 }
 
-// Memory mapping for large files
+/# Memory mapping for large files
 fn process_large_file(path: &Path) -> io::Result<ProcessedData> {
     let file = File::open(path)?;
     let mmap = unsafe { Mmap::map(&file)? };
 
-    // Process memory-mapped data directly
+    /# Process memory-mapped data directly
     process_bytes(&mmap[..])
 }
 ```
@@ -5488,7 +5501,7 @@ This section provides comprehensive guidance for integrating Veil with other pro
 #### 19.1.1 Basic C Interoperability
 
 ```veil
-// External C function declarations
+/# External C function declarations
 extern "C" {
     fn malloc(size: usize) -> rawptr;
     fn free(ptr: rawptr);
@@ -5498,7 +5511,7 @@ extern "C" {
     fn fclose(file: *mut FILE) -> i32;
 }
 
-// Calling C functions from Veil
+/# Calling C functions from Veil
 fn allocate_memory(size: usize) -> Option<rawptr> {
     unsafe {
         let ptr = malloc(size);
@@ -5510,7 +5523,7 @@ fn allocate_memory(size: usize) -> Option<rawptr> {
     }
 }
 
-// Exporting Veil functions to C
+/# Exporting Veil functions to C
 #[no_mangle]
 pub extern "C" fn veil_add(a: i32, b: i32) -> i32 {
     a + b
@@ -5523,7 +5536,7 @@ pub extern "C" fn veil_process_string(
     output: *mut u8,
     output_capacity: usize
 ) -> i32 {
-    // Safe wrapper around unsafe C interface
+    /# Safe wrapper around unsafe C interface
     if input.is_null() || output.is_null() {
         return -1;
     }
@@ -5539,7 +5552,7 @@ pub extern "C" fn veil_process_string(
         let processed_bytes = processed.as_bytes();
 
         if processed_bytes.len() > output_capacity {
-            return -3; // Buffer too small
+            return -3; /# Buffer too small
         }
 
         std::ptr::copy_nonoverlapping(
@@ -5556,7 +5569,7 @@ pub extern "C" fn veil_process_string(
 #### 19.1.2 C Structure Interoperability
 
 ```veil
-// C-compatible struct layouts
+/# C-compatible struct layouts
 #[repr(C)]
 struct CPoint {
     x: f64,
@@ -5577,13 +5590,13 @@ union CValue {
     ptr_val: *mut u8,
 }
 
-// Opaque types for C API
+/# Opaque types for C API
 #[repr(C)]
 pub struct OpaqueHandle {
     _private: [u8; 0],
 }
 
-// C API with opaque handles
+/# C API with opaque handles
 #[no_mangle]
 pub extern "C" fn create_processor() -> *mut OpaqueHandle {
     let processor = Box::new(Processor::new());
@@ -5595,7 +5608,7 @@ pub extern "C" fn destroy_processor(handle: *mut OpaqueHandle) {
     if !handle.is_null() {
         unsafe {
             let _processor = Box::from_raw(handle as *mut Processor);
-            // Processor is automatically dropped
+            /# Processor is automatically dropped
         }
     }
 }
@@ -5627,7 +5640,7 @@ pub extern "C" fn process_data(
 #### 19.2.1 Callback Functions
 
 ```veil
-// C-style callbacks
+/# C-style callbacks
 type CCallback = extern "C" fn(data: *const u8, len: usize, user_data: *mut u8) -> i32;
 
 #[no_mangle]
@@ -5635,14 +5648,14 @@ pub extern "C" fn register_callback(
     callback: CCallback,
     user_data: *mut u8
 ) -> i32 {
-    // Store callback for later use
+    /# Store callback for later use
     unsafe {
         GLOBAL_CALLBACK = Some((callback, user_data));
     }
     0
 }
 
-// Invoking callbacks safely
+/# Invoking callbacks safely
 fn invoke_callback(data: &[u8]) -> Result<(), CallbackError> {
     unsafe {
         if let Some((callback, user_data)) = GLOBAL_CALLBACK {
@@ -5658,10 +5671,10 @@ fn invoke_callback(data: &[u8]) -> Result<(), CallbackError> {
     }
 }
 
-// Veil closures to C function pointers
+/# Veil closures to C function pointers
 fn create_c_compatible_closure() -> extern "C" fn(i32) -> i32 {
     extern "C" fn closure_wrapper(x: i32) -> i32 {
-        // Stateless function - safe to convert
+        /# Stateless function - safe to convert
         x * 2
     }
     closure_wrapper
@@ -5671,7 +5684,7 @@ fn create_c_compatible_closure() -> extern "C" fn(i32) -> i32 {
 #### 19.2.2 Error Handling Across Language Boundaries
 
 ```veil
-// C-compatible error codes
+/# C-compatible error codes
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub enum CErrorCode {
@@ -5683,7 +5696,7 @@ pub enum CErrorCode {
     UnknownError = 255,
 }
 
-// Convert Veil errors to C error codes
+/# Convert Veil errors to C error codes
 impl From<VeilError> for CErrorCode {
     fn from(error: VeilError) -> Self {
         match error {
@@ -5696,7 +5709,7 @@ impl From<VeilError> for CErrorCode {
     }
 }
 
-// Error handling with detailed messages
+/# Error handling with detailed messages
 #[no_mangle]
 pub extern "C" fn get_last_error_message(
     buffer: *mut u8,
@@ -5713,7 +5726,7 @@ pub extern "C" fn get_last_error_message(
                     buffer,
                     copy_len
                 );
-                *buffer.offset(copy_len as isize) = 0; // Null terminator
+                *buffer.offset(copy_len as isize) = 0; /# Null terminator
             }
 
             msg_bytes.len()
@@ -5729,7 +5742,7 @@ pub extern "C" fn get_last_error_message(
 #### 19.3.1 Safe Memory Management Patterns
 
 ```veil
-// RAII wrapper for C resources
+/# RAII wrapper for C resources
 pub struct CResource {
     handle: *mut c_void,
     deleter: fn(*mut c_void),
@@ -5754,7 +5767,7 @@ impl Drop for CResource {
     }
 }
 
-// Safe C string handling
+/# Safe C string handling
 pub struct CString {
     inner: std::ffi::CString,
 }
@@ -5771,7 +5784,7 @@ impl CString {
     }
 }
 
-// Owned vs borrowed data across FFI
+/# Owned vs borrowed data across FFI
 #[no_mangle]
 pub extern "C" fn create_owned_data(size: usize) -> *mut u8 {
     if size == 0 {
@@ -5802,7 +5815,7 @@ pub extern "C" fn free_owned_data(ptr: *mut u8, size: usize) {
 #### 19.3.2 Thread Safety Considerations
 
 ```veil
-// Thread-safe C API
+/# Thread-safe C API
 use std::sync::{Arc, Mutex};
 
 struct ThreadSafeProcessor {
@@ -5838,12 +5851,12 @@ pub extern "C" fn thread_safe_process(
                     Err(_) => -2,
                 }
             },
-            Err(_) => -3, // Mutex poisoned
+            Err(_) => -3, /# Mutex poisoned
         }
     }
 }
 
-// Async-safe FFI with channels
+/# Async-safe FFI with channels
 use std::sync::mpsc;
 
 static mut COMMAND_SENDER: Option<mpsc::Sender<Command>> = None;
@@ -5869,7 +5882,7 @@ pub extern "C" fn send_async_command(
                 Err(_) => -1,
             }
         } else {
-            -2 // Not initialized
+            -2 /# Not initialized
         }
     }
 }
@@ -5880,7 +5893,7 @@ pub extern "C" fn send_async_command(
 #### 19.4.1 Automatic Header Generation
 
 ```veil
-// Generate C headers from Veil code
+/# Generate C headers from Veil code
 #[cbindgen::export]
 #[repr(C)]
 pub struct ExportedStruct {
@@ -5893,11 +5906,11 @@ pub extern "C" fn exported_function(
     input: *const ExportedStruct,
     output: *mut ExportedStruct
 ) -> i32 {
-    // Implementation
+    /# Implementation
     0
 }
 
-// Configuration for cbindgen (in cbindgen.toml)
+/# Configuration for cbindgen (in cbindgen.toml)
 /*
 [export]
 include = ["ExportedStruct", "exported_function"]
@@ -5917,7 +5930,7 @@ rename_fields = "PascalCase"
 #### 19.4.2 Binding Other Languages
 
 ```veil
-// Python bindings with PyO3
+/# Python bindings with PyO3
 #[pymodule]
 fn veil_module(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(process_data_py, m)?)?;
@@ -5959,7 +5972,7 @@ impl PyProcessor {
     }
 }
 
-// Node.js bindings with napi-rs
+/# Node.js bindings with napi-rs
 #[js_function(1)]
 fn process_data_js(ctx: CallContext) -> napi::Result<JsBuffer> {
     let input_buffer = ctx.get::<JsBuffer>(0)?;
@@ -5981,7 +5994,7 @@ fn process_data_js(ctx: CallContext) -> napi::Result<JsBuffer> {
 #### 19.5.1 Windows Integration
 
 ```veil
-// Windows API integration
+/# Windows API integration
 #[cfg(target_os = "windows")]
 mod windows {
     use winapi::um::winnt::HANDLE;
@@ -6007,7 +6020,7 @@ mod windows {
         }
     }
 
-    // COM interface implementation
+    /# COM interface implementation
     #[repr(C)]
     pub struct VeilComObject {
         vtable: *const VeilComVTable,
@@ -6045,7 +6058,7 @@ mod windows {
 #### 19.5.2 Unix/Linux Integration
 
 ```veil
-// Unix-specific functionality
+/# Unix-specific functionality
 #[cfg(unix)]
 mod unix {
     use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
@@ -6072,15 +6085,15 @@ mod unix {
         }
     }
 
-    // Signal handling
+    /# Signal handling
     extern "C" fn signal_handler(sig: libc::c_int) {
         match sig {
             libc::SIGINT => {
-                // Handle Ctrl+C
+                /# Handle Ctrl+C
                 shutdown_gracefully();
             },
             libc::SIGTERM => {
-                // Handle termination request
+                /# Handle termination request
                 shutdown_gracefully();
             },
             _ => {},
@@ -6100,7 +6113,7 @@ mod unix {
 #### 19.5.3 WebAssembly Integration
 
 ```veil
-// WebAssembly bindings
+/# WebAssembly bindings
 #[cfg(target_arch = "wasm32")]
 mod wasm {
     use wasm_bindgen::prelude::*;
@@ -6132,7 +6145,7 @@ mod wasm {
         }
     }
 
-    // JavaScript interop
+    /# JavaScript interop
     #[wasm_bindgen]
     extern "C" {
         #[wasm_bindgen(js_namespace = console)]
@@ -6162,25 +6175,25 @@ mod wasm {
 #### 19.6.1 API Design Guidelines
 
 ```veil
-// Design C APIs that are easy to use correctly
-// and hard to use incorrectly
+/# Design C APIs that are easy to use correctly
+/# and hard to use incorrectly
 
-// Good: Clear ownership semantics
+/# Good: Clear ownership semantics
 #[no_mangle]
 pub extern "C" fn create_object() -> *mut OpaqueObject {
-    // Caller owns the returned pointer
+    /# Caller owns the returned pointer
     Box::into_raw(Box::new(Object::new()))
 }
 
 #[no_mangle]
 pub extern "C" fn destroy_object(obj: *mut OpaqueObject) {
-    // Caller transfers ownership back
+    /# Caller transfers ownership back
     if !obj.is_null() {
         unsafe { Box::from_raw(obj); }
     }
 }
 
-// Good: Explicit buffer management
+/# Good: Explicit buffer management
 #[no_mangle]
 pub extern "C" fn get_data(
     obj: *const OpaqueObject,
@@ -6188,7 +6201,7 @@ pub extern "C" fn get_data(
     buffer_size: usize,
     actual_size: *mut usize
 ) -> i32 {
-    // Returns required buffer size even if buffer is too small
+    /# Returns required buffer size even if buffer is too small
     if obj.is_null() || actual_size.is_null() {
         return -1;
     }
@@ -6200,7 +6213,7 @@ pub extern "C" fn get_data(
         *actual_size = data.len();
 
         if buffer.is_null() || buffer_size < data.len() {
-            return -2; // Buffer too small, but actual_size is set
+            return -2; /# Buffer too small, but actual_size is set
         }
 
         std::ptr::copy_nonoverlapping(
@@ -6209,11 +6222,11 @@ pub extern "C" fn get_data(
             data.len()
         );
 
-        0 // Success
+        0 /# Success
     }
 }
 
-// Version information for API evolution
+/# Version information for API evolution
 #[no_mangle]
 pub extern "C" fn get_api_version() -> u32 {
     (MAJOR_VERSION << 16) | (MINOR_VERSION << 8) | PATCH_VERSION
@@ -6233,7 +6246,7 @@ pub extern "C" fn is_feature_supported(feature: u32) -> bool {
 #### 19.6.2 Testing Interoperability
 
 ```veil
-// Integration tests for C API
+/# Integration tests for C API
 #[cfg(test)]
 mod ffi_tests {
     use super::*;
@@ -6242,15 +6255,15 @@ mod ffi_tests {
     #[test]
     fn test_c_api_lifecycle() {
         unsafe {
-            // Test object creation and destruction
+            /# Test object creation and destruction
             let obj = create_object();
             assert!(!obj.is_null());
 
-            // Test basic operations
+            /# Test basic operations
             let result = process_data(obj, b"test".as_ptr(), 4);
             assert_eq!(result, 0);
 
-            // Test cleanup
+            /# Test cleanup
             destroy_object(obj);
         }
     }
@@ -6258,11 +6271,11 @@ mod ffi_tests {
     #[test]
     fn test_error_handling() {
         unsafe {
-            // Test null pointer handling
+            /# Test null pointer handling
             let result = process_data(std::ptr::null_mut(), std::ptr::null(), 0);
             assert_eq!(result, -1);
 
-            // Test error message retrieval
+            /# Test error message retrieval
             let mut buffer = [0u8; 256];
             let len = get_last_error_message(buffer.as_mut_ptr(), buffer.len());
             assert!(len > 0);
@@ -6306,7 +6319,7 @@ mod ffi_tests {
 2. **Cast**: as — Left
 3. **Ranges**: .. ..= ..> ..< — Left
 4. **Power**: \*\* — Right
-5. **Multiplicative**: \* / // % — Left
+5. **Multiplicative**: \* / /# % — Left
 6. **Additive**: + - — Left
 7. **Shifts**: << >> — Left
 8. **Bitwise AND**: & — Left
@@ -6356,7 +6369,7 @@ relational_expression ::= additive_expression (('<' | '>' | '<=' | '>=' | 'in' |
 
 additive_expression ::= multiplicative_expression (('+' | '-') multiplicative_expression)*
 
-multiplicative_expression ::= power_expression (('*' | '/' | '//' | '%') power_expression)*
+multiplicative_expression ::= power_expression (('*' | '/' | '/#' | '%') power_expression)*
 
 power_expression ::= cast_expression (('**') power_expression)*
 
@@ -6407,9 +6420,9 @@ literal ::= integer_literal
 ```ebnf
 type ::= base_type type_modifier*
 
-type_modifier ::= '?'           // Optional type
-                | '[' ']'       // Array type
-                | '[' integer_literal ']'  // Sized array
+type_modifier ::= '?'           /# Optional type
+                | '[' ']'       /# Array type
+                | '[' integer_literal ']'  /# Sized array
 
 base_type ::= primitive_type
             | identifier generic_args?

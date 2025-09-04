@@ -929,15 +929,6 @@ impl TypeChecker {
                 }
                 Ok(HirType::Range)
             }
-
-            // Fallback for not-yet-implemented operators
-            _ => {
-                self.warning(format!(
-                    "Operator {:?} not yet fully supported for types {:?} and {:?}",
-                    op, left_type, right_type
-                ));
-                Ok(Unknown)
-            }
         }
     }
 

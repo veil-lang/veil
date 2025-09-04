@@ -1,6 +1,5 @@
 use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
 
 #[test]
 fn mvl_build_generates_c_and_hir_dump_with_no_cc() {

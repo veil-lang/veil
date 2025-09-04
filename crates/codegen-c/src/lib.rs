@@ -205,7 +205,6 @@ impl IrCBackend {
                             );
                         }
                         // Extended IR ops (only compiled when the feature is enabled)
-                        #[cfg(feature = "extended_ir_ops")]
                         veil_ir::InstIR::Mod { lhs, rhs } => {
                             declare_or_assign(
                                 res,
@@ -214,7 +213,6 @@ impl IrCBackend {
                                 &mut out,
                             );
                         }
-                        #[cfg(feature = "extended_ir_ops")]
                         veil_ir::InstIR::BitAnd { lhs, rhs } => {
                             declare_or_assign(
                                 res,
@@ -223,7 +221,6 @@ impl IrCBackend {
                                 &mut out,
                             );
                         }
-                        #[cfg(feature = "extended_ir_ops")]
                         veil_ir::InstIR::BitOr { lhs, rhs } => {
                             declare_or_assign(
                                 res,
@@ -232,7 +229,6 @@ impl IrCBackend {
                                 &mut out,
                             );
                         }
-                        #[cfg(feature = "extended_ir_ops")]
                         veil_ir::InstIR::BitXor { lhs, rhs } => {
                             declare_or_assign(
                                 res,
@@ -241,7 +237,6 @@ impl IrCBackend {
                                 &mut out,
                             );
                         }
-                        #[cfg(feature = "extended_ir_ops")]
                         veil_ir::InstIR::Shl { lhs, rhs } => {
                             declare_or_assign(
                                 res,
@@ -250,7 +245,6 @@ impl IrCBackend {
                                 &mut out,
                             );
                         }
-                        #[cfg(feature = "extended_ir_ops")]
                         veil_ir::InstIR::Shr { lhs, rhs } => {
                             declare_or_assign(
                                 res,
@@ -259,7 +253,6 @@ impl IrCBackend {
                                 &mut out,
                             );
                         }
-                        #[cfg(feature = "extended_ir_ops")]
                         veil_ir::InstIR::Not { value } => {
                             declare_or_assign(
                                 res,
@@ -268,7 +261,6 @@ impl IrCBackend {
                                 &mut out,
                             );
                         }
-                        #[cfg(feature = "extended_ir_ops")]
                         veil_ir::InstIR::Neg { value } => {
                             declare_or_assign(
                                 res,
@@ -277,7 +269,6 @@ impl IrCBackend {
                                 &mut out,
                             );
                         }
-                        #[cfg(feature = "extended_ir_ops")]
                         veil_ir::InstIR::Pos { value } => {
                             declare_or_assign(
                                 res,
@@ -286,7 +277,6 @@ impl IrCBackend {
                                 &mut out,
                             );
                         }
-                        #[cfg(feature = "extended_ir_ops")]
                         veil_ir::InstIR::Cast { value, ty } => {
                             let cty = self.type_to_c(ty);
                             declare_or_assign(
@@ -400,12 +390,6 @@ impl IrCBackend {
                                     &mut out,
                                 );
                             }
-                        }
-                        #[cfg(not(feature = "extended_ir_ops"))]
-                        _ => {
-                            // Fallback for extended IR ops when the feature is disabled.
-                            // Emit a neutral temporary to keep the TU valid and deterministic.
-                            declare_or_assign(res, "int64_t", "0", &mut out);
                         }
                     }
                 }

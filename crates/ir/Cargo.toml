@@ -6,9 +6,7 @@ license = "MIT OR Apache-2.0"
 description = "Intermediate Representation for the Veil compiler (post-monomorphization)."
 publish = false
 
-[features]
-# Enable additional IR operations (mod, bitwise, shifts, unary ops, cast)
-extended_ir_ops = []
+
 
 [lib]
 name = "veil_ir"

@@ -21,11 +21,6 @@ use veil_ir as ir;
 use veil_normalize as normalize;
 use veil_resolve as resolve;
 use veil_typeck as typeck;
-pub mod benchmark;
-pub mod init;
-pub mod run;
-pub mod test;
-pub mod upgrade;
 
 #[derive(Debug)]
 #[allow(dead_code)]
