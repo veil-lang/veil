@@ -223,7 +223,7 @@ fn test_expression_lowering() {
 
 #[test]
 fn test_pattern_lowering() {
-    let pattern = ast::Pattern::Variable("x".to_string(), Span::new(0, 1));
+    let _pattern = ast::Pattern::Variable("x".to_string(), Span::new(0, 1));
 
     let let_stmt = ast::Stmt::Let(
         "x".to_string(),

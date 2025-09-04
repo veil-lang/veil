@@ -140,10 +140,7 @@ impl FsPassCache {
 impl PassCache for FsPassCache {
     fn get(&self, pass: &str, key: &str) -> Option<Vec<u8>> {
         let path = self.entry_path(pass, key);
-        match fs::read(&path) {
-            Ok(bytes) => Some(bytes),
-            Err(_) => None,
-        }
+        fs::read(&path).ok()
     }
 
     fn put(&self, pass: &str, key: &str, bytes: &[u8]) -> Result<()> {

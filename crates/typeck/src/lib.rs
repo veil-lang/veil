@@ -409,14 +409,14 @@ impl TypeChecker {
         self.check_block(&mut func.body)?;
 
         // Check if inferred return type differs from declared
-        if let Some(inferred) = &self.context.inferred_return_type {
-            if !self.context.types_compatible(&func.return_type, inferred) {
-                let diagnostic: Diag = ReportingDiagnostic::error().with_message(format!(
-                    "Function declared return type {:?} but inferred {:?}",
-                    func.return_type, inferred
-                ));
-                self.errors.push(diagnostic);
-            }
+        if let Some(inferred) = &self.context.inferred_return_type
+            && !self.context.types_compatible(&func.return_type, inferred)
+        {
+            let diagnostic: Diag = ReportingDiagnostic::error().with_message(format!(
+                "Function declared return type {:?} but inferred {:?}",
+                func.return_type, inferred
+            ));
+            self.errors.push(diagnostic);
         }
 
         // Validate postfix '?' obligations (if any) against the function return type

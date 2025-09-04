@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Run subcommand: compiles the given input and executes the resulting binary.
 /// Uses the extracted end-to-end pipeline from this crate.

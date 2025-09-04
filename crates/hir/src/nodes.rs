@@ -506,9 +506,9 @@ pub enum HirPatternKind {
 }
 
 /// Field in a struct literal with resolved symbol information
-
+///
 /// Field in a struct pattern with resolved symbol information
-
+///
 /// HIR match arm
 #[derive(Debug, Clone, PartialEq)]
 pub struct HirMatchArm {

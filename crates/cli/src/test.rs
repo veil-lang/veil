@@ -56,14 +56,14 @@ pub fn run_test(
     }
 
     // If a specific test was requested, verify it exists
-    if let Some(ref name) = test_name {
-        if !tests.iter().any(|t| t == name) {
-            return Err(anyhow!(
-                "Requested test '{}' not found in {}",
-                name,
-                input.display()
-            ));
-        }
+    if let Some(ref name) = test_name
+        && !tests.iter().any(|t| t == name)
+    {
+        return Err(anyhow!(
+            "Requested test '{}' not found in {}",
+            name,
+            input.display()
+        ));
     }
 
     // Compile the program as-is. This validates that test blocks type-check and

@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, anyhow};
 use std::fs;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::SystemTime;
 
 pub fn create_project(directory: &Path, project_name: &str) -> Result<()> {

@@ -54,7 +54,7 @@ mod tests {
 
     #[test]
     fn default_iter_has_next_is_false() {
-        assert_eq!(iter_has_next(std::ptr::null_mut()), false);
+        assert!(!iter_has_next(std::ptr::null_mut()));
     }
 
     #[test]

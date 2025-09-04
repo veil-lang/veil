@@ -41,6 +41,12 @@ pub struct ProgramIR {
     // Future: globals, data segments, cfg metadata, etc.
 }
 
+impl Default for ProgramIR {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ProgramIR {
     pub fn new() -> Self {
         Self {
@@ -445,7 +451,7 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
         id
     }
 
-    fn get_block_mut<'a>(blocks: &'a mut Vec<BlockIR>, id: BlockId) -> &'a mut BlockIR {
+    fn get_block_mut(blocks: &mut Vec<BlockIR>, id: BlockId) -> &mut BlockIR {
         // Ids are sequential and correspond to indices
         &mut blocks[id.0 as usize]
     }
@@ -894,7 +900,7 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                     // Record LocalIR with best-effort type from HIR
                     let local_ty = ty
                         .as_ref()
-                        .map(|t| map_hir_type_to_ir(t))
+                        .map(map_hir_type_to_ir)
                         .unwrap_or(TypeIR::Opaque("unknown".to_string()));
                     locals_meta.push(LocalIR {
                         id: new_local,
@@ -903,20 +909,19 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                     });
 
                     // Initialize with RHS if provided
-                    if let Some(init_expr) = init {
-                        if let Some(v) =
+                    if let Some(init_expr) = init
+                        && let Some(v) =
                             lower_expr(init_expr, blocks, cur_bb, next_val, locals, local_slots)
-                        {
-                            let _ = emit(
-                                blocks,
-                                *cur_bb,
-                                next_val,
-                                InstIR::Store {
-                                    local: new_local,
-                                    value: v,
-                                },
-                            );
-                        }
+                    {
+                        let _ = emit(
+                            blocks,
+                            *cur_bb,
+                            next_val,
+                            InstIR::Store {
+                                local: new_local,
+                                value: v,
+                            },
+                        );
                     }
                 }
                 None
@@ -966,7 +971,7 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                             .unwrap_or_else(|| {
                                 emit(blocks, *cur_bb, next_val, InstIR::ConstInt { value: 0 })
                             });
-                        let mut next_bb = *cur_bb;
+                        let next_bb = *cur_bb;
                         let merge_bb = new_block(blocks);
                         let mut arm_blocks: Vec<(Option<ValueId>, BlockId)> = Vec::new();
                         // Create a basic block per arm and record literal value when applicable
@@ -1184,23 +1189,20 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
             }
             S::Assign { lhs, rhs } => {
                 // If assigning to a local slot, emit a Store; otherwise just evaluate RHS
-                if let hir::HirExprKind::Variable(var_name) = &*lhs.kind {
-                    if let Some(lid) = local_slots.get(var_name).copied() {
-                        if let Some(v) =
-                            lower_expr(rhs, blocks, cur_bb, next_val, locals, local_slots)
-                        {
-                            let _ = emit(
-                                blocks,
-                                *cur_bb,
-                                next_val,
-                                InstIR::Store {
-                                    local: lid,
-                                    value: v,
-                                },
-                            );
-                            return None;
-                        }
-                    }
+                if let hir::HirExprKind::Variable(var_name) = &*lhs.kind
+                    && let Some(lid) = local_slots.get(var_name).copied()
+                    && let Some(v) = lower_expr(rhs, blocks, cur_bb, next_val, locals, local_slots)
+                {
+                    let _ = emit(
+                        blocks,
+                        *cur_bb,
+                        next_val,
+                        InstIR::Store {
+                            local: lid,
+                            value: v,
+                        },
+                    );
+                    return None;
                 }
                 let _ = lower_expr(rhs, blocks, cur_bb, next_val, locals, local_slots);
                 None
@@ -1319,8 +1321,6 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
 /// - For now, this scaffolds a ProgramIR from AST, creating one entry block per function
 ///   with an empty body and a `ret`.
 pub fn lower_from_ast(program: &ast::ast::Program) -> ProgramIR {
-    use std::collections::HashMap;
-
     // Helper: emit an instruction into a block and produce a fresh ValueId
     fn emit(block: &mut BlockIR, next_val: &mut u32, inst: InstIR) -> ValueId {
         block.insts.push(inst);

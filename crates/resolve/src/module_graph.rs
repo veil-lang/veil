@@ -442,10 +442,10 @@ impl ModuleGraph {
         // Check for invalid exports
         for module in self.modules.values() {
             for export in &module.exports {
-                if let ExportKind::Reexport { source_module, .. } = &export.kind {
-                    if self.find_module_by_path(source_module).is_none() {
-                        errors.push(ResolveError::module_not_found(source_module));
-                    }
+                if let ExportKind::Reexport { source_module, .. } = &export.kind
+                    && self.find_module_by_path(source_module).is_none()
+                {
+                    errors.push(ResolveError::module_not_found(source_module));
                 }
             }
         }

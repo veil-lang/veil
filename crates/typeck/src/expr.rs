@@ -499,7 +499,7 @@ impl TypeChecker {
         &mut self,
         base_type: &HirType,
         field_name: &str,
-        location: NodeId,
+        _location: NodeId,
     ) -> Result<HirType, Vec<Diag>> {
         match base_type {
             HirType::Struct(struct_name) => {
@@ -559,7 +559,7 @@ impl TypeChecker {
         &mut self,
         func_type: &HirType,
         arg_types: &[HirType],
-        location: NodeId,
+        _location: NodeId,
     ) -> Result<HirType, Vec<Diag>> {
         match func_type {
             HirType::Function(param_types, return_type) => {

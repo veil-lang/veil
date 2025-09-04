@@ -182,9 +182,7 @@ impl HirVisitor for HirFormatter {
         }
     }
 
-    fn default_output(&self) -> Self::Output {
-        ()
-    }
+    fn default_output(&self) -> Self::Output {}
 }
 
 #[test]
@@ -322,7 +320,7 @@ fn test_struct_with_methods_snapshot() {
     let mut formatter = HirFormatter::new();
     let output = formatter.format_hir(&hir_program);
 
-    let expected = r#"HIR Program (module_id: mod_0)
+    let _expected = r#"HIR Program (module_id: mod_0)
   Struct: Point
     Fields:
       x: F64

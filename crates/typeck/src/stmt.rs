@@ -25,15 +25,14 @@ impl TypeChecker {
                 };
 
                 // Check type annotation if present
-                if let Some(annotation) = ty {
-                    if let Some(ref init_ty) = init_type {
-                        if !self.context.types_compatible(annotation, init_ty) {
-                            self.error(format!(
-                                "Type annotation {:?} does not match initializer type {:?}",
-                                annotation, init_ty
-                            ));
-                        }
-                    }
+                if let Some(annotation) = ty
+                    && let Some(ref init_ty) = init_type
+                    && !self.context.types_compatible(annotation, init_ty)
+                {
+                    self.error(format!(
+                        "Type annotation {:?} does not match initializer type {:?}",
+                        annotation, init_ty
+                    ));
                 }
 
                 // Determine the variable's type
@@ -84,13 +83,13 @@ impl TypeChecker {
                     }
                 } else {
                     // Empty return - check if function expects void
-                    if let Some(expected_return) = &self.context.current_return_type {
-                        if *expected_return != HirType::Void {
-                            self.error(format!(
-                                "Empty return in function expecting {:?}",
-                                expected_return
-                            ));
-                        }
+                    if let Some(expected_return) = &self.context.current_return_type
+                        && *expected_return != HirType::Void
+                    {
+                        self.error(format!(
+                            "Empty return in function expecting {:?}",
+                            expected_return
+                        ));
                     }
                 }
 
@@ -218,13 +217,11 @@ impl TypeChecker {
                     } else {
                         None
                     }
-                }) {
-                    if let HirPatternKind::Tuple(pelems) = &*pattern.kind {
-                        if pelems.len() == telems.len() {
-                            for (p, t) in pelems.iter().zip(telems.iter()) {
-                                self.check_pattern_against_type(p, t)?;
-                            }
-                        }
+                }) && let HirPatternKind::Tuple(pelems) = &*pattern.kind
+                    && pelems.len() == telems.len()
+                {
+                    for (p, t) in pelems.iter().zip(telems.iter()) {
+                        self.check_pattern_against_type(p, t)?;
                     }
                 }
             }

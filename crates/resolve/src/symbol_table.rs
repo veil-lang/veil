@@ -245,15 +245,12 @@ impl SymbolTable {
         let module_id = symbol.module_id;
 
         // Update name mapping
-        self.name_to_symbol
-            .entry(name)
-            .or_insert_with(Vec::new)
-            .push(symbol_id);
+        self.name_to_symbol.entry(name).or_default().push(symbol_id);
 
         // Update module mapping
         self.module_symbols
             .entry(module_id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(symbol_id);
 
         // Update type cache if this is a type

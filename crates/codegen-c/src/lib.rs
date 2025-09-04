@@ -89,7 +89,7 @@ impl IrCBackend {
             out.push_str(&sig);
             out.push_str(";\n");
         }
-        out.push_str("\n");
+        out.push('\n');
 
         // Definitions
         for f in &fns {
@@ -437,7 +437,7 @@ impl IrCBackend {
                     }
                 }
 
-                out.push_str("\n");
+                out.push('\n');
             }
 
             out.push_str("}\n\n");

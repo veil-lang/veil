@@ -780,9 +780,7 @@ impl HirVisitor for VariableCollector {
         self.walk_pattern(pattern)
     }
 
-    fn default_output(&self) -> Self::Output {
-        ()
-    }
+    fn default_output(&self) -> Self::Output {}
 }
 
 /// A visitor that counts different types of HIR nodes
@@ -823,9 +821,7 @@ impl HirVisitor for NodeCounter {
         self.walk_stmt(stmt)
     }
 
-    fn default_output(&self) -> Self::Output {
-        ()
-    }
+    fn default_output(&self) -> Self::Output {}
 }
 
 #[cfg(test)]

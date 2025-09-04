@@ -122,10 +122,10 @@ fn rustc_version() -> Option<String> {
 }
 
 fn build_timestamp_unix() -> u64 {
-    if let Ok(src_epoch) = env::var("SOURCE_DATE_EPOCH") {
-        if let Ok(v) = src_epoch.trim().parse::<u64>() {
-            return v;
-        }
+    if let Ok(src_epoch) = env::var("SOURCE_DATE_EPOCH")
+        && let Ok(v) = src_epoch.trim().parse::<u64>()
+    {
+        return v;
     }
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

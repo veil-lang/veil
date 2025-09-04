@@ -102,14 +102,15 @@ impl Scope {
 
     /// Define a type parameter in this scope
     pub fn define_type_param(&mut self, name: String, symbol_id: SymbolId) -> Result<(), String> {
-        if self.type_params.contains_key(&name) {
-            Err(format!(
+        match self.type_params.entry(name) {
+            std::collections::hash_map::Entry::Occupied(entry) => Err(format!(
                 "Type parameter '{}' is already defined in this scope",
-                name
-            ))
-        } else {
-            self.type_params.insert(name, symbol_id);
-            Ok(())
+                entry.key()
+            )),
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                entry.insert(symbol_id);
+                Ok(())
+            }
         }
     }
 
@@ -349,10 +350,10 @@ impl ScopeStack {
     /// Look up a symbol starting from the current scope and walking up the stack
     pub fn lookup_symbol(&self, name: &str) -> Option<(SymbolId, ScopeId)> {
         for &scope_id in self.stack.iter().rev() {
-            if let Some(scope) = self.scopes.get(&scope_id) {
-                if let Some(symbol_id) = scope.lookup_local(name) {
-                    return Some((symbol_id, scope_id));
-                }
+            if let Some(scope) = self.scopes.get(&scope_id)
+                && let Some(symbol_id) = scope.lookup_local(name)
+            {
+                return Some((symbol_id, scope_id));
             }
         }
         None
@@ -361,10 +362,10 @@ impl ScopeStack {
     /// Look up a type parameter starting from the current scope and walking up the stack
     pub fn lookup_type_param(&self, name: &str) -> Option<(SymbolId, ScopeId)> {
         for &scope_id in self.stack.iter().rev() {
-            if let Some(scope) = self.scopes.get(&scope_id) {
-                if let Some(symbol_id) = scope.lookup_local_type_param(name) {
-                    return Some((symbol_id, scope_id));
-                }
+            if let Some(scope) = self.scopes.get(&scope_id)
+                && let Some(symbol_id) = scope.lookup_local_type_param(name)
+            {
+                return Some((symbol_id, scope_id));
             }
         }
         None

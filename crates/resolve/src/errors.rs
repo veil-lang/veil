@@ -5,7 +5,7 @@
 
 use codespan::{FileId, Span};
 use std::fmt;
-use veil_diagnostics::{Diagnostic, Label, Severity};
+use veil_diagnostics::{Diagnostic, Label};
 
 /// Result type for resolver operations
 pub type ResolveResult<T> = Result<T, Vec<ResolveError>>;
@@ -46,7 +46,7 @@ impl ResolveError {
 
         if let (Some(file_id), Some(span)) = (self.file_id, self.span) {
             diagnostic = diagnostic.with_labels(vec![
-                Label::primary(file_id, span).with_message(&self.kind.label_message()),
+                Label::primary(file_id, span).with_message(self.kind.label_message()),
             ]);
         }
 
@@ -371,7 +371,7 @@ mod tests {
     fn test_diagnostic_conversion() {
         let error = ResolveError::undefined_symbol("test_symbol");
         let diagnostic = error.to_diagnostic();
-        assert_eq!(diagnostic.severity, Severity::Error);
+        assert_eq!(diagnostic.severity, veil_diagnostics::Severity::Error);
     }
 
     #[test]

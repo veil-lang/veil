@@ -123,10 +123,10 @@ impl ResolverContext {
         let name = symbol.name.clone();
 
         // Check if symbol already exists in current scope
-        if let Some(scope) = self.scope_stack.current_scope() {
-            if scope.shadows_symbol(&name) {
-                return Err(ResolveError::duplicate_symbol(&name));
-            }
+        if let Some(scope) = self.scope_stack.current_scope()
+            && scope.shadows_symbol(&name)
+        {
+            return Err(ResolveError::duplicate_symbol(&name));
         }
 
         // Add to symbol table
@@ -178,12 +178,11 @@ impl ResolverContext {
         }
 
         // Then check for type symbols
-        if let Some(symbol_id) = self.resolve_name(name) {
-            if let Some(symbol) = self.symbol_table.get(symbol_id) {
-                if symbol.is_type() {
-                    return Ok(symbol_id);
-                }
-            }
+        if let Some(symbol_id) = self.resolve_name(name)
+            && let Some(symbol) = self.symbol_table.get(symbol_id)
+            && symbol.is_type()
+        {
+            return Ok(symbol_id);
         }
 
         // Find candidates for better error messages
@@ -759,10 +758,10 @@ impl Resolver {
                 // Try to resolve the type name
                 match self.context.resolve_type(name) {
                     Ok(symbol_id) => {
-                        if let Some(_symbol) = self.context.symbol_table.get(symbol_id) {
-                            if let Err(error) = self.context.check_access(symbol_id, None) {
-                                self.context.add_error(error);
-                            }
+                        if let Some(_symbol) = self.context.symbol_table.get(symbol_id)
+                            && let Err(error) = self.context.check_access(symbol_id, None)
+                        {
+                            self.context.add_error(error);
                         }
                         // Keep as unresolved for now - full resolution happens in type checker
                     }

@@ -15,7 +15,7 @@ use veil_ast::{self as ast};
 pub struct LoweringContext {
     id_gen: IdGenerator,
     span_map: SpanMap,
-    module_id: ModuleId,
+    _module_id: ModuleId,
 }
 
 impl LoweringContext {
@@ -23,7 +23,7 @@ impl LoweringContext {
         Self {
             id_gen: IdGenerator::new(),
             span_map: SpanMap::new(),
-            module_id,
+            _module_id: module_id,
         }
     }
 
@@ -433,11 +433,11 @@ impl LoweringContext {
             match self.lower_stmt(stmt) {
                 Ok(hir_stmt) => {
                     // Check if this is an expression statement that could be the block's value
-                    if let HirStmtKind::Expr(ref expr) = hir_stmt.kind {
-                        if stmts.last().map(|s| std::ptr::eq(s, stmt)).unwrap_or(false) {
-                            last_expr = Some(Box::new(expr.clone()));
-                            continue; // Don't add as statement if it's the last expression
-                        }
+                    if let HirStmtKind::Expr(ref expr) = hir_stmt.kind
+                        && stmts.last().map(|s| std::ptr::eq(s, stmt)).unwrap_or(false)
+                    {
+                        last_expr = Some(Box::new(expr.clone()));
+                        continue; // Don't add as statement if it's the last expression
                     }
                     hir_stmts.push(hir_stmt);
                 }
@@ -836,7 +836,7 @@ mod tests {
     fn test_lowering_context_creation() {
         let module_id = ModuleId::new(0);
         let ctx = LoweringContext::new(module_id);
-        assert_eq!(ctx.module_id, module_id);
+        assert_eq!(ctx._module_id, module_id);
     }
 
     #[test]

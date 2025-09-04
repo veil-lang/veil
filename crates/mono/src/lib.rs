@@ -33,15 +33,9 @@ impl fmt::Display for MonoError {
 impl std::error::Error for MonoError {}
 
 /// Monomorphization options (reserved for future expansion).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct MonomorphizeOptions {
     // Placeholder for future flags, e.g., array/impl specialization
-}
-
-impl Default for MonomorphizeOptions {
-    fn default() -> Self {
-        MonomorphizeOptions {}
-    }
 }
 
 /// Name mapping compatible with backend's type_to_c_name, used for deterministic
@@ -85,7 +79,7 @@ fn type_to_backend_name(ty: &Type) -> String {
         Type::Function(args, ret) => {
             let args_str = args
                 .iter()
-                .map(|t| type_to_backend_name(t))
+                .map(type_to_backend_name)
                 .collect::<Vec<_>>()
                 .join("_");
             let ret_str = type_to_backend_name(ret);
@@ -363,10 +357,10 @@ impl Monomorphizer {
         fn collect_types_in_stmt(stmt: &ast::Stmt, out: &mut HashSet<String>) {
             match stmt {
                 ast::Stmt::Let(_, ty_opt, expr, _, _) => {
-                    if let Some(ty) = ty_opt {
-                        if let ast::Type::Array(inner) = ty {
-                            out.insert(type_to_backend_name(inner));
-                        }
+                    if let Some(ty) = ty_opt
+                        && let ast::Type::Array(inner) = ty
+                    {
+                        out.insert(type_to_backend_name(inner));
                     }
                     collect_types_in_expr(expr, out);
                 }
@@ -436,7 +430,7 @@ impl Monomorphizer {
         }
 
         // 7) Generic struct instantiation from usages
-        let mut generic_structs: HashMap<String, ast::StructDef> = out_program
+        let generic_structs: HashMap<String, ast::StructDef> = out_program
             .structs
             .iter()
             .filter(|s| !s.generic_params.is_empty())
@@ -449,10 +443,10 @@ impl Monomorphizer {
             generic_structs: &HashMap<String, ast::StructDef>,
         ) {
             let ty = expr.get_type();
-            if let ast::Type::GenericInstance(name, _) = &ty {
-                if generic_structs.contains_key(name) {
-                    out.insert(ty);
-                }
+            if let ast::Type::GenericInstance(name, _) = &ty
+                && generic_structs.contains_key(name)
+            {
+                out.insert(ty);
             }
 
             use ast::Expr;
@@ -543,12 +537,11 @@ impl Monomorphizer {
         ) {
             match stmt {
                 ast::Stmt::Let(_, ty_opt, expr, _, _) => {
-                    if let Some(ty) = ty_opt {
-                        if let ast::Type::GenericInstance(name, _) = ty {
-                            if generic_structs.contains_key(name) {
-                                out.insert(ty.clone());
-                            }
-                        }
+                    if let Some(ty) = ty_opt
+                        && let ast::Type::GenericInstance(name, _) = ty
+                        && generic_structs.contains_key(name)
+                    {
+                        out.insert(ty.clone());
                     }
                     collect_struct_instances_in_expr(expr, out, generic_structs);
                 }
@@ -598,16 +591,16 @@ impl Monomorphizer {
         let mut struct_instances: HashSet<ast::Type> = HashSet::new();
         for f in &out_program.functions {
             // From signatures
-            if let ast::Type::GenericInstance(name, _) = &f.return_type {
-                if generic_structs.contains_key(name) {
-                    struct_instances.insert(f.return_type.clone());
-                }
+            if let ast::Type::GenericInstance(name, _) = &f.return_type
+                && generic_structs.contains_key(name)
+            {
+                struct_instances.insert(f.return_type.clone());
             }
             for (_, p) in &f.params {
-                if let ast::Type::GenericInstance(name, _) = p {
-                    if generic_structs.contains_key(name) {
-                        struct_instances.insert(p.clone());
-                    }
+                if let ast::Type::GenericInstance(name, _) = p
+                    && generic_structs.contains_key(name)
+                {
+                    struct_instances.insert(p.clone());
                 }
             }
             // From bodies
@@ -629,31 +622,31 @@ impl Monomorphizer {
         let mut seen_struct_names = HashSet::new();
 
         for ty in &struct_instances {
-            if let ast::Type::GenericInstance(name, args) = ty {
-                if let Some(def) = generic_structs.get(name) {
-                    let mut new_fields = Vec::new();
-                    for f in &def.fields {
-                        let new_ty = substitute_type_using_struct_generics(&f.ty, def, args)?;
-                        new_fields.push(ast::StructField {
-                            name: f.name.clone(),
-                            ty: new_ty,
-                            span: f.span,
-                        });
-                    }
-                    let concrete_name = type_to_backend_name(ty);
-                    if seen_struct_names.insert(concrete_name.clone())
-                        && !self.struct_cache.borrow().contains(&concrete_name)
-                    {
-                        self.struct_cache.borrow_mut().insert(concrete_name.clone());
-                        extra_structs.push(ast::StructDef {
-                            name: concrete_name,
-                            generic_params: vec![],
-                            fields: new_fields,
-                            span: def.span,
-                            visibility: def.visibility.clone(),
-                            repr: def.repr.clone(),
-                        });
-                    }
+            if let ast::Type::GenericInstance(name, args) = ty
+                && let Some(def) = generic_structs.get(name)
+            {
+                let mut new_fields = Vec::new();
+                for f in &def.fields {
+                    let new_ty = substitute_type_using_struct_generics(&f.ty, def, args)?;
+                    new_fields.push(ast::StructField {
+                        name: f.name.clone(),
+                        ty: new_ty,
+                        span: f.span,
+                    });
+                }
+                let concrete_name = type_to_backend_name(ty);
+                if seen_struct_names.insert(concrete_name.clone())
+                    && !self.struct_cache.borrow().contains(&concrete_name)
+                {
+                    self.struct_cache.borrow_mut().insert(concrete_name.clone());
+                    extra_structs.push(ast::StructDef {
+                        name: concrete_name,
+                        generic_params: vec![],
+                        fields: new_fields,
+                        span: def.span,
+                        visibility: def.visibility.clone(),
+                        repr: def.repr.clone(),
+                    });
                 }
             }
         }
@@ -740,61 +733,55 @@ impl Monomorphizer {
                     let base = s[..lt].trim();
                     // let params_src = &s[lt + 1..s.len() - 1]; // not used directly
                     for inst in &struct_instances {
-                        if let ast::Type::GenericInstance(inst_base, inst_args) = inst {
-                            if inst_base == base {
-                                if let Some(def) = generic_structs.get(base) {
-                                    let mut new_methods = Vec::new();
-                                    for m in &impl_block.methods {
-                                        let mut new_m = m.clone();
-                                        new_m.return_type = substitute_type_using_struct_generics(
-                                            &m.return_type,
-                                            def,
-                                            inst_args,
-                                        )?;
-                                        let mut new_params = Vec::new();
-                                        for (n, t) in &m.params {
-                                            new_params.push((
-                                                n.clone(),
-                                                substitute_type_using_struct_generics(
-                                                    t, def, inst_args,
-                                                )?,
-                                            ));
-                                        }
-                                        new_m.params = new_params;
-
-                                        // Substitute inside statements using a struct generic map
-                                        let mut map = HashMap::new();
-                                        for (gp, arg) in
-                                            def.generic_params.iter().zip(inst_args.iter())
-                                        {
-                                            map.insert(gp.clone(), arg.clone());
-                                        }
-                                        let mut new_body = Vec::new();
-                                        for stmt in &m.body {
-                                            new_body.push(substitute_stmt(stmt, &map)?);
-                                        }
-                                        new_m.body = new_body;
-
-                                        new_methods.push(new_m);
-                                    }
-
-                                    let concrete_name =
-                                        type_to_backend_name(&ast::Type::GenericInstance(
-                                            inst_base.clone(),
-                                            inst_args.clone(),
-                                        ));
-                                    if !self.generic_impl_cache.borrow().contains(&concrete_name) {
-                                        self.generic_impl_cache
-                                            .borrow_mut()
-                                            .insert(concrete_name.clone());
-                                        new_impls.push(ast::ImplBlock {
-                                            target_type: concrete_name,
-                                            target_type_parsed: None, // optional
-                                            methods: new_methods,
-                                            span: impl_block.span,
-                                        });
-                                    }
+                        if let ast::Type::GenericInstance(inst_base, inst_args) = inst
+                            && inst_base == base
+                            && let Some(def) = generic_structs.get(base)
+                        {
+                            let mut new_methods = Vec::new();
+                            for m in &impl_block.methods {
+                                let mut new_m = m.clone();
+                                new_m.return_type = substitute_type_using_struct_generics(
+                                    &m.return_type,
+                                    def,
+                                    inst_args,
+                                )?;
+                                let mut new_params = Vec::new();
+                                for (n, t) in &m.params {
+                                    new_params.push((
+                                        n.clone(),
+                                        substitute_type_using_struct_generics(t, def, inst_args)?,
+                                    ));
                                 }
+                                new_m.params = new_params;
+
+                                // Substitute inside statements using a struct generic map
+                                let mut map = HashMap::new();
+                                for (gp, arg) in def.generic_params.iter().zip(inst_args.iter()) {
+                                    map.insert(gp.clone(), arg.clone());
+                                }
+                                let mut new_body = Vec::new();
+                                for stmt in &m.body {
+                                    new_body.push(substitute_stmt(stmt, &map)?);
+                                }
+                                new_m.body = new_body;
+
+                                new_methods.push(new_m);
+                            }
+
+                            let concrete_name = type_to_backend_name(&ast::Type::GenericInstance(
+                                inst_base.clone(),
+                                inst_args.clone(),
+                            ));
+                            if !self.generic_impl_cache.borrow().contains(&concrete_name) {
+                                self.generic_impl_cache
+                                    .borrow_mut()
+                                    .insert(concrete_name.clone());
+                                new_impls.push(ast::ImplBlock {
+                                    target_type: concrete_name,
+                                    target_type_parsed: None, // optional
+                                    methods: new_methods,
+                                    span: impl_block.span,
+                                });
                             }
                         }
                     }
@@ -1144,7 +1131,7 @@ fn type_to_mono_suffix(ty: &Type) -> String {
         Type::Function(args, ret) => {
             let args_str = args
                 .iter()
-                .map(|t| type_to_mono_suffix(t))
+                .map(type_to_mono_suffix)
                 .collect::<Vec<_>>()
                 .join("_");
             let ret_str = type_to_mono_suffix(ret);

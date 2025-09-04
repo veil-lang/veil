@@ -22,7 +22,7 @@ use std::collections::HashMap;
 
 use veil_hir::{
     HirBinaryOp, HirBlock, HirExpr, HirExprKind, HirItem, HirItemKind, HirMatchArm,
-    HirMatchArmBody, HirProgram, HirStmt, HirStmtKind, HirType, HirVisibility, NodeId, SpanMap,
+    HirMatchArmBody, HirProgram, HirStmt, HirStmtKind, HirType, NodeId, SpanMap,
 };
 
 /// Normalize the HIR program in-place:
@@ -79,7 +79,7 @@ impl Normalizer {
         self.span_lookup.insert(id, span);
     }
 
-    fn inherit_span(&mut self, from: NodeId, to: NodeId) {
+    fn _inherit_span(&mut self, from: NodeId, to: NodeId) {
         if let Some(sp) = self.span_of(from) {
             self.set_span(to, sp);
         }

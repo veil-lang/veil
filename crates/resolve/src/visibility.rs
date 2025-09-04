@@ -46,7 +46,7 @@ pub struct ModuleHierarchy {
     /// Module paths for debugging
     module_paths: HashMap<ModuleId, String>,
     /// Root module of the current crate
-    crate_root: ModuleId,
+    _crate_root: ModuleId,
 }
 
 impl ModuleHierarchy {
@@ -54,7 +54,7 @@ impl ModuleHierarchy {
         Self {
             parents: HashMap::new(),
             module_paths: HashMap::new(),
-            crate_root,
+            _crate_root: crate_root,
         }
     }
 
