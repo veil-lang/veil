@@ -74,13 +74,20 @@ pub enum HirVisibility {
     PublicInResolved(ModuleId), // Resolved version
 }
 
+/// HIR generic parameter
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HirGenericParam {
+    pub name: String,
+    pub bounds: Vec<HirType>,
+}
+
 /// HIR function definition
 #[derive(Debug, Clone)]
 pub struct HirFunction {
     pub id: NodeId,
     pub name: String,
     pub symbol_id: Option<SymbolId>, // Resolved symbol ID
-    pub generic_params: Vec<String>, // TODO: Replace with proper generic representation
+    pub generic_params: Vec<HirGenericParam>,
     pub params: Vec<HirParam>,
     pub return_type: HirType,
     pub body: HirBlock,
@@ -101,7 +108,7 @@ pub struct HirStruct {
     pub id: NodeId,
     pub name: String,
     pub symbol_id: Option<SymbolId>, // Resolved symbol ID
-    pub generic_params: Vec<String>, // TODO: Replace with proper generic representation
+    pub generic_params: Vec<HirGenericParam>,
     pub fields: Vec<HirStructField>,
     pub repr: Option<String>,
 }
@@ -122,7 +129,7 @@ pub struct HirEnum {
     pub id: NodeId,
     pub name: String,
     pub symbol_id: Option<SymbolId>, // Resolved symbol ID
-    pub generic_params: Vec<String>, // TODO: Replace with proper generic representation
+    pub generic_params: Vec<HirGenericParam>,
     pub variants: Vec<HirEnumVariant>,
 }
 
@@ -147,7 +154,7 @@ pub enum HirEnumVariantData {
 pub struct HirImpl {
     pub id: NodeId,
     pub target_type: HirType,
-    pub trait_ref: Option<String>, // TODO: Replace with SymbolId after resolution
+    pub trait_ref: Option<HirType>, // TODO: Replace with SymbolId after resolution
     pub trait_symbol_id: Option<SymbolId>, // Resolved trait symbol ID
     pub methods: Vec<HirFunction>,
 }

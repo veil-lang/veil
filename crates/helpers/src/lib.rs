@@ -148,6 +148,13 @@ pub fn print_parse_error(
 /// Automatically appends the .veil extension if none is present.
 pub fn validate_ve_file(path: &str) -> std::result::Result<PathBuf, String> {
     let path = Path::new(path);
+
+    // If it's a directory, return it as-is for recursive test discovery
+    if path.is_dir() {
+        return Ok(path.to_path_buf());
+    }
+
+    // For files, add .veil extension if missing
     let path = if path.extension().is_none() {
         path.with_extension("veil")
     } else {

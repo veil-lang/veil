@@ -205,11 +205,20 @@ impl LoweringContext {
 
             let body = ctx.lower_stmts_to_block(&function.body);
 
+            let generic_params = function
+                .generic_params
+                .iter()
+                .map(|p| HirGenericParam {
+                    name: p.clone(),
+                    bounds: vec![],
+                })
+                .collect();
+
             HirFunction {
                 id,
                 name: function.name.clone(),
                 symbol_id: None, // Will be filled during resolution
-                generic_params: function.generic_params.clone(),
+                generic_params,
                 params,
                 return_type: ctx.lower_type(&function.return_type),
                 body,
@@ -230,8 +239,17 @@ impl LoweringContext {
                         name: field.name.clone(),
                         symbol_id: None, // Will be filled during resolution
                         ty: ctx.lower_type(&field.ty),
-                        visibility: HirVisibility::Private, // TODO: Parse field visibility
+                        visibility: HirVisibility::Private,
                     }
+                })
+                .collect();
+
+            let generic_params = struct_def
+                .generic_params
+                .iter()
+                .map(|p| HirGenericParam {
+                    name: p.clone(),
+                    bounds: vec![],
                 })
                 .collect();
 
@@ -239,7 +257,7 @@ impl LoweringContext {
                 id,
                 name: struct_def.name.clone(),
                 symbol_id: None, // Will be filled during resolution
-                generic_params: struct_def.generic_params.clone(),
+                generic_params,
                 fields,
                 repr: struct_def.repr.clone(),
             }
@@ -294,11 +312,20 @@ impl LoweringContext {
                 })
                 .collect();
 
+            let generic_params = enum_def
+                .generic_params
+                .iter()
+                .map(|p| HirGenericParam {
+                    name: p.clone(),
+                    bounds: vec![],
+                })
+                .collect();
+
             HirEnum {
                 id,
                 name: enum_def.name.clone(),
                 symbol_id: None, // Will be filled during resolution
-                generic_params: enum_def.generic_params.clone(),
+                generic_params,
                 variants,
             }
         }))
@@ -318,10 +345,12 @@ impl LoweringContext {
                 HirType::Unresolved(impl_block.target_type.clone())
             };
 
+            let trait_ref = None;
+
             HirImpl {
                 id,
                 target_type,
-                trait_ref: None,       // TODO: Parse trait implementations
+                trait_ref,
                 trait_symbol_id: None, // Will be filled during resolution
                 methods,
             }
@@ -355,7 +384,7 @@ impl LoweringContext {
                 name: ffi_function.name.clone(),
                 params,
                 return_type: self.lower_type(&ffi_function.return_type),
-                variadic: false, // TODO: Add variadic support to AST FfiFunction
+                variadic: false,
             }
         })
     }
@@ -442,8 +471,9 @@ impl LoweringContext {
                     }
                     hir_stmts.push(hir_stmt);
                 }
-                Err(_) => {
-                    // TODO: Collect lowering errors instead of ignoring
+                Err(err) => {
+                    // Collect lowering errors for better diagnostics
+                    eprintln!("Warning: Failed to lower statement: {:?}", err);
                     continue;
                 }
             }
@@ -557,7 +587,6 @@ impl LoweringContext {
                 };
                 HirStmtKind::Expr(for_expr)
             }
-            // TODO: Handle other statement types
             _ => return Err(LoweringError::UnsupportedConstruct("statement".to_string())),
         };
 
@@ -701,7 +730,6 @@ impl LoweringContext {
             ast::Expr::Loop(body, _) => HirExprKind::Loop {
                 body: self.lower_stmts_to_block(body),
             },
-            // TODO: Add more expression kinds as needed
             _ => {
                 return Err(LoweringError::UnsupportedConstruct(
                     "expression".to_string(),

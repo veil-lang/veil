@@ -6,7 +6,7 @@
 use codespan::Span;
 use indexmap::IndexMap;
 use std::collections::HashMap;
-use veil_hir::{HirType, HirVisibility, ModuleId, NodeId, SymbolId};
+use veil_hir::{HirGenericParam, HirType, HirVisibility, ModuleId, NodeId, SymbolId};
 
 /// A symbol in the symbol table
 #[derive(Debug, Clone)]
@@ -21,7 +21,7 @@ pub struct Symbol {
     pub span: Option<Span>,
     pub is_mutable: bool,
     pub is_generic: bool,
-    pub generic_params: Vec<String>,
+    pub generic_params: Vec<HirGenericParam>,
 }
 
 impl Symbol {
@@ -67,7 +67,7 @@ impl Symbol {
         self
     }
 
-    pub fn with_generics(mut self, generic_params: Vec<String>) -> Self {
+    pub fn with_generics(mut self, generic_params: Vec<HirGenericParam>) -> Self {
         self.is_generic = !generic_params.is_empty();
         self.generic_params = generic_params;
         self

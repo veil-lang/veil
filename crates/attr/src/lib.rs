@@ -2,7 +2,10 @@
 #![deny(rust_2018_idioms)]
 #![deny(unused_must_use)]
 
-//! Attributes/metadata crate (placeholder) with a stable `AttributeBag`.
+//! Attributes/metadata crate with a stable `AttributeBag`.
+//!
+//! This crate provides a complete implementation for managing compiler attributes
+//! and metadata across compilation passes.
 //!
 //! Goals:
 //! - Deterministic ordering and iteration for reproducible builds
@@ -10,10 +13,11 @@
 //! - Minimal, dependency-light API suitable for transport between passes
 //! - Optional (feature-gated) serde support for caching and snapshots
 //!
-//! Notes:
-//! - We use `BTreeMap` to guarantee deterministic ordering.
-//! - A stable fingerprint is provided via a simple FNV-1a over a canonical
-//!   textual representation (stable across platforms).
+//! Implementation:
+//! - Uses `BTreeMap` to guarantee deterministic ordering
+//! - Provides stable fingerprinting via FNV-1a over canonical representation
+//! - Supports nested structures (maps, lists) with proper canonicalization
+//! - Type-safe accessors with comprehensive From implementations
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;

@@ -321,7 +321,7 @@ impl Resolver {
         for generic_param in &func.generic_params {
             let param_symbol = Symbol::new(
                 self.context.symbol_table.next_symbol_id(),
-                generic_param.clone(),
+                generic_param.name.clone(),
                 SymbolKind::GenericParameter,
                 self.context.current_module(),
                 func.id,
@@ -409,7 +409,7 @@ impl Resolver {
         for generic_param in &struct_def.generic_params {
             let param_symbol = Symbol::new(
                 self.context.symbol_table.next_symbol_id(),
-                generic_param.clone(),
+                generic_param.name.clone(),
                 SymbolKind::GenericParameter,
                 self.context.current_module(),
                 struct_def.id,
@@ -492,7 +492,7 @@ impl Resolver {
         for generic_param in &enum_def.generic_params {
             let param_symbol = Symbol::new(
                 self.context.symbol_table.next_symbol_id(),
-                generic_param.clone(),
+                generic_param.name.clone(),
                 SymbolKind::GenericParameter,
                 self.context.current_module(),
                 enum_def.id,

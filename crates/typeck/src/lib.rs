@@ -611,20 +611,22 @@ impl TypeChecker {
     /// Type-check impl blocks: validate trait_ref exists and method duplicates
     fn check_impl(&mut self, imp: &mut HirImpl) -> Result<(), Vec<Diag>> {
         // Validate trait_ref existence if provided
-        if let Some(trait_name) = &imp.trait_ref {
-            let is_trait = self
-                .context
-                .symbol_table
-                .find_by_name_and_kind(trait_name, SymbolKind::Trait)
-                .is_some();
-            if !is_trait {
-                // VE0101: unresolved trait in impl
-                self.error_with_fix(
-                    imp.id,
-                    Some("VE0101"),
-                    format!("unknown trait '{}' in impl", trait_name),
-                    "Declare/import the trait or correct the name",
-                );
+        if let Some(trait_type) = &imp.trait_ref {
+            if let HirType::Unresolved(trait_name) = trait_type {
+                let is_trait = self
+                    .context
+                    .symbol_table
+                    .find_by_name_and_kind(trait_name, SymbolKind::Trait)
+                    .is_some();
+                if !is_trait {
+                    // VE0101: unresolved trait in impl
+                    self.error_with_fix(
+                        imp.id,
+                        Some("VE0101"),
+                        format!("unknown trait '{:?}' in impl", trait_name),
+                        "Declare/import the trait or correct the name",
+                    );
+                }
             }
         }
 
@@ -1190,7 +1192,7 @@ mod tests {
         let mut imp = veil_hir::HirImpl {
             id: NodeId::new(200),
             target_type: HirType::Struct("S".to_string()),
-            trait_ref: Some("Foo".to_string()),
+            trait_ref: Some(HirType::Unresolved("Foo".to_string())),
             trait_symbol_id: None,
             methods: vec![],
         };

@@ -1,10 +1,5 @@
-/# Minimal prelude for Veil standard library
+/# prelude for Veil standard library
 /# This file is automatically imported by all Veil programs
 /# Contains essential types and functions available by default
 /# on other standard library modules that may not exist yet
 /# Core types are built into the compiler and don't need explicit definitions here
-/# i32, i64, f32, f64, bool, str, string, void are all built-in
-
-/# Placeholder for future standard library exports
-/# When the standard library is fully implemented, this file will export
-/# commonly used functions, types, and traits

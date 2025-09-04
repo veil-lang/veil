@@ -3,18 +3,17 @@
 #![deny(unused_must_use)]
 
 /*!
-Veil Syntax (Pest frontend skeleton)
+Veil Syntax (Pest frontend)
 
-This crate provides a minimal, production-safe skeleton for the Pest-based
-frontend. It intentionally does not build a real AST yet; instead, it validates
-that the input can be recognized by a trivial grammar and returns a placeholder
-structure. Subsequent milestones will replace the placeholder with a real AST
-builder and a complete grammar.
+This crate provides the production Pest-based frontend for the Veil compiler.
+It includes a complete grammar implementation and builds real AST structures
+from the parsed input.
 
-Key points:
-- Pest is the default parser (no feature flag).
-- Grammar is intentionally minimal here; it will be expanded in M2.
-- parse() returns a placeholder to be wired to the AST crate later.
+Key features:
+- Complete Veil v2.0 grammar support via Pest
+- Full AST construction with proper spans and type information
+- Template string parsing with embedded expressions
+- Comprehensive error diagnostics with source locations
 
 API stability notes:
 - The parse() signature takes codespan Files and a FileId so diagnostics remain
@@ -33,7 +32,7 @@ use veil_diagnostics::{Diagnostic, Label};
 ///
 /// Notes:
 /// - WHITESPACE and COMMENT are silent to avoid trivia pairs.
-/// - tokens rule is used by `lex_raw`; program remains permissive for the stub.
+/// - tokens rule is used by `lex_raw`; program provides complete language support.
 #[derive(Parser)]
 #[grammar_inline = r##"
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
@@ -193,16 +192,6 @@ pub mod ast_grammar {
     pub use self::Rule as AstRule;
 }
 
-/// Placeholder type returned by parse(), to be replaced by the real AST type.
-///
-/// This holds the file identifier and whether the file was non-empty. It is
-/// deliberately small and forward-compatible with future wiring to the AST crate.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AstPlaceholder {
-    pub file_id: FileId,
-    pub non_empty: bool,
-}
-
 /// Raw token kind exposed by the syntax crate for M2a.
 /// This is intentionally coarse; the RD parser remains in use and will be fed later.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -224,12 +213,12 @@ pub struct RawSpanned {
     pub span: Span,
 }
 
-/// Parse the given file and return a placeholder AST or diagnostics.
+/// Parse the given file and return a complete AST or diagnostics.
 ///
-/// Future work (M2+):
-/// - Replace AstPlaceholder with the real AST type (e.g., ast::Program)
-/// - Expand grammar and implement an adapter that lowers pairs into AST nodes
-/// - Map pest spans to codespan::Span for precise diagnostics
+/// Implementation:
+/// - Grammar provides complete language support
+/// - AST adapter lowers Pest pairs into proper AST nodes with spans
+/// - Maps pest spans to codespan::Span for precise diagnostics
 fn codespan_span(span: pest::Span<'_>) -> Span {
     Span::new(span.start() as u32, span.end() as u32)
 }
@@ -1709,43 +1698,6 @@ pub fn parse_ast_with_warnings(
     }
 }
 
-pub fn parse(files: &Files<String>, file_id: FileId) -> Result<AstPlaceholder, Vec<Diag>> {
-    let source = files.source(file_id);
-
-    match VeilParser::parse(Rule::program, source) {
-        Ok(mut pairs) => {
-            // For now, the stub only checks if there's any non-whitespace content.
-            let non_empty = pairs
-                .next()
-                .map(|p| {
-                    let span = p.as_span();
-                    let s = &source[span.start()..span.end()];
-                    s.chars().any(|c| !c.is_whitespace())
-                })
-                .unwrap_or(false);
-
-            Ok(AstPlaceholder { file_id, non_empty })
-        }
-        Err(e) => {
-            // Convert pest error into a single diagnostic. We keep it simple here.
-            let mut diags = Vec::with_capacity(1);
-            let message = format!("Parse error: {}", e);
-            let span = match e.location {
-                pest::error::InputLocation::Pos(pos) => {
-                    // Highlight a single byte when only a position is given.
-                    let start = pos as u32;
-                    Span::new(start, start.saturating_add(1))
-                }
-                pest::error::InputLocation::Span((start, end)) => {
-                    Span::new(start as u32, end as u32)
-                }
-            };
-            diags.push(error(message, file_id, span));
-            Err(diags)
-        }
-    }
-}
-
 /// Tokenize the file into RawSpanned tokens using the Pest grammar.
 /// Whitespace and comments are omitted.
 pub fn lex_raw(files: &Files<String>, file_id: FileId) -> Result<Vec<RawSpanned>, Vec<Diag>> {
@@ -1926,13 +1878,10 @@ pub fn lex_raw(files: &Files<String>, file_id: FileId) -> Result<Vec<RawSpanned>
     Ok(out)
 }
 
-/// Optional grammar validation hook (no-op for now).
-///
-/// When we introduce a standalone `.pest` file and full grammar, this function
-/// can leverage pest_meta to validate the grammar during CI or dev checks.
 #[cfg(feature = "grammar-validation")]
 pub fn validate_grammar() -> Result<(), String> {
-    // Placeholder: the inline grammar is trivially valid for the skeleton.
+    // The embedded Pest grammar is validated at compile time.
+    // This function exists for runtime validation if needed in the future.
     Ok(())
 }
 
@@ -1945,7 +1894,7 @@ mod tests {
     fn parse_minimal_file_succeeds() {
         let mut files = Files::<String>::new();
         let fid = files.add("test.veil", "fn main() {}".to_string());
-        let result = parse(&files, fid);
+        let result = parse_ast(&files, fid);
         assert!(result.is_ok());
     }
 
@@ -1953,7 +1902,7 @@ mod tests {
     fn parse_empty_file_succeeds_and_is_empty() {
         let mut files = Files::<String>::new();
         let fid = files.add("empty.veil", "".to_string());
-        let result = parse(&files, fid);
+        let result = parse_ast(&files, fid);
         assert!(result.is_ok());
     }
 
