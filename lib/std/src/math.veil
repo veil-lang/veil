@@ -37,7 +37,7 @@ export fn clamp(x: i32, min_val: i32, max_val: i32) -> i32 {
 let seeded = false;
 
 export fn random() -> i32 {
-    // todo: rewrite this
+    /# todo: rewrite this
     if !seeded {
        srand(time(0 as rawptr));
        seeded = true;

@@ -1,6 +1,5 @@
 use codespan::Files;
 use pest::Parser;
-use veil_syntax;
 
 #[test]
 fn logical_operators_single_char() {

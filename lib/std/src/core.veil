@@ -24,7 +24,7 @@ foreign fn memcpy(dest: rawptr, src: rawptr, n: size_t) -> rawptr;
 
 
 export fn panic(msg: string) -> void {
-    println(`Panic: ${msg}`);
+    println(`Panic: {msg}`);
     exit(1);
 }
 
@@ -61,7 +61,8 @@ impl string[] {
     fn length(self) -> i32 {
         return ve_array_length(self as rawptr) as i32;
     }
-      fn append(self, item: string) -> string[] {
+
+    fn append(self, item: string) -> string[] {
         return ve_array_append_string(self as rawptr, item) as string[];
     }
 }
@@ -76,7 +77,8 @@ impl i32[] {
     fn length(self) -> i32 {
         return ve_array_length(self as rawptr) as i32;
     }
-      fn append(self, item: i32) -> i32[] {
+
+    fn append(self, item: i32) -> i32[] {
         return ve_array_append_i32(self as rawptr, item) as i32[];
     }
 }
@@ -84,7 +86,9 @@ impl i32[] {
 impl bool[] {
     fn length(self) -> i32 {
         return ve_array_length(self as rawptr) as i32;
-    }    fn append(self, item: bool) -> bool[] {
+    }
+
+    fn append(self, item: bool) -> bool[] {
         return ve_array_append_bool(self as rawptr, item) as bool[];
     }
 }

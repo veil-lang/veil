@@ -1,9 +1,5 @@
 use codespan::Files;
 use pest::Parser;
-use veil_diagnostics::prelude::*;
-use veil_diagnostics::term;
-use veil_diagnostics::termcolor::{ColorChoice, StandardStream};
-use veil_syntax;
 
 #[test]
 
@@ -113,39 +109,6 @@ fn astparser_kw_let_token_probe() {
     {
         Ok(_) => eprintln!("KW_LET token recognized by AstParser"),
         Err(e) => eprintln!("Pest raw error for KW_LET:\n{}", e),
-    }
-}
-
-/// Pretty-print diagnostics then panic to fail the test with context.
-fn fail_with_diags(files: &Files<String>, diags: &[veil_diagnostics::Diagnostic<FileId>]) -> ! {
-    let mut writer = StandardStream::stderr(ColorChoice::Auto);
-    let config = term::Config::default();
-
-    eprintln!("=== PARSER DIAGNOSTICS ({} error[s]) ===", diags.len());
-    for d in diags {
-        let _ = term::emit(&mut writer.lock(), &config, files, d);
-    }
-    panic!("parse failed; see diagnostics above");
-}
-
-/// Parse helper that surfaces warnings and returns the AST on success.
-fn parse_or_panic(src: &str) -> veil_ast::Program {
-    let mut files = Files::<String>::new();
-    let fid = files.add("mvl_smoke.veil".to_string(), src.to_string());
-
-    match veil_syntax::parse_ast_with_warnings(&files, fid) {
-        Ok((program, warnings)) => {
-            if !warnings.is_empty() {
-                let mut writer = StandardStream::stderr(ColorChoice::Auto);
-                let config = term::Config::default();
-                eprintln!("=== PARSER WARNINGS ({} warning[s]) ===", warnings.len());
-                for w in &warnings {
-                    let _ = term::emit(&mut writer.lock(), &config, &files, w);
-                }
-            }
-            program
-        }
-        Err(diags) => fail_with_diags(&files, &diags),
     }
 }
 

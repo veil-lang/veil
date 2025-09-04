@@ -996,7 +996,7 @@ impl TypeChecker {
     fn check_struct_literal(
         &mut self,
         struct_name: &str,
-        fields: &mut Vec<(String, HirExpr)>,
+        fields: &mut [(String, HirExpr)],
         _location: NodeId,
     ) -> Result<HirType, Vec<Diag>> {
         for (_name, expr) in fields.iter_mut() {

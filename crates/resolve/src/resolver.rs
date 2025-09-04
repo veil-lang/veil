@@ -1249,7 +1249,7 @@ mod tests {
         let mut function = create_test_function();
 
         assert!(resolver.resolve_function(&mut function).is_ok());
-        assert!(resolver.context.symbol_table.len() > 0);
+        assert!(!resolver.context.symbol_table.is_empty());
 
         // Check that function symbol was created
         let symbols = resolver.context.symbol_table.find_by_name("test_function");

@@ -433,8 +433,8 @@ fn levenshtein_distance(s1: &str, s2: &str) -> usize {
     let len2 = s2.len();
     let mut matrix = vec![vec![0; len2 + 1]; len1 + 1];
 
-    for i in 0..=len1 {
-        matrix[i][0] = i;
+    for (i, row) in matrix.iter_mut().enumerate() {
+        row[0] = i;
     }
     for j in 0..=len2 {
         matrix[0][j] = j;
@@ -551,7 +551,7 @@ mod tests {
     fn test_find_candidates() {
         let mut table = SymbolTable::new();
 
-        let symbols = vec!["hello", "hallo", "help", "world", "word"];
+        let symbols = ["hello", "hallo", "help", "world", "word"];
         for (i, name) in symbols.iter().enumerate() {
             let symbol = Symbol::new(
                 SymbolId::new(i as u32),

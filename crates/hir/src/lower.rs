@@ -380,6 +380,7 @@ impl LoweringContext {
         }))
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn lower_type(&self, ast_type: &ast::Type) -> HirType {
         match ast_type {
             ast::Type::I8 => HirType::I8,
