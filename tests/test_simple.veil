@@ -1,7 +1,0 @@
-fn simple() -> i32 {
-    return 5;
-}
-
-fn main() {
-    simple();
-}
