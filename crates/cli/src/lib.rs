@@ -603,7 +603,7 @@ fn merge_imports_into_program(
                     if let Some(st) = imported.structs.iter().find(|s| {
                         matches!(s.visibility, ast::Visibility::Public) && s.name == spec.name
                     }) {
-                        let mut scl = st.clone();
+                        let scl = st.clone();
                         root_program.structs.push(scl);
                     }
                 }

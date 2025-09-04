@@ -2,7 +2,6 @@ use anyhow::{Result, anyhow};
 use codespan::Files;
 use std::fs;
 use std::path::PathBuf;
-use std::process::Command;
 
 /// Test runner entry point for the CLI.
 ///
