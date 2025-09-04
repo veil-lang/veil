@@ -1,0 +1,55 @@
+/# Imports and visibility forms coverage #/
+
+import std/io;
+import std::math;
+import std::process as proc;
+/# Redundant with auto-injection but should still parse and normalize #/
+import std/prelude;
+
+/# Visibility: functions in different forms #/
+pub fn public_function() -> void {
+    return;
+}
+
+pub(crate) fn crate_function() -> void {
+    return;
+}
+
+pub(super) fn super_function() -> void {
+    return;
+}
+
+pub(in std::io) fn path_function() -> void {
+    return;
+}
+
+/# Visibility on type declarations #/
+pub struct PublicStruct {
+    pub field1: i32,
+    pub(crate) field2: string,
+    field3: bool,
+}
+
+pub(crate) enum CrateEnum {
+    Variant1,
+    Variant2(i32),
+}
+
+/# Compile-only test to exercise import normalization and visibility parsing #/
+test imports_and_visibility_compile {
+    public_function();
+    crate_function();
+    super_function();
+    path_function();
+
+    /# Use a few local variables to keep the block non-empty #/
+    let a: i32 = 1;
+    let b: bool = true;
+    let s: string = "ok";
+
+    let _ = a;
+    let _ = b;
+    let _ = s;
+
+    return;
+}

@@ -446,7 +446,7 @@ impl LoweringContext {
             ast::Type::CChar => HirType::I8,  // C char maps to i8
             ast::Type::CInt => HirType::I32,  // C int maps to i32
             ast::Type::CSize => HirType::U64, // C size_t maps to u64
-            ast::Type::Unknown => HirType::Unresolved("unknown".to_string()),
+            ast::Type::Unknown => HirType::Unknown,
             ast::Type::Any => HirType::Unresolved("any".to_string()),
             ast::Type::NoneType => HirType::Void,
             ast::Type::Ellipsis => HirType::Unresolved("...".to_string()),

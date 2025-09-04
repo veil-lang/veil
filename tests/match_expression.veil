@@ -1,0 +1,61 @@
+/# Match expression tests: integer, string, bool; statement-level and expression-level arms #/
+
+test match_on_int_minimal {
+    let v: i32 = 2 as i32;
+
+    match v {
+        1 => { let _ = 10; }
+        2 => { let _ = 20; }
+        _ => { let _ = 0; }
+    }
+
+    return;
+}
+
+test match_expression_value_i32 {
+    let v: i32 = 1 as i32;
+
+    let res: i32 = match v {
+        0 => 10 as i32
+        1 => 20 as i32
+        _ => 30 as i32
+    };
+
+    let _ = res;
+    return;
+}
+
+test match_on_string_literal {
+    let s: string = "b";
+
+    match s {
+        "a" => { let _ = 1; }
+        "b" => { let _ = 2; }
+        _   => { let _ = 0; }
+    }
+
+    return;
+}
+
+test match_on_bool_literals {
+    let b = true;
+
+    match b {
+        true  => { let _ = 1; }
+        false => { let _ = 0; }
+    }
+
+    return;
+}
+
+test mixed_arm_bodies_statement_level {
+    let x: i32 = 0 as i32;
+
+    /# Statement-level match: first arm uses a block body, second uses an expression body #/
+    match x {
+        0 => { let _ = 0; }
+        _ => 1
+    };
+
+    return;
+}

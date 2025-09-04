@@ -3279,8 +3279,8 @@ fn foo() { ... }
 - Within documentation comments, Markdown headings (#, ##, ###) define sections and subsections. Content under a heading belongs to that section. If no headings are present, documentation is treated as a single section (Rust-like flat docgen).
 
 - **Cross-references** use wiki-style linking:
-  - [[module::Type]] or [[module::Type::method]] for items within the same package
-  - [[lib::module::Type]] to link to items in another library; the generator resolves library names from ve.toml dependencies
+  - [[]] for items within the same package
+  - [[]] to link to items in another library; the generator resolves library names from ve.toml dependencies
 
 - Inline code and fences are supported; links and images follow standard Markdown.
 

@@ -1,0 +1,63 @@
+/# Control flow tests: if/else, while, loop, for #/
+
+test if_else_chains {
+    let x: i32 = 5 as i32;
+
+    if x > 10 {
+        let _ = 1 as i32;
+    } else if x == 10 {
+        let _ = 2 as i32;
+    } else {
+        let _ = 3 as i32;
+    }
+
+    /# Nested if inside a block #/
+    {
+        let y: i32 = 0 as i32;
+        if y < 1 as i32 {
+            let _ = y;
+        }
+    }
+
+    return;
+}
+
+test while_loop_counter {
+    let i: i32 = 0 as i32;
+
+    while i < 3 as i32 {
+        let tick = i;
+        let _ = tick;
+        /# Update via assignment expression #/
+        i = i + 1 as i32;
+    }
+
+    return;
+}
+
+test loop_with_early_return {
+    let n: i32 = 0 as i32;
+
+    loop {
+        if n >= 0 {
+            /# Use return to exit instead of break to stay within implemented subset #/
+            return;
+        }
+    }
+}
+
+test for_over_range_exclusive {
+    /# for <ident> in <range> { ... } with exclusive upper bound #/
+    for i in 0 .. 3 {
+        let _ = i;
+    }
+    return;
+}
+
+test for_over_range_inclusive {
+    /# Inclusive upper bound #/
+    for i in 0 ..= 2 {
+        let _ = i;
+    }
+    return;
+}

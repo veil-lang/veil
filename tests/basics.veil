@@ -1,0 +1,26 @@
+/# Basics: declarations, expressions, return, comments #/
+
+test decl_parse_smoke {
+    let a: i32 = 1;
+    let b: i32 = 2;
+    let c = a + b;
+    let d = c * 3;
+    let e = d - 4;
+    let f = e % 2;
+    let g = f == 0;
+    let h = !g;
+
+    /# comments and extra semicolons #/
+    let _sink = h;
+    return;
+}
+
+test blocks_and_shadowing {
+    let x: i32 = 10;
+    {
+        let x: i32 = 20;
+        let _ = x;
+    }
+    let _ = x;
+    return;
+}
