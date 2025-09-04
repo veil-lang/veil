@@ -67,15 +67,15 @@ test for_in_append_during_iteration_does_not_expand_iteration {
 
     for v, i in arr {
         if i == 0 as i32 {
-            // Append during iteration; iteration should still visit original length only
+            /# Append during iteration; iteration should still visit original length only
             arr = arr.append(40 as i32);
         }
         visited = visited + 1 as i32;
     }
 
-    // We expect to have visited only the first 3 elements
+    /# We expect to have visited only the first 3 elements
     assert_eq_i32(visited, 3 as i32);
-    // But the array length after loop should reflect the append
+    /# But the array length after loop should reflect the append
     assert_eq_i32(arr.length(), 4 as i32);
 }
 
@@ -88,9 +88,9 @@ test for_in_mutation_of_values_reflected_in_body_only {
     let sum = 0 as i32;
 
     for v, i in arr {
-        // Mutate the array after reading v; read should reflect original element at i
+        /# Mutate the array after reading v; read should reflect original element at i
         assert_eq_i32(v, arr[i]);
-        arr = arr.append(99 as i32); // does not affect current iteration order or count
+        arr = arr.append(99 as i32); /# does not affect current iteration order or count
         sum = sum + v;
     }
 
