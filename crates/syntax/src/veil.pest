@@ -417,7 +417,7 @@ while_stmt = {
 }
 
 for_stmt = {
-    KW_FOR ~ S ~ pattern ~ S ~ KW_IN ~ S ~ expr ~ ( S ~ KW_STEP ~ S ~ expr )? ~ S ~ block
+    KW_FOR ~ S ~ ( pattern_list | ident_list ) ~ S ~ KW_IN ~ S ~ expr ~ ( S ~ KW_STEP ~ S ~ expr )? ~ S ~ block
 }
 
 loop_stmt = { KW_LOOP ~ S ~ block }
@@ -540,13 +540,15 @@ loop_expr = {
 
 // Patterns
 pattern = {
-      "_"                         // wildcard
-    | enum_variant_pattern        // enum variant (must come before ident)
+      enum_variant_pattern        // enum variant (must come before ident)
+    | ident                       // variable (ident covers '_' and '_v' forms)
     | literal                     // literal pattern
-    | ident                       // variable
     | array_pattern
     | struct_pattern
 }
+
+pattern_list = { pattern ~ ( S ~ COMMA ~ S ~ pattern )* }
+ident_list = { ident ~ ( S ~ COMMA ~ S ~ ident )* }
 
 enum_variant_pattern = {
     module_path ~ ( S ~ ( tuple_variant_pattern | struct_variant_pattern ) )?
@@ -585,15 +587,19 @@ ty = { ty_union ~ S ~ QUESTION? }
 ty_union = { ty_intersection ~ ( S ~ PIPE ~ S ~ ty_intersection )* }
 ty_intersection = { ty_primary ~ ( S ~ AMP ~ S ~ ty_primary )* }
 
-ty_primary = {
+ty_postfix = {
       primitive_type
-    | ty_array
     | ty_ref
     | ty_ptr
     | "weak" ~ S ~ ty
     | "dyn" ~ S ~ ty_path
     | ty_path ~ generic_args?
     | LPAREN ~ S ~ ty ~ S ~ RPAREN
+}
+
+ty_primary = {
+      ty_postfix ~ ( S? ~ LBRACK ~ S? ~ RBRACK )*
+    | ty_array
 }
 
 primitive_type = {
