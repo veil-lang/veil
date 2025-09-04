@@ -27,6 +27,7 @@ use pest_derive::Parser;
 pub use veil_ast as ast;
 use veil_diagnostics::help;
 use veil_diagnostics::prelude::*;
+use veil_diagnostics::{Diagnostic, Label};
 
 /// Pest grammar for skeleton parsing and raw tokenization.
 ///
@@ -266,6 +267,22 @@ pub fn parse_ast_with_warnings(
     let _parse_ident = |p: &Pair<'_, R>| p.as_str().to_string();
     // Collect parser warnings (e.g., legacy '/' module paths) without failing parse
     let mut warnings: Vec<Diag> = Vec::new();
+
+    // Add deprecation warning helper
+    let add_deprecation_warning =
+        |warnings: &mut Vec<Diag>, span: Span, old_token: &str, new_token: &str, context: &str| {
+            let warning = Diagnostic::new(Severity::Warning)
+                .with_message(format!("Use of deprecated {} operator", context))
+                .with_labels(vec![
+                    Label::primary(file_id, usize::from(span.start())..usize::from(span.end()))
+                        .with_message(format!("Use '{}' instead of '{}'", new_token, old_token)),
+                ])
+                .with_notes(vec![format!(
+                    "The '{}' operator is deprecated. Use '{}' for {} operations.",
+                    old_token, new_token, context
+                )]);
+            warnings.push(warning);
+        };
 
     // Parse ModuleType from a module path string
     let _module_type_of = |mp: &str| {
@@ -1548,6 +1565,22 @@ pub fn parse_ast_with_warnings(
         }
 
         (funcs, vars)
+    }
+
+    // Pre-scan for deprecated tokens before main parse
+    if let Ok(token_pairs) = ast_grammar::AstParser::parse(ast_grammar::AstRule::tokens, source) {
+        for pair in token_pairs.flatten() {
+            let span = to_span(pair.as_span());
+            match pair.as_rule() {
+                ast_grammar::AstRule::ANDAND => {
+                    add_deprecation_warning(&mut warnings, span, "&&", "&", "logical AND");
+                }
+                ast_grammar::AstRule::OROR => {
+                    add_deprecation_warning(&mut warnings, span, "||", "|", "logical OR");
+                }
+                _ => {}
+            }
+        }
     }
 
     // Main parse

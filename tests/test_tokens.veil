@@ -1,0 +1,15 @@
+/# Token parsing test for M2
+fn test_tokens() -> void {
+    let a = true;
+    let b = false;
+
+    /# Test deprecated tokens
+    let result1 = a && b;
+    let result2 = a || b;
+
+    /# Test new tokens
+    let result3 = a & b;
+    let result4 = a | b;
+
+    return;
+}

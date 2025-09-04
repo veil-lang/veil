@@ -1,0 +1,128 @@
+/# M3 Verification Test - Comprehensive test for all M3 features
+/# Tests: structs, enums, match, visibility, sized arrays, discriminants
+
+pub struct Point {
+    pub x: i32,
+    pub y: i32,
+}
+
+pub struct Circle {
+    center: Point,
+    pub radius: f64,
+}
+
+pub enum Color {
+    Red,
+    Green,
+    Blue,
+    Custom(i32, i32, i32),
+}
+
+pub enum Shape {
+    Circle { radius: f64 },
+    Rectangle { width: f64, height: f64 },
+    Triangle(f64, f64, f64),
+}
+
+/# Sized arrays
+const BUFFER_SIZE: i32 = 10;
+var buffer: [i32; 10];
+var colors: [Color; 3];
+
+/# Private functions (default visibility)
+fn calculate_area(shape: Shape) -> f64 {
+    match shape {
+        Shape::Circle { radius } => {
+            return 3.14159 * radius * radius;
+        }
+        Shape::Rectangle { width, height } => {
+            return width * height;
+        }
+        Shape::Triangle(a, b, c) => {
+            /# Heron's formula approximation
+            let s = (a + b + c) / 2.0;
+            return s * (s - a) * (s - b) * (s - c);
+        }
+    }
+}
+
+/# Public function with visibility
+pub fn process_color(color: Color) -> i32 {
+    match color {
+        Color::Red => return 1,
+        Color::Green => return 2,
+        Color::Blue => return 3,
+        Color::Custom(r, g, b) => {
+            return r + g + b;
+        }
+    }
+}
+
+/# Test integer division and float division
+fn test_division() -> i32 {
+    let int_result = 10 // 3;  /# Integer division
+    let float_result = 10.0 / 3.0;  /# Float division
+    return int_result;
+}
+
+/# Test optional types
+fn maybe_divide(a: i32, b: i32) -> i32? {
+    if b == 0 {
+        return None;
+    }
+    return Some(a // b);
+}
+
+/# Test struct initialization and field access
+pub fn test_structs() -> i32 {
+    let point = Point { x: 10, y: 20 };
+    let circle = Circle {
+        center: point,
+        radius: 5.0
+    };
+
+    return circle.center.x + circle.center.y;
+}
+
+/# Test arrays and ranges
+fn test_arrays() -> i32 {
+    let numbers = [1, 2, 3, 4, 5];
+    var sum = 0;
+
+    /# Range iteration (for M3 compatibility)
+    for i in 0..5 {
+        sum = sum + numbers[i];
+    }
+
+    return sum;
+}
+
+/# Main function to test everything
+pub fn main() -> i32 {
+    /# Test structs
+    let struct_result = test_structs();
+
+    /# Test enums and match
+    let red_color = Color::Red;
+    let custom_color = Color::Custom(255, 128, 64);
+    let color_result = process_color(red_color) + process_color(custom_color);
+
+    /# Test shapes and match with guards
+    let circle = Shape::Circle { radius: 10.0 };
+    let rectangle = Shape::Rectangle { width: 5.0, height: 4.0 };
+
+    /# Test arrays
+    let array_result = test_arrays();
+
+    /# Test optional handling
+    let div_result = maybe_divide(10, 2);
+    let safe_result = match div_result {
+        Some(value) => value,
+        None => 0,
+    };
+
+    /# Test division operators
+    let division_result = test_division();
+
+    return struct_result + color_result + array_result + safe_result + division_result;
+}

@@ -701,14 +701,10 @@ impl Resolver {
 
     /// Resolve an import declaration
     fn resolve_import(&mut self, import: &mut HirImport) -> ResolveResult<()> {
-        // Validate module path format (only "/" allowed, not "::")
-        if import.path.contains("::") {
-            let error = ResolveError::invalid_module_path(
-                &import.path,
-                "Module paths must use '/' not '::'".to_string(),
-            );
-            self.context.add_error(error);
-            return Err(vec![]);
+        // Accept both "::" and "/" syntax for now, canonicalize "/" to "::"
+        if import.path.contains("/") && !import.path.contains("::") {
+            // Canonicalize to "::" syntax
+            import.path = import.path.replace("/", "::");
         }
 
         // Resolve the module path
@@ -725,7 +721,7 @@ impl Resolver {
                     ImportKind::Single(import.alias.clone().unwrap_or_else(|| {
                         import
                             .path
-                            .split('/')
+                            .split("::")
                             .last()
                             .unwrap_or("unknown")
                             .to_string()

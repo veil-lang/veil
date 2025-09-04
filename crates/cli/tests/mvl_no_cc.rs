@@ -13,7 +13,7 @@ fn mvl_build_generates_c_and_hir_dump_with_no_cc() {
     let mut f = fs::File::create(&input_path).expect("create prog.veil");
     let program = r#"
 fn main() -> void {
-    let a: i32 = 6 // 3;     /# integer division operator added in M1
+    let a: i32 = 6 // 3;     /# integer division operator
     let s: str = "hi";       /# accept `str` as string alias
     let t: string = s;       /# map both to Type::String
     return;

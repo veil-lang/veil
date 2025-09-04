@@ -1,0 +1,63 @@
+/# M3 Simple Verification Test - Basic enum and match functionality
+
+pub enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+pub enum Shape {
+    Circle(f64),
+    Rectangle(f64, f64),
+}
+
+pub fn process_color(color: Color) -> i32 {
+    match color {
+        Color::Red => {
+            return 1;
+        },
+        Color::Green => {
+            return 2;
+        },
+        Color::Blue => {
+            return 3;
+        },
+    }
+}
+
+pub fn calculate_area(shape: Shape) -> f64 {
+    match shape {
+        Shape::Circle(radius) => {
+            return 3.14159 * radius * radius;
+        },
+        Shape::Rectangle(width, height) => {
+            return width * height;
+        },
+    }
+}
+
+pub fn test_division() -> i32 {
+    let int_result = 10 // 3;
+    let float_result = 10.0 / 3.0;
+    return int_result;
+}
+
+pub struct Point {
+    pub x: i32,
+    pub y: i32,
+}
+
+pub fn test_structs() -> i32 {
+    let point = Point { x: 10, y: 20 };
+    return point.x + point.y;
+}
+
+pub fn main() -> i32 {
+    let red_color = Color::Red;
+    let circle = Shape::Circle(5.0);
+    let struct_result = test_structs();
+    let color_result = process_color(red_color);
+    let division_result = test_division();
+
+    return struct_result + color_result + division_result;
+}

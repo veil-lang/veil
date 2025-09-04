@@ -11,6 +11,10 @@ name = "veil_cli"
 path = "src/lib.rs"
 crate-type = ["rlib"]
 
+[[bin]]
+name = "ve"
+path = "src/main.rs"
+
 [dependencies]
 # Internal crates used by the CLI pipeline
 veil-helpers = { path = "../helpers" }

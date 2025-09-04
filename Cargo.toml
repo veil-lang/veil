@@ -43,13 +43,9 @@ name = "ve"
 version = "0.2.0-beta.4"
 edition = "2024"
 
-[lib]
-name = "ve"
-path = "src/lib.rs"
-
 [[bin]]
 name = "ve"
-path = "src/main.rs"
+path = "crates/cli/src/main.rs"
 
 [dependencies]
 veil-syntax = { path = "crates/syntax" }

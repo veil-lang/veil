@@ -1,0 +1,22 @@
+/# Test file for M2 deprecation warnings
+fn test_deprecated_operators() -> bool {
+    let a = true;
+    let b = false;
+
+    /# These should emit deprecation warnings
+    let result1 = a && b;
+    let result2 = a || b;
+    let result3 = a && (b || a);
+
+    /# These should not emit warnings (new syntax)
+    let result4 = a & b;
+    let result5 = a | b;
+    let result6 = a & (b | a);
+
+    return result1 || result2;
+}
+
+fn main() -> void {
+    test_deprecated_operators();
+    return;
+}

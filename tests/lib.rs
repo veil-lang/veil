@@ -368,10 +368,26 @@ fn resolve_standard_library_path(module_path: &str) -> Result<PathBuf> {
             exe_dir.join("lib"),
             exe_dir.join("..").join("lib"),
             exe_dir.join("..").join("..").join("lib"),
+            exe_dir.join("..").join("..").join("..").join("lib"), // For tests in target/debug/deps
         ];
 
         if let Ok(cargo_manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
             candidate_paths.push(PathBuf::from(cargo_manifest_dir).join("lib"));
+        }
+
+        // Add current working directory as fallback for development/testing
+        if let Ok(cwd) = std::env::current_dir() {
+            candidate_paths.push(cwd.join("lib"));
+            // Also try going up from current directory to find project root
+            if let Some(parent) = cwd.parent() {
+                candidate_paths.push(parent.join("lib"));
+                if let Some(grandparent) = parent.parent() {
+                    candidate_paths.push(grandparent.join("lib"));
+                    if let Some(great_grandparent) = grandparent.parent() {
+                        candidate_paths.push(great_grandparent.join("lib"));
+                    }
+                }
+            }
         }
 
         candidate_paths
@@ -851,7 +867,7 @@ pub fn process_build(
         }
     }
 
-    // Ensure prelude import unless compiling prelude itself
+    // Ensure prelude import unless compiling prelude itself or in test mode
     let is_prelude_module = input.to_string_lossy().ends_with("prelude.veil");
     let has_prelude_import = program.imports.iter().any(|import| match import {
         ast::ImportDeclaration::ImportAll { module_path, .. } => {

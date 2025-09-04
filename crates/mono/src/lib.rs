@@ -238,7 +238,7 @@ impl Monomorphizer {
                 let mut ok = true;
 
                 for ((_, param_ty), arg_ty) in gen_func.params.iter().zip(call_arg_types.iter()) {
-                    if !unify_types(param_ty, arg_ty, &subst) {
+                    if !unify_types(param_ty, arg_ty, &mut subst) {
                         ok = false;
                         break;
                     }
@@ -817,8 +817,8 @@ impl Monomorphizer {
 /// Fills `subst` with inferred generic parameter -> concrete type mappings.
 ///
 /// Returns true when the types can be unified, false otherwise.
-fn unify_types(pattern: &Type, concrete: &Type, subst: &HashMap<String, Type>) -> bool {
-    // Convert immutable subst to mutable for recursion; helper delegates to internal fn
+fn unify_types(pattern: &Type, concrete: &Type, subst: &mut HashMap<String, Type>) -> bool {
+    // Directly use mutable reference for recursion
     fn go(pattern: &Type, concrete: &Type, subst: &mut HashMap<String, Type>) -> bool {
         match (pattern, concrete) {
             // Bind generic to the concrete type (if not already bound) or ensure consistency
@@ -859,8 +859,7 @@ fn unify_types(pattern: &Type, concrete: &Type, subst: &HashMap<String, Type>) -
         }
     }
 
-    let mut owned = subst.clone();
-    go(pattern, concrete, &mut owned)
+    go(pattern, concrete, subst)
 }
 
 /// Instantiate a generic function with concrete type arguments, producing a monomorphic function.
