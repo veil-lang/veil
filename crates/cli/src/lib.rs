@@ -195,7 +195,7 @@ enum Command {
         channel: Option<Channel>,
     },
     Test {
-        #[arg(value_parser = validate_ve_file)]
+        #[arg(value_parser = validate_ve_file, value_name = "FILE|DIR", help = "Path to a .veil file or a directory to scan recursively for tests")]
         input: PathBuf,
         #[arg(short, long)]
         test_name: Option<String>,
