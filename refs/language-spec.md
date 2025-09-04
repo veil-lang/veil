@@ -3323,7 +3323,7 @@ digit      ::= '0'..'9'
 - **Integer**: decimal, hex (0x...), binary (0b...), octal (0o...) with optional underscores for readability
 - **Float**: digits '.' digits with optional exponent (e/E)
 - **String**: "..." with escape sequences (\n, \r, \t, \\, \", \')
-- **Template string**: `...` with {expression} interpolation
+- **Template string**: `...` with {expression} interpolation (delimited by backticks, not single quotes; interpolation is not supported in double-quoted strings)
 - **Boolean**: true | false
 - **None**: none
 
@@ -4896,6 +4896,33 @@ fn string_length(s: string) -> u64 {
 ```
 
 ### 17.6 Template Strings
+
+Template strings are delimited by backticks and support inline expression interpolation with braces.
+
+- Delimiter: backticks `…`
+- Interpolation: `{expr}` inside a template string
+- Not supported: interpolation inside double-quoted strings ("…") or single quotes ('…')
+  - Single quotes are not valid string delimiters in Veil
+
+Examples:
+
+```veil
+const name = "Alice";
+print(`Hello, {name}!`);
+
+const a: i32 = 6;
+println(`The value of a is {a}`);
+```
+
+Incorrect (prints braces literally or will not parse):
+
+```veil
+// No interpolation in double-quoted strings:
+print("Hello, {name}");
+
+// Single quotes are not valid for strings or templates:
+println('Value: {a}');
+```
 
 ```veil
 fn greet(name: string,
