@@ -40,10 +40,34 @@ pub fn run_test(
 
         let content = fs::read_to_string(test_file)
             .map_err(|e| anyhow!("Failed to read file {}: {e}", test_file.display()))?;
-        let file_id = files.add(test_file.to_string_lossy().to_string(), content);
+        let file_id = files.add(test_file.to_string_lossy().to_string(), content.clone());
 
+        // Try to parse normally. If parse fails we fall back to a simple heuristic.
         let program = match veil_syntax::parse_ast(&files, file_id) {
-            Ok(p) => p,
+            Ok(mut p) => {
+                if p.tests.is_empty() {
+                    let src_text = files.source(file_id);
+                    for line in src_text.lines() {
+                        let trimmed = line.trim_start();
+                        if trimmed.starts_with("test ") {
+                            let rest = &trimmed["test ".len()..];
+                            let name = rest
+                                .split(|c: char| c.is_whitespace() || c == '{')
+                                .next()
+                                .unwrap_or("")
+                                .to_string();
+                            if !name.is_empty() {
+                                p.tests.push(veil_syntax::ast::Test {
+                                    name,
+                                    stmts: Vec::new(),
+                                    span: codespan::Span::new(0, 0),
+                                });
+                            }
+                        }
+                    }
+                }
+                p
+            }
             Err(diags) => {
                 if verbose {
                     eprintln!(
@@ -52,7 +76,43 @@ pub fn run_test(
                         diags.len()
                     );
                 }
-                continue; // Skip files that don't parse
+
+                let mut tests: Vec<veil_syntax::ast::Test> = Vec::new();
+                let src_text = files.source(file_id);
+                for line in src_text.lines() {
+                    let trimmed = line.trim_start();
+                    if trimmed.starts_with("test ") {
+                        let rest = &trimmed["test ".len()..];
+                        let name = rest
+                            .split(|c: char| c.is_whitespace() || c == '{')
+                            .next()
+                            .unwrap_or("")
+                            .to_string();
+                        if !name.is_empty() {
+                            tests.push(veil_syntax::ast::Test {
+                                name,
+                                stmts: Vec::new(),
+                                span: codespan::Span::new(0, 0),
+                            });
+                        }
+                    }
+                }
+
+                if tests.is_empty() {
+                    continue;
+                }
+
+                veil_syntax::ast::Program {
+                    imports: Vec::new(),
+                    stmts: Vec::new(),
+                    functions: Vec::new(),
+                    structs: Vec::new(),
+                    enums: Vec::new(),
+                    impls: Vec::new(),
+                    ffi_functions: Vec::new(),
+                    ffi_variables: Vec::new(),
+                    tests,
+                }
             }
         };
 
@@ -292,7 +352,7 @@ fn generate_test_program(original_content: &str, test_name: &str) -> Result<Stri
             }
 
             if !in_main {
-                continue; // Skip the closing brace line of main
+                continue; // Skip the closing braid line of main
             } else {
                 continue; // Skip all lines inside main
             }
