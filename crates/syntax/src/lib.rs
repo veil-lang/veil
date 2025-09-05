@@ -289,6 +289,13 @@ pub fn parse_ast_with_warnings(
         fn parse_type_inner(p: Pair<'_, R>) -> ast::Type {
             use ast::Type;
             match p.as_rule() {
+                R::ty_postfix => {
+                    // Handle ty_postfix by processing its children
+                    for c in p.into_inner() {
+                        return parse_type_inner(c);
+                    }
+                    Type::Unknown
+                }
                 R::primitive_type => {
                     let t = p.as_str();
                     match t {

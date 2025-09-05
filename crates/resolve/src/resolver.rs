@@ -1270,6 +1270,11 @@ impl Resolver {
     fn resolve_pattern(&mut self, pattern: &mut HirPattern) -> ResolveResult<()> {
         match pattern.kind.as_mut() {
             HirPatternKind::Variable(name) => {
+                // Wildcard pattern (_) doesn't define a symbol
+                if name == "_" {
+                    return Ok(());
+                }
+
                 // Define a new variable symbol for this pattern
                 let symbol = Symbol::new(
                     self.context.symbol_table.next_symbol_id(),
