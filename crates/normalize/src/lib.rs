@@ -178,7 +178,7 @@ impl Normalizer {
         use HirExprKind::*;
         match &mut *expr.kind {
             // Leaf literals/variables: no change
-            Int(_) | Float(_) | Bool(_) | String(_) | Char(_) | None | Variable(_) => {}
+            Int(_) | Float(_) | Bool(_) | String(_) | Char(_) | None | Void | Variable(_) => {}
 
             // Pipeline: expr |> func => Call { func, args: [expr] }
             Pipeline { expr: piped, func } => {

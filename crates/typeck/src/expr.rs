@@ -18,6 +18,7 @@ impl TypeChecker {
             HirExprKind::String(_) => HirType::String,
             HirExprKind::Char(_) => HirType::Char,
             HirExprKind::None => HirType::Optional(Box::new(HirType::Unknown)),
+            HirExprKind::Void => HirType::Void,
 
             // Variable references
             HirExprKind::Variable(name) => {

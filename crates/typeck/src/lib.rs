@@ -706,7 +706,7 @@ impl TypeChecker {
             }
 
             // Literals and simple variables: nothing to traverse
-            Int(_) | Float(_) | Bool(_) | String(_) | Char(_) | None | Variable(_) => {}
+            Int(_) | Float(_) | Bool(_) | String(_) | Char(_) | None | Void | Variable(_) => {}
 
             FieldAccess { base, .. } => self.collect_question_sites_in_expr(base, out),
 

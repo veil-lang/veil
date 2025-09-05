@@ -353,6 +353,7 @@ pub enum HirExprKind {
     String(String),
     Char(char),
     None,
+    Void,
 
     /// Variables and paths
     Variable(String),

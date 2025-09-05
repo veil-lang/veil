@@ -631,7 +631,7 @@ impl LoweringContext {
             ast::Expr::Bool(value, _) => HirExprKind::Bool(*value),
             ast::Expr::Str(value, _) => HirExprKind::String(value.clone()),
             ast::Expr::None(_) => HirExprKind::None,
-            ast::Expr::Void(_) => HirExprKind::None,
+            ast::Expr::Void(_) => HirExprKind::Void,
 
             ast::Expr::Var(name, _) => HirExprKind::Variable(name.clone()),
 

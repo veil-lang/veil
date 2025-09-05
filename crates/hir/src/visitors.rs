@@ -163,6 +163,7 @@ pub trait HirVisitor {
             | HirExprKind::String(_)
             | HirExprKind::Char(_)
             | HirExprKind::None
+            | HirExprKind::Void
             | HirExprKind::Variable { .. } => self.default_output(),
 
             HirExprKind::FieldAccess { base, .. } => self.visit_expr(base),
@@ -532,6 +533,7 @@ pub trait HirVisitorMut {
             | HirExprKind::String(_)
             | HirExprKind::Char(_)
             | HirExprKind::None
+            | HirExprKind::Void
             | HirExprKind::Variable { .. } => self.default_output(),
 
             HirExprKind::FieldAccess { base, .. } => self.visit_expr(base),
