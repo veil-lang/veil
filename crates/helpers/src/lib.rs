@@ -7,7 +7,7 @@
 
 use anyhow::Result;
 use codespan::{FileId, Files};
-use std::fs;
+
 use std::path::{Path, PathBuf};
 
 /// Extract a "line:col" string from a codespan diagnostic for a specific file.
@@ -380,6 +380,7 @@ pub fn prepare_windows_clang_args(
 
 #[cfg(target_os = "windows")]
 fn discover_msvc_lib_paths() -> Vec<PathBuf> {
+    use std::fs;
     let mut paths = Vec::new();
 
     if let Ok(vctools) = std::env::var("VCToolsInstallDir") {

@@ -554,7 +554,7 @@ fn resolve_imports_only(
 fn merge_imports_into_program(
     root_program: &mut ast::Program,
     entry_path: &Path,
-    files: &mut Files<String>,
+    _files: &mut Files<String>,
 ) -> Result<()> {
     // Parse entry already done; now resolve imports and merge
     let resolved = resolve_imports_only(&root_program.imports, entry_path)?;
@@ -738,7 +738,7 @@ fn merge_imports_into_program(
 fn compute_transitive_import_digests(
     root_imports: &[ast::ImportDeclaration],
     base_path: &Path,
-    files: &mut Files<String>,
+    _files: &mut Files<String>,
 ) -> Vec<String> {
     // Breadth-first traversal of imports to collect transitive module digests.
     // Errors are non-fatal; missing/unparseable modules are skipped for robustness.
@@ -818,7 +818,7 @@ fn compute_transitive_import_digests(
                             }
                         }
                     }
-                    Err(e) => {
+                    Err(_e) => {
                         // Failed to spawn parser thread; log and continue.
                     }
                 }
@@ -1216,7 +1216,7 @@ pub fn process_build(
             (run_result, pm, pcx)
         });
 
-    let (run_result, pm, mut pcx) = match spawn_res {
+    let (run_result, _pm, mut pcx) = match spawn_res {
         Ok(handle) => match handle.join() {
             Ok(tuple) => tuple,
             Err(_) => {
@@ -1234,7 +1234,7 @@ pub fn process_build(
                 (Ok(fallback), pm, pcx)
             }
         },
-        Err(e) => {
+        Err(_e) => {
             // failed to spawn pass thread, falling back
             // Spawn failed: fall back synchronously
             let fallback = ir::lower_from_ast(&program);

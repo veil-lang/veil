@@ -309,20 +309,6 @@ impl Resolver {
         }
     }
 
-    /// Resolve a top-level item (legacy single-pass method)
-    fn resolve_item(&mut self, item: &mut HirItem) -> ResolveResult<()> {
-        match &mut item.kind {
-            HirItemKind::Function(func) => self.resolve_function(func),
-            HirItemKind::Struct(struct_def) => self.resolve_struct(struct_def),
-            HirItemKind::Enum(enum_def) => self.resolve_enum(enum_def),
-            HirItemKind::Impl(impl_block) => self.resolve_impl(impl_block),
-            HirItemKind::FfiFunction(ffi_func) => self.resolve_ffi_function(ffi_func),
-            HirItemKind::FfiVariable(ffi_var) => self.resolve_ffi_variable(ffi_var),
-            HirItemKind::Test(test) => self.resolve_test(test),
-            HirItemKind::Import(import) => self.resolve_import(import),
-        }
-    }
-
     /// Resolve a function definition
     fn resolve_function(&mut self, func: &mut HirFunction) -> ResolveResult<()> {
         // Create symbol for function
