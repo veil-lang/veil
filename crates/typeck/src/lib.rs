@@ -203,6 +203,56 @@ impl TypeCheckContext {
             (Bool, Bool) | (String, String) | (Char, Char) => true,
             (Void, Void) | (Never, Never) => true,
 
+            // Bidirectional numeric coercion for literals and expressions
+            // Integer promotions (both directions for flexibility)
+            (I8, I16) | (I16, I8) => true,
+            (I8, I32) | (I32, I8) => true,
+            (I8, I64) | (I64, I8) => true,
+            (I16, I32) | (I32, I16) => true,
+            (I16, I64) | (I64, I16) => true,
+            (I32, I64) | (I64, I32) => true,
+
+            // Unsigned integer promotions (both directions)
+            (U8, U16) | (U16, U8) => true,
+            (U8, U32) | (U32, U8) => true,
+            (U8, U64) | (U64, U8) => true,
+            (U16, U32) | (U32, U16) => true,
+            (U16, U64) | (U64, U16) => true,
+            (U32, U64) | (U64, U32) => true,
+
+            // Signed/unsigned compatibility for same bit width
+            (I8, U8) | (U8, I8) => true,
+            (I16, U16) | (U16, I16) => true,
+            (I32, U32) | (U32, I32) => true,
+            (I64, U64) | (U64, I64) => true,
+
+            // Integer to float promotion (both directions)
+            (I8, F32) | (F32, I8) => true,
+            (I8, F64) | (F64, I8) => true,
+            (I16, F32) | (F32, I16) => true,
+            (I16, F64) | (F64, I16) => true,
+            (I32, F32) | (F32, I32) => true,
+            (I32, F64) | (F64, I32) => true,
+            (I64, F64) | (F64, I64) => true,
+            (U8, F32) | (F32, U8) => true,
+            (U8, F64) | (F64, U8) => true,
+            (U16, F32) | (F32, U16) => true,
+            (U16, F64) | (F64, U16) => true,
+            (U32, F32) | (F32, U32) => true,
+            (U32, F64) | (F64, U32) => true,
+            (U64, F64) | (F64, U64) => true,
+
+            // Float promotions (both directions for literals)
+            (F32, F64) | (F64, F32) => true,
+
+            // Range type compatibility (ranges are always compatible with each other)
+            (Range, Range) => true,
+
+            // Optional type compatibility - only Optional to Optional
+            (Optional(left_inner), Optional(right_inner)) => {
+                self.types_compatible(left_inner, right_inner)
+            }
+
             // Array compatibility
             (Array(left_elem), Array(right_elem)) => self.types_compatible(left_elem, right_elem),
 
@@ -213,11 +263,6 @@ impl TypeCheckContext {
                         .iter()
                         .zip(right_elems.iter())
                         .all(|(l, r)| self.types_compatible(l, r))
-            }
-
-            // Optional compatibility
-            (Optional(left_inner), Optional(right_inner)) => {
-                self.types_compatible(left_inner, right_inner)
             }
 
             // Reference compatibility
@@ -268,6 +313,14 @@ impl TypeCheckContext {
 
             // Unknown type is compatible with anything (for error recovery)
             (Unknown, _) | (_, Unknown) => true,
+
+            // Optional(Unknown) from 'none' literals should be compatible with any Optional type
+            (Optional(box_type), _) if matches!(**box_type, Unknown) => {
+                matches!(right, Optional(_))
+            }
+            (_, Optional(box_type)) if matches!(**box_type, Unknown) => {
+                matches!(left, Optional(_))
+            }
 
             // Everything else is incompatible
             _ => false,
@@ -488,6 +541,16 @@ impl TypeChecker {
             // Record the computed type and attach a TypeId for the tail expression
             self.context.set_node_type(expr.id, ty.clone());
             last_type = ty;
+        } else if block.stmts.len() == 1 {
+            // If block has exactly one statement and no tail expression,
+            // check if it's an expression statement and return its type
+            if let Some(stmt) = block.stmts.first_mut() {
+                if let veil_hir::HirStmtKind::Expr(expr) = &mut stmt.kind {
+                    let ty = self.check_expr(expr)?;
+                    self.context.set_node_type(expr.id, ty.clone());
+                    last_type = ty;
+                }
+            }
         }
 
         Ok(last_type)

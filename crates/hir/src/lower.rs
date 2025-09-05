@@ -458,13 +458,26 @@ impl LoweringContext {
 
         let mut hir_stmts = Vec::new();
         let mut last_expr = None;
+        let mut has_return = false;
+
+        // First pass: check if there's an explicit return statement
+        for stmt in stmts {
+            if matches!(stmt, ast::Stmt::Return(_, _)) {
+                has_return = true;
+                break;
+            }
+        }
 
         for stmt in stmts {
             match self.lower_stmt(stmt) {
                 Ok(hir_stmt) => {
-                    // Check if this is an expression statement that could be the block's value
+                    // Only treat the last expression as the block's value if:
+                    // 1. It's the last statement
+                    // 2. It's an expression statement
+                    // 3. There's no explicit return statement in the block
                     if let HirStmtKind::Expr(ref expr) = hir_stmt.kind
                         && stmts.last().map(|s| std::ptr::eq(s, stmt)).unwrap_or(false)
+                        && !has_return
                     {
                         last_expr = Some(Box::new(expr.clone()));
                         continue; // Don't add as statement if it's the last expression

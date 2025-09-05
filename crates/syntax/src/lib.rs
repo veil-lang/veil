@@ -782,21 +782,21 @@ pub fn parse_ast_with_warnings(
                 }
                 ast::Expr::ArrayInit(elems, info(sp))
             }
-            R::if_expr => {
+            R::if_expr | R::if_stmt => {
                 let mut cond = None;
                 let mut then_stmts = Vec::new();
                 let mut else_stmts = None;
                 for c in pair.into_inner() {
                     match c.as_rule() {
-                        R::expr => cond = Some(parse_expr(c)),
+                        R::expr | R::assignment_expr => cond = Some(parse_expr(c)),
                         R::block => then_stmts = parse_block_stmts(c),
-                        R::if_expr => { /* handled above */ }
+                        R::if_expr | R::if_stmt => { /* handled above */ }
                         R::KW_ELSE => { /* skip */ }
                         _ => {
                             // nested else-if or else block
                             if matches!(c.as_rule(), R::block) {
                                 else_stmts = Some(parse_block_stmts(c));
-                            } else if matches!(c.as_rule(), R::if_expr) {
+                            } else if matches!(c.as_rule(), R::if_expr | R::if_stmt) {
                                 let span_c = codespan_span(c.as_span());
                                 let expr_c = parse_expr(c);
                                 else_stmts = Some(vec![ast::Stmt::Expr(expr_c, span_c)]);
@@ -820,7 +820,7 @@ pub fn parse_ast_with_warnings(
                         R::match_arm => {
                             // pattern (if expr)? => (expr | block)
                             let mut pat = None;
-                            let mut guard = None;
+                            let guard = None;
                             let mut body =
                                 ast::MatchArmBody::Expr(ast::Expr::Void(info(c.as_span())));
                             let arm_span = codespan_span(c.as_span());
@@ -828,11 +828,8 @@ pub fn parse_ast_with_warnings(
                                 match a.as_rule() {
                                     R::pattern => pat = Some(parse_pattern(a)),
                                     R::expr => {
-                                        if guard.is_none() {
-                                            guard = Some(parse_expr(a));
-                                        } else {
-                                            body = ast::MatchArmBody::Expr(parse_expr(a));
-                                        }
+                                        // Always treat expr as body - guards are not currently supported
+                                        body = ast::MatchArmBody::Expr(parse_expr(a));
                                     }
                                     R::block => {
                                         body = ast::MatchArmBody::Block(parse_block_stmts(a));
@@ -872,6 +869,8 @@ pub fn parse_ast_with_warnings(
                 // Check if it's a literal by trying to parse it
                 if let Ok(v) = content.parse::<i32>() {
                     Expr::Int(v, info(sp))
+                } else if let Ok(v) = content.parse::<i64>() {
+                    Expr::Int64(v, info(sp))
                 } else if let Ok(v) = content.parse::<f64>() {
                     Expr::F64(v, info(sp))
                 } else if content == "true" || content == "false" {
@@ -939,8 +938,19 @@ pub fn parse_ast_with_warnings(
                     Expr::TemplateStr(parts, info(sp))
                 } else {
                     // Not a literal, must be a complex expression with children
-                    if let Some(child) = pair.into_inner().next() {
-                        parse_expr(child)
+                    let mut children = pair.into_inner();
+                    if let Some(first_child) = children.next() {
+                        // For parenthesized expressions: LPAREN expr RPAREN
+                        // We want the middle child (expr), not the first (LPAREN)
+                        if first_child.as_rule() == R::LPAREN {
+                            if let Some(expr_child) = children.next() {
+                                parse_expr(expr_child)
+                            } else {
+                                Expr::Void(info(sp))
+                            }
+                        } else {
+                            parse_expr(first_child)
+                        }
                     } else {
                         // Try as variable reference
                         Expr::Var(content.to_string(), info(sp))
@@ -1088,7 +1098,7 @@ pub fn parse_ast_with_warnings(
                 // for pattern in expr (step expr)? { body }
                 let mut it_name = String::new();
                 let mut range_expr = ast::Expr::Void(ast::ExprInfo {
-                    span: Span::new(sp.start() as u32, sp.end() as u32),
+                    span: Span::new(0, 0), // Empty span to allow detection of unset range
                     ty: ast::Type::Unknown,
                     is_tail: false,
                 });
@@ -1096,32 +1106,58 @@ pub fn parse_ast_with_warnings(
                 let mut body = Vec::new();
                 for c in pair.into_inner() {
                     match c.as_rule() {
-                        R::pattern => {
-                            if let R::ident = c
-                                .clone()
-                                .into_inner()
-                                .next()
-                                .map(|x| x.as_rule())
-                                .unwrap_or(R::pattern)
-                            {
-                                it_name = c.as_str().to_string();
+                        R::pattern_list => {
+                            // pattern_list -> pattern -> ident
+                            if let Some(pattern_child) = c.clone().into_inner().next() {
+                                // The pattern rule has children, check what they are
+                                if let Some(pattern_rule_child) =
+                                    pattern_child.clone().into_inner().next()
+                                {
+                                    // Handle different pattern child types
+                                    match pattern_rule_child.as_rule() {
+                                        R::ident => {
+                                            it_name = pattern_rule_child.as_str().to_string();
+                                        }
+                                        R::enum_variant_pattern => {
+                                            // For simple identifiers parsed as enum variants, extract the module_path
+                                            if let Some(module_path_child) =
+                                                pattern_rule_child.clone().into_inner().next()
+                                            {
+                                                if module_path_child.as_rule() == R::module_path {
+                                                    it_name =
+                                                        module_path_child.as_str().to_string();
+                                                } else {
+                                                    it_name = "_".into();
+                                                }
+                                            } else {
+                                                it_name = "_".into();
+                                            }
+                                        }
+                                        _ => {
+                                            it_name = "_".into();
+                                        }
+                                    }
+                                } else {
+                                    it_name = "_".into();
+                                }
                             } else {
                                 it_name = "_".into();
                             }
                         }
-                        R::expr => {
+                        R::expr | R::assignment_expr => {
                             if range_expr.get_info().span.start()
                                 == range_expr.get_info().span.end()
                             {
-                                range_expr = parse_expr(c)
+                                range_expr = parse_expr(c);
                             } else {
-                                step = Some(parse_expr(c))
+                                step = Some(parse_expr(c));
                             }
                         }
                         R::block => body = parse_block_stmts(c),
                         _ => {}
                     }
                 }
+
                 Stmt::For(
                     it_name,
                     None,

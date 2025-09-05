@@ -875,7 +875,7 @@ const value = result.unwrap_or_else(|| compute_fallback());  /# Compute fallback
 
 #### 3.5.6 Error Handling Best Practices
 
-`````veil
+```veil
 /# 1. Use specific error types
 enum DatabaseError {
     ConnectionFailed(str),
@@ -1017,7 +1017,7 @@ impl Add for Point {
         Point { x: self.x + other.x, y: self.y + other.y }
     }
 }
-`````
+```
 
 ### 3.7 Module System & Visibility
 
@@ -1193,19 +1193,20 @@ pub use crate::network::{Connection, Listener};
 #### 3.7.7 Module Resolution Rules
 
 1. **Absolute paths**: Start from crate root
-
+   
    ```veil
    use crate::network::tcp::Connection;  /# From crate root
    ```
 
 2. **Relative paths**: Relative to current module
-
+   
    ```veil
    use super::utils;        /# Parent module's utils
    use self::internal;      /# Current module's internal submodule
    ```
 
 3. **External crates**: Reference dependencies
+   
    ```veil
    use tokio::net::TcpStream;     /# External crate
    use serde::{Serialize, Deserialize}; /# External with multiple items
@@ -1681,8 +1682,7 @@ ptr.offset(offset)
 }
 }
 
-````
-
+```
 ### 3.10 Advanced Type Features
 
 Advanced type system features for sophisticated type-level programming, enabling highly expressive and safe abstractions.
@@ -1718,7 +1718,7 @@ fn calculate_speed(distance: Meters, time: Seconds) -> f64 {
 
 /# Compiler prevents errors like:
 /# calculate_speed(42.0, 10.0);  /# Error: expected Meters and Seconds
-````
+```
 
 #### 3.10.2 Associated Types and Type Families
 
@@ -2204,8 +2204,7 @@ type Future<'a>: Future<Output = Option<Self::Item>>;
 
 }
 
-````
-
+```
 ## 4. The ve Toolchain & Ecosystem
 
 Productivity is built on tooling. Veil provides a single, cohesive, and blazing-fast tool, ve, that manages the entire development lifecycle from a consistent command-line interface.
@@ -2272,7 +2271,7 @@ path = "examples/demo.vl"
 
 [workspace]
 members = [".", "subcrate"]
-````
+```
 
 **Package commands:**
 
@@ -2557,17 +2556,20 @@ Veil is committed to becoming self-hosted before version 1.0, demonstrating the 
 **Self-Hosting Milestones**:
 
 1. **Phase 1: Core Compiler (Target: v0.8)**
+   
    - Rewrite the lexer and parser in Veil
    - Implement type checking and semantic analysis
    - Basic code generation for primary targets
 
 2. **Phase 2: Advanced Features (Target: v0.9)**
+   
    - Complete optimization pipeline
    - Cross-compilation support
    - Full standard library implementation
    - Comprehensive error reporting system
 
 3. **Phase 3: Bootstrap Complete (Target: v1.0)**
+   
    - Self-hosting compiler can build itself
    - Performance parity with original implementation
    - Full toolchain (ve) rewritten in Veil
@@ -2673,7 +2675,7 @@ max-function-length = 50
 
 **In-code lint controls:**
 
-````veil
+```veil
 #[allow(unused_variables)]
 fn development_function() {
     const unused = 42;
@@ -2763,7 +2765,7 @@ impl<T> MutexGuard<T> {
 /# When a MutexGuard<T> value goes out of scope, its destructor
 /# is called, which automatically and safely unlocks the Mutex.
 /# This means you can never forget to unlock a mutex.
-````
+```
 
 ### 6.2 std::collections API Reference
 
@@ -3211,7 +3213,7 @@ root.children.push(child);
 /# Because the child's reference to the parent was weak, it did not
 /# prevent the deallocation. The child is then also freed.
 
-````
+```
 ## 8. Operators and Precedence
 
 This section defines the full operator set and their precedence/associativity. Unless stated otherwise, operators are left-associative. No implicit numeric coercions are performed; operands must be of the same type family where applicable.
@@ -3274,17 +3276,19 @@ This section defines the full operator set and their precedence/associativity. U
  * Some description...
  */
 fn foo() { ... }
-````
+```
 
 - Within documentation comments, Markdown headings (#, ##, ###) define sections and subsections. Content under a heading belongs to that section. If no headings are present, documentation is treated as a single section (Rust-like flat docgen).
 
 - **Cross-references** use wiki-style linking:
+  
   - [[]] for items within the same package
   - [[]] to link to items in another library; the generator resolves library names from ve.toml dependencies
 
 - Inline code and fences are supported; links and images follow standard Markdown.
 
 - **Docgen behavior**:
+  
   - If sectioned docs are present, the generator preserves the hierarchy in the output navigation.
   - If not, it falls back to Rust-like docgen that attaches the entire comment to the item.
   - Examples inside docs are runnable tests when wrapped in ```test fences (honored by ve test).
@@ -3402,6 +3406,7 @@ metadata_value ::= string_literal | identifier | bool_literal
 ### 12.1 Primitive Types
 
 - **Integers**:
+  
   - **Signed**: i8 (1 byte: -128 to 127), i16 (2 bytes: -32,768 to 32,767), i32 (4 bytes: -2³¹ to 2³¹-1), i64 (8 bytes: -2⁶³ to 2⁶³-1), i128 (16 bytes: -2¹²⁷ to 2¹²⁷-1)
   - **Unsigned**: u8 (1 byte: 0 to 255), u16 (2 bytes: 0 to 65,535), u32 (4 bytes: 0 to 2³²-1), u64 (8 bytes: 0 to 2⁶⁴-1), u128 (16 bytes: 0 to 2¹²⁸-1)
   - **Architecture-dependent**: isize and usize (pointer-sized: 32-bit or 64-bit depending on target architecture)
@@ -3415,6 +3420,7 @@ metadata_value ::= string_literal | identifier | bool_literal
 - **String**: str (UTF-8 encoded, heap-allocated, growable)
 
 - **Special Types**:
+  
   - **void**: Zero-sized type, used for functions that don't return a value
   - **any**: Dynamic type container with runtime type information, similar to `void*` with RTTI. Supports explicit downcasting with runtime checks
   - **rawptr**: Raw pointer type for unsafe operations and FFI

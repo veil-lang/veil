@@ -284,11 +284,15 @@ fn run_single_test(input_file: &PathBuf, test_name: &str, verbose: bool) -> Resu
     let test_program = generate_test_program(&original_content, test_name)?;
 
     // Write the test program
-    fs::write(&test_source, test_program)
+    fs::write(&test_source, &test_program)
         .map_err(|e| anyhow!("Failed to write test source: {}", e))?;
 
     if verbose {
         println!("  Generated test source at: {}", test_source.display());
+        println!("  Generated test program content:");
+        println!("--- START ---");
+        println!("{}", test_program);
+        println!("--- END ---");
     }
 
     // Compile the test program
@@ -316,13 +320,14 @@ fn run_single_test(input_file: &PathBuf, test_name: &str, verbose: bool) -> Resu
 
 /// Generate a test program that calls the specified test function.
 fn generate_test_program(original_content: &str, test_name: &str) -> Result<String> {
-    // Create a new program that includes all the original content except main()
+    // Create a new program that includes all the original content except main() and test functions
     // and adds a new main() that calls the specific test
     let lines: Vec<&str> = original_content.lines().collect();
 
-    // Remove any existing main function (simple approach - remove entire main block)
+    // Remove any existing main function and test functions
     let mut filtered_lines: Vec<String> = Vec::new();
     let mut in_main = false;
+    let mut in_test = false;
     let mut brace_count = 0;
 
     for line in lines {
@@ -335,8 +340,15 @@ fn generate_test_program(original_content: &str, test_name: &str) -> Result<Stri
             continue;
         }
 
-        if in_main {
-            // Count braces to know when main function ends
+        // Detect start of test function
+        if trimmed.starts_with("test ") {
+            in_test = true;
+            brace_count = 0;
+            continue;
+        }
+
+        if in_main || in_test {
+            // Count braces to know when function ends
             for ch in trimmed.chars() {
                 match ch {
                     '{' => brace_count += 1,
@@ -344,6 +356,7 @@ fn generate_test_program(original_content: &str, test_name: &str) -> Result<Stri
                         brace_count -= 1;
                         if brace_count < 0 {
                             in_main = false;
+                            in_test = false;
                             break;
                         }
                     }
@@ -351,10 +364,10 @@ fn generate_test_program(original_content: &str, test_name: &str) -> Result<Stri
                 }
             }
 
-            if !in_main {
-                continue; // Skip the closing braid line of main
+            if !in_main && !in_test {
+                continue; // Skip the closing brace line of function
             } else {
-                continue; // Skip all lines inside main
+                continue; // Skip all lines inside function
             }
         }
 
@@ -399,6 +412,10 @@ fn generate_test_program(original_content: &str, test_name: &str) -> Result<Stri
                             for line in body.lines() {
                                 filtered_lines.push(format!("    {}", line));
                             }
+                            // Always add return; at the end if not already present
+                            if !body.lines().any(|line| line.trim().starts_with("return")) {
+                                filtered_lines.push("    return;".to_string());
+                            }
                             filtered_lines.push("}".to_string());
                             return Ok(filtered_lines.join("\n"));
                         }
@@ -410,6 +427,7 @@ fn generate_test_program(original_content: &str, test_name: &str) -> Result<Stri
     }
     // Fallback: call the test by name if we failed to extract body
     filtered_lines.push(format!("    {}();", test_name));
+    filtered_lines.push("    return 0;".to_string());
     filtered_lines.push("}".to_string());
 
     Ok(filtered_lines.join("\n"))

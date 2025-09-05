@@ -12,7 +12,14 @@ impl TypeChecker {
     pub fn check_expr(&mut self, expr: &mut HirExpr) -> Result<HirType, Vec<Diag>> {
         let expr_type = match &mut *expr.kind {
             // Literals have known types
-            HirExprKind::Int(_) => HirType::I32, // Default integer literal type
+            HirExprKind::Int(value) => {
+                // Choose I32 or I64 based on value range
+                if *value >= i32::MIN as i64 && *value <= i32::MAX as i64 {
+                    HirType::I32
+                } else {
+                    HirType::I64
+                }
+            }
             HirExprKind::Float(_) => HirType::F64, // Default float literal type
             HirExprKind::Bool(_) => HirType::Bool,
             HirExprKind::String(_) => HirType::String,
@@ -786,19 +793,31 @@ impl TypeChecker {
             }
 
             Lt | Le | Gt | Ge => {
-                if self.is_numeric_type(left_type) && self.is_numeric_type(right_type) {
+                // Allow numeric types and ranges
+                let left_is_numeric = self.is_numeric_type(left_type);
+                let right_is_numeric = self.is_numeric_type(right_type);
+                let left_is_range = matches!(left_type, HirType::Range);
+                let right_is_range = matches!(right_type, HirType::Range);
+
+                if (left_is_numeric && right_is_numeric) || (left_is_range && right_is_range) {
                     if self.context.types_compatible(left_type, right_type) {
+                        Ok(Bool)
+                    } else if left_is_numeric && right_is_numeric {
+                        self.error(format!(
+                            "Cannot compare incompatible numeric types: {:?} and {:?}",
+                            left_type, right_type
+                        ));
                         Ok(Bool)
                     } else {
                         self.error(format!(
-                            "Cannot compare incompatible numeric types: {:?} and {:?}",
+                            "Cannot compare incompatible range types: {:?} and {:?}",
                             left_type, right_type
                         ));
                         Ok(Bool)
                     }
                 } else {
                     self.error(format!(
-                        "Cannot compare non-numeric types: {:?} and {:?}",
+                        "Cannot compare non-numeric/non-range types: {:?} and {:?}",
                         left_type, right_type
                     ));
                     Ok(Bool)
