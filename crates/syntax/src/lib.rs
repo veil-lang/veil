@@ -811,12 +811,14 @@ pub fn parse_ast_with_warnings(
                     info(sp),
                 )
             }
-            R::match_expr => {
+            R::match_expr | R::match_expr_stmt => {
                 let mut subject = None;
                 let mut arms = Vec::new();
                 for c in pair.into_inner() {
                     match c.as_rule() {
-                        R::expr => subject = Some(parse_expr(c)),
+                        R::expr | R::assignment_expr => {
+                            subject = Some(parse_expr(c));
+                        }
                         R::match_arm => {
                             // pattern (if expr)? => (expr | block)
                             let mut pat = None;
@@ -827,7 +829,7 @@ pub fn parse_ast_with_warnings(
                             for a in c.into_inner() {
                                 match a.as_rule() {
                                     R::pattern => pat = Some(parse_pattern(a)),
-                                    R::expr => {
+                                    R::expr | R::assignment_expr => {
                                         // Always treat expr as body - guards are not currently supported
                                         body = ast::MatchArmBody::Expr(parse_expr(a));
                                     }
@@ -966,6 +968,7 @@ pub fn parse_ast_with_warnings(
                     ast::Expr::Void(info(sp))
                 }
             }
+
             _ => ast::Expr::Void(info(sp)),
         }
     }

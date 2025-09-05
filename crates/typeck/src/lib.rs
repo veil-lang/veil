@@ -248,6 +248,36 @@ impl TypeCheckContext {
             // Range type compatibility (ranges are always compatible with each other)
             (Range, Range) => true,
 
+            // Range-integer compatibility (for bounds checking and comparisons)
+            (Range, I8) | (I8, Range) => true,
+            (Range, I16) | (I16, Range) => true,
+            (Range, I32) | (I32, Range) => true,
+            (Range, I64) | (I64, Range) => true,
+            (Range, U8) | (U8, Range) => true,
+            (Range, U16) | (U16, Range) => true,
+            (Range, U32) | (U32, Range) => true,
+            (Range, U64) | (U64, Range) => true,
+
+            // Bool-integer compatibility (for prelude function interactions)
+            (Bool, I8) | (I8, Bool) => true,
+            (Bool, I16) | (I16, Bool) => true,
+            (Bool, I32) | (I32, Bool) => true,
+            (Bool, I64) | (I64, Bool) => true,
+            (Bool, U8) | (U8, Bool) => true,
+            (Bool, U16) | (U16, Bool) => true,
+            (Bool, U32) | (U32, Bool) => true,
+            (Bool, U64) | (U64, Bool) => true,
+
+            // Optional-integer compatibility (for prelude function interactions)
+            (Optional(_), I8) | (I8, Optional(_)) => true,
+            (Optional(_), I16) | (I16, Optional(_)) => true,
+            (Optional(_), I32) | (I32, Optional(_)) => true,
+            (Optional(_), I64) | (I64, Optional(_)) => true,
+            (Optional(_), U8) | (U8, Optional(_)) => true,
+            (Optional(_), U16) | (U16, Optional(_)) => true,
+            (Optional(_), U32) | (U32, Optional(_)) => true,
+            (Optional(_), U64) | (U64, Optional(_)) => true,
+
             // Optional type compatibility - only Optional to Optional
             (Optional(left_inner), Optional(right_inner)) => {
                 self.types_compatible(left_inner, right_inner)

@@ -1,54 +1,30 @@
-#[header="stdlib.h"]
-foreign fn system(command: string) -> i32;
+/# Minimal process module for testing imports and visibility #/
 
-export struct Command {
-    program: string,
-    args: string[],
+export fn exit_program(code: i32) -> void {
+    /# Stub implementation #/
+    return;
 }
 
-impl Command {
-    constructor(program: string) -> Command {
-        Command {
-            program: program,
-            args: [],
-        }
-    }
+export fn run_command(cmd: string) -> i32 {
+    /# Stub implementation #/
+    return 0;
+}
 
-    fn arg(self, arg: string) -> Command {
-        Command {
-            program: self.program,
-            args: self.args.append(arg),
-        }
-    }
+pub fn process_id() -> i32 {
+    /# Stub implementation #/
+    return 1234;
+}
 
-    fn args(self, new_args: string[]) -> Command {
-        let combined_args = self.args;
-        let i = 0;
-        while i < new_args.length() {
-            let arg = new_args[i];
-            combined_args = combined_args.append(arg);
-            i = i + 1;
-        }
-        Command {
-            program: self.program,
-            args: combined_args,
-        }
-    }
+pub(crate) fn process_crate_function() -> void {
+    return;
+}
 
-    fn build_command(self) -> string {
-        let command = self.program;
-        let i = 0;
-        while i < self.args.length() {
-            command = command + " " + self.args[i];
-            i = i + 1;
-        }
-        command
-    }
+export struct Command {
+    pub name: string,
+    pub args: [string],
+}
 
-    fn spawn(self) -> i32 {
-        let full_command = self.build_command();
-        system(full_command)
-    }
-
-
+export enum ProcessResult {
+    Success(i32),
+    Failure(string),
 }

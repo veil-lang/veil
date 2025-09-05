@@ -1,25 +1,25 @@
 import std::io;
 
-#[header="stdlib.h"]
+#[header("stdlib.h")]
 foreign fn exit(code: i32) -> void;
 
-#[header="string.h"]
+#[header("string.h")]
 foreign fn strlen(s: string) -> size_t;
 
 foreign fn ve_array_length(arr: rawptr) -> i32;
 
-#[no_emit_decl="true"]
+#[no_emit_decl("true")]
 foreign fn ve_array_append_i32(arr: rawptr, item: i32) -> rawptr;
-#[no_emit_decl="true"]
+#[no_emit_decl("true")]
 foreign fn ve_array_append_string(arr: rawptr, item: string) -> rawptr;
-#[no_emit_decl="true"]
+#[no_emit_decl("true")]
 foreign fn ve_array_append_bool(arr: rawptr, item: bool) -> rawptr;
-#[no_emit_decl="true"]
+#[no_emit_decl("true")]
 foreign fn ve_string_at(s: string, index: i32) -> i32;
-#[no_emit_decl="true"]
+#[no_emit_decl("true")]
 foreign fn ve_string_slice(s: string, start: i32, end: i32) -> string;
 
-#[header="string.h", no_emit_decl="true"]
+#[header("string.h"), no_emit_decl("true")]
 foreign fn memcpy(dest: rawptr, src: rawptr, n: size_t) -> rawptr;
 
 

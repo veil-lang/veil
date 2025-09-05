@@ -184,9 +184,13 @@ impl TypeChecker {
                 }
 
                 // All arms should have compatible types
+                // Skip this check for statement-level matches (where first arm is Void)
                 if let Some(first_type) = arm_types.first() {
+                    let is_statement_level = matches!(first_type, HirType::Void);
                     for arm_type in &arm_types[1..] {
-                        if !self.context.types_compatible(first_type, arm_type) {
+                        if !is_statement_level
+                            && !self.context.types_compatible(first_type, arm_type)
+                        {
                             self.warning(format!(
                                 "Match arms have different types: {:?} and {:?}",
                                 first_type, arm_type
@@ -798,8 +802,20 @@ impl TypeChecker {
                 let right_is_numeric = self.is_numeric_type(right_type);
                 let left_is_range = matches!(left_type, HirType::Range);
                 let right_is_range = matches!(right_type, HirType::Range);
+                let left_is_bool = matches!(left_type, HirType::Bool);
+                let right_is_bool = matches!(right_type, HirType::Bool);
+                let left_is_optional = matches!(left_type, HirType::Optional(_));
+                let right_is_optional = matches!(right_type, HirType::Optional(_));
 
-                if (left_is_numeric && right_is_numeric) || (left_is_range && right_is_range) {
+                if (left_is_numeric && right_is_numeric)
+                    || (left_is_range && right_is_range)
+                    || (left_is_range && right_is_numeric)
+                    || (left_is_numeric && right_is_range)
+                    || (left_is_bool && right_is_numeric)
+                    || (left_is_numeric && right_is_bool)
+                    || (left_is_optional && right_is_numeric)
+                    || (left_is_numeric && right_is_optional)
+                {
                     if self.context.types_compatible(left_type, right_type) {
                         Ok(Bool)
                     } else if left_is_numeric && right_is_numeric {
@@ -988,7 +1004,9 @@ impl TypeChecker {
                 }
             }
             Minus | Plus => {
-                if self.is_numeric_type(operand_type) {
+                if self.is_numeric_type(operand_type)
+                    || matches!(operand_type, HirType::Optional(_))
+                {
                     Ok(operand_type.clone())
                 } else {
                     self.error(format!(

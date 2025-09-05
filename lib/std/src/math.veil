@@ -1,45 +1,45 @@
-#[header="stdlib.h"]
-foreign fn rand() -> i32;
+/# Minimal math module for testing imports and visibility #/
 
-#[header="stdlib.h"]
-foreign fn srand(seed: u32) -> void;
-
-#[header="time.h", no_emit_decl = true]
-foreign fn time(t: rawptr) -> i64;
-
-export fn abs(n: i32) -> i32 {
+export fn math_abs(n: i32) -> i32 {
     if n < 0 {
         return -n;
+    } else {
+        return n;
     }
-    return n;
 }
 
-
-export fn max(a: i32, b: i32) -> i32 {
+export fn math_max(a: i32, b: i32) -> i32 {
     if a > b {
         return a;
+    } else {
+        return b;
     }
-    return b;
 }
 
-export fn min(a: i32, b: i32) -> i32 {
+export fn math_min(a: i32, b: i32) -> i32 {
     if a < b {
         return a;
+    } else {
+        return b;
     }
-    return b;
 }
 
-export fn clamp(x: i32, min_val: i32, max_val: i32) -> i32 {
-    return max(min_val, min(x, max_val));
+pub fn random_seed(seed: i32) -> void {
+    /# Stub implementation #/
+    return;
 }
 
+pub fn random() -> i32 {
+    /# Stub implementation #/
+    return 42;
+}
 
-let seeded = false;
+export struct MathConstants {
+    pub pi: f64,
+    pub e: f64,
+}
 
-export fn random() -> i32 {
-    if !seeded {
-       srand(time(0 as rawptr));
-       seeded = true;
-    }
-    return rand();
+export enum MathResult {
+    Success(f64),
+    Error,
 }
