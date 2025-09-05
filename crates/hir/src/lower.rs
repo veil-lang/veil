@@ -648,11 +648,21 @@ impl LoweringContext {
 
             ast::Expr::Var(name, _) => HirExprKind::Variable(name.clone()),
 
-            ast::Expr::BinOp(left, op, right, _) => HirExprKind::Binary {
-                op: self.lower_binary_op(op),
-                lhs: Box::new(self.lower_expr(left)?),
-                rhs: Box::new(self.lower_expr(right)?),
-            },
+            ast::Expr::BinOp(left, op, right, _) => {
+                // Handle pipeline operator specially
+                if matches!(op, ast::BinOp::Pipeline) {
+                    HirExprKind::Pipeline {
+                        expr: Box::new(self.lower_expr(left)?),
+                        func: Box::new(self.lower_expr(right)?),
+                    }
+                } else {
+                    HirExprKind::Binary {
+                        op: self.lower_binary_op(op),
+                        lhs: Box::new(self.lower_expr(left)?),
+                        rhs: Box::new(self.lower_expr(right)?),
+                    }
+                }
+            }
 
             ast::Expr::UnaryOp(op, expr, _) => HirExprKind::Unary {
                 op: self.lower_unary_op(op),
@@ -904,6 +914,7 @@ impl LoweringContext {
             ast::BinOp::RangeInclusive => HirBinaryOp::RangeInclusive,
             ast::BinOp::RangeFrom => HirBinaryOp::RangeFrom,
             ast::BinOp::RangeTo => HirBinaryOp::RangeExclusive,
+            ast::BinOp::Pipeline => HirBinaryOp::Add, // Should not be called - handled specially above
         }
     }
 

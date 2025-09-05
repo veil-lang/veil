@@ -688,7 +688,8 @@ pub fn parse_ast_with_warnings(
                         | R::PIPE
                         | R::AMP
                         | R::SHL
-                        | R::SHR => {
+                        | R::SHR
+                        | R::PIPELINE => {
                             let rhs = parse_expr(it.next().unwrap());
                             let bop = match op_or_rhs.as_rule() {
                                 R::PLUS => BinOp::Add,
@@ -710,6 +711,7 @@ pub fn parse_ast_with_warnings(
                                 R::PIPE => BinOp::Or,
                                 R::AMP => BinOp::And,
                                 R::SHL | R::SHR => BinOp::Add, // no shift in AST; approximate
+                                R::PIPELINE => BinOp::Pipeline,
                                 _ => BinOp::Add,
                             };
                             lhs = Expr::BinOp(Box::new(lhs), bop, Box::new(rhs), info(sp));

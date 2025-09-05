@@ -125,6 +125,7 @@ ANDAND     = { "&&" }  // DEPRECATED: Use & for logical AND
 OROR       = { "||" }  // DEPRECATED: Use | for logical OR
 SHL        = { "<<" }
 SHR        = { ">>" }
+PIPELINE   = { "|>" }
 IDIV       = { "//" }
 RANGE_EQ   = { "..=" }
 RANGE_GT   = { "..>" }
@@ -180,6 +181,7 @@ token = {
   | ELLIPSIS | POW | INC | DEC | ARROW | FATARROW | EQEQ | NOTEQ | GTE | LTE | ANDAND | OROR | SHL | SHR | IDIV
   | RANGE_EQ | RANGE_GT | RANGE_LT | RANGE
   | PLUSEQ | MINUSEQ | MULEQ | IDIVEQ | DIVEQ | MODEQ | POWEQ | SHLEQ | SHREQ | ANDEQ | XOREQ | OREQ
+  | PIPELINE
   | LPAREN | RPAREN | LBRACE | RBRACE | LBRACK | RBRACK | COMMA | SEMI | COLON | DOT | EQ | PLUS | MINUS
   | STAR | SLASH | BANG | PERCENT | CARET | AMP | PIPE | GT | LT | QUESTION | HASH
   | bool_lit | none_lit | int_lit | float_lit | str_lit | template_str | ident
@@ -445,7 +447,7 @@ assignment_expr = {
     pipeline_expr ~ ( S ~ ( EQ | PLUSEQ | MINUSEQ | MULEQ | IDIVEQ | DIVEQ | MODEQ | POWEQ | SHLEQ | SHREQ | ANDEQ | XOREQ | OREQ ) ~ S ~ assignment_expr )?
 }
 
-pipeline_expr = { logical_or_expr ~ ( S ~ "|>" ~ S ~ logical_or_expr )* }
+pipeline_expr = { logical_or_expr ~ ( S ~ PIPELINE ~ S ~ logical_or_expr )* }
 
 logical_or_expr = { logical_and_expr ~ ( S ~ ( OROR | PIPE ) ~ S ~ logical_and_expr )* }
 logical_and_expr = { equality_expr ~ ( S ~ ( ANDAND | AMP ) ~ S ~ equality_expr )* }

@@ -905,24 +905,37 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
         match &stmt.kind {
             S::Let { pattern, ty, init } => {
                 if let hir::HirPatternKind::Variable(name) = &*pattern.kind {
-                    // Allocate a local slot for this binding
-                    let new_local = LocalId(
-                        local_slots
-                            .get(name)
-                            .map(|lid| lid.0)
-                            .unwrap_or(local_slots.len() as u32),
-                    );
-                    local_slots.insert(name.clone(), new_local);
-                    // Record LocalIR with best-effort type from HIR
-                    let local_ty = ty
-                        .as_ref()
-                        .map(map_hir_type_to_ir)
-                        .unwrap_or(TypeIR::Opaque("unknown".to_string()));
-                    locals_meta.push(LocalIR {
-                        id: new_local,
-                        ty: local_ty,
-                        debug_name: Some(name.clone()),
-                    });
+                    // Allocate a unique local slot for this binding
+                    let new_local = if name == "_" {
+                        // Always allocate new unique local for '_' (discard variables)
+                        LocalId(locals_meta.len() as u32)
+                    } else if let Some(&existing_local) = local_slots.get(name) {
+                        // Reuse existing local for the same variable name
+                        existing_local
+                    } else {
+                        // Allocate new unique local ID
+                        let new_id = LocalId(locals_meta.len() as u32);
+                        local_slots.insert(name.clone(), new_id);
+                        new_id
+                    };
+                    // Record LocalIR with best-effort type from HIR or infer from init
+                    let local_ty = if let Some(ty) = ty {
+                        map_hir_type_to_ir(ty)
+                    } else if let Some(init_expr) = init {
+                        // Try to infer type from the initialization expression
+                        infer_type_from_hir_expr(init_expr)
+                    } else {
+                        // Default to i32 for untyped, uninitialized locals
+                        TypeIR::I32
+                    };
+                    // Only add to locals_meta if this is a new local
+                    if !locals_meta.iter().any(|l| l.id == new_local) {
+                        locals_meta.push(LocalIR {
+                            id: new_local,
+                            ty: local_ty,
+                            debug_name: Some(name.clone()),
+                        });
+                    }
 
                     // Initialize with RHS if provided
                     if let Some(init_expr) = init
@@ -1517,6 +1530,26 @@ fn map_hir_type_to_ir(t: &hir::HirType) -> TypeIR {
         H::Pointer(inner) => TypeIR::Ptr(Box::new(map_hir_type_to_ir(inner))),
         // Keep others opaque to preserve determinism; refined after type layout decisions
         other => TypeIR::Opaque(format!("{:?}", other)),
+    }
+}
+
+/// Infer IR type from HIR expression for local variable type inference
+fn infer_type_from_hir_expr(expr: &hir::HirExpr) -> TypeIR {
+    use hir::HirExprKind as K;
+    match &*expr.kind {
+        K::Int(_) => TypeIR::I64,   // HIR Int is i64
+        K::Float(_) => TypeIR::F64, // HIR Float is f64
+        K::Bool(_) => TypeIR::Bool,
+        K::String(_) => TypeIR::String,
+        K::Char(_) => TypeIR::I32, // Treat char as i32 for now
+        K::None => TypeIR::I32,    // Default for None
+        K::Void => TypeIR::Void,
+        K::Binary { .. } => TypeIR::I64, // Most binary ops result in i64
+        K::Unary { .. } => TypeIR::I64,  // Most unary ops result in i64
+        K::Call { .. } => TypeIR::I32,   // Default to i32 for function calls
+        K::Variable(_) => TypeIR::I32,   // Default to i32 for variables
+        K::Pipeline { .. } => TypeIR::I32, // Pipeline results default to i32
+        _ => TypeIR::I32,                // Safe default for other expressions
     }
 }
 
