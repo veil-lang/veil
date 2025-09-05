@@ -1145,10 +1145,6 @@ pub fn parse_ast_with_warnings(
                 let expr = parse_expr(pair);
                 Stmt::Expr(expr.clone(), Span::new(sp.start() as u32, sp.end() as u32))
             }
-            R::match_stmt => {
-                let expr = parse_expr(pair);
-                Stmt::Expr(expr.clone(), Span::new(sp.start() as u32, sp.end() as u32))
-            }
             _ => {
                 // expression statement
                 let expr = parse_expr(pair);
@@ -1171,7 +1167,6 @@ pub fn parse_ast_with_warnings(
                 | R::break_stmt
                 | R::continue_stmt
                 | R::if_stmt
-                | R::match_stmt
                 | R::block => {
                     out.push(parse_stmt(s));
                 }

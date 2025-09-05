@@ -395,7 +395,6 @@ stmt = _{
     | break_stmt
     | continue_stmt
     | if_stmt
-    | match_stmt
     | block
     | expr_stmt
 }
@@ -429,9 +428,6 @@ if_stmt = {
     KW_IF ~ S ~ ( "let" ~ S ~ pattern ~ S ~ EQ ~ S ~ expr ~ S | expr ~ S ) ~ block ~ ( S ~ KW_ELSE ~ S ~ ( if_stmt | block ) )?
 }
 
-match_stmt = {
-    KW_MATCH ~ S ~ expr ~ S ~ LBRACE ~ S ~ ( match_arm ~ ( S ~ COMMA ~ S ~ match_arm )* ~ ( S ~ COMMA )? )? ~ S ~ RBRACE
-}
 match_arm = {
     pattern ~ ( S ~ KW_IF ~ S ~ expr )? ~ S ~ FATARROW ~ S ~ ( stmt | expr | block )
 }
@@ -451,7 +447,7 @@ logical_or_expr = { logical_and_expr ~ ( S ~ ( OROR | PIPE ) ~ S ~ logical_and_e
 logical_and_expr = { equality_expr ~ ( S ~ ( ANDAND | AMP ) ~ S ~ equality_expr )* }
 
 equality_expr = { relational_expr ~ ( WS ~ ( EQEQ | NOTEQ ) ~ WS ~ relational_expr )* }
-relational_expr = { bit_or_expr ~ ( WS ~ ( LT | GT | LTE | GTE ) ~ WS ~ bit_or_expr )* }
+relational_expr = { bit_or_expr ~ ( WS ~ ( LTE | GTE | LT | GT ) ~ WS ~ bit_or_expr )* }
 bit_or_expr = { bit_xor_expr ~ ( WS ~ PIPE ~ WS ~ bit_xor_expr )* }
 bit_xor_expr= { bit_and_expr ~ ( WS ~ CARET ~ WS ~ bit_and_expr )* }
 bit_and_expr= { shift_expr ~ ( WS ~ AMP ~ WS ~ shift_expr )* }
@@ -464,7 +460,7 @@ power_expr = { cast_expr ~ ( WS ~ POW ~ WS ~ power_expr )? }
 cast_expr = { range_expr ~ ( S ~ KW_AS ~ S ~ ty )* }
 
 range_expr = {
-      unary_expr ~ S ~ (RANGE | RANGE_EQ) ~ S ~ unary_expr
+      unary_expr ~ S ~ (RANGE_EQ | RANGE_GT | RANGE_LT | RANGE) ~ S ~ unary_expr
     | RANGE_GT                  // ..>
     | RANGE_LT                  // ..<
     | RANGE_EQ                  // ..=
@@ -520,7 +516,7 @@ var_ref = { module_path }
 argument_list = { expr ~ ( S? ~ COMMA ~ S? ~ expr )* }
 
 array_lit = {
-      LBRACK ~ S ~ ( expr ~ ( S ~ COMMA ~ S ~ expr )* )? ~ S ~ RBRACK
+      LBRACK ~ S ~ ( expr ~ ( S ~ COMMA ~ S ~ expr )* ~ ( S ~ COMMA )? )? ~ S ~ RBRACK
     | "[]" // empty array type literal (token recognized)
 }
 
@@ -531,7 +527,7 @@ if_expr = {
 }
 
 match_expr = {
-    KW_MATCH ~ S ~ expr ~ S ~ LBRACE ~ S ~ ( match_arm ~ ( S ~ COMMA ~ S ~ match_arm )* ~ ( S ~ COMMA )? )? ~ S ~ RBRACE
+    KW_MATCH ~ S ~ expr ~ S ~ LBRACE ~ S ~ ( match_arm ~ ( S ~ COMMA ~ S )? )* ~ S ~ RBRACE
 }
 
 loop_expr = {
