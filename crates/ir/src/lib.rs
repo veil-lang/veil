@@ -923,7 +923,7 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                         map_hir_type_to_ir(ty)
                     } else if let Some(init_expr) = init {
                         // Try to infer type from the initialization expression
-                        infer_type_from_hir_expr(init_expr)
+                        infer_type_from_hir_expr_with_context(init_expr, &locals_meta, local_slots)
                     } else {
                         // Default to i32 for untyped, uninitialized locals
                         TypeIR::I32
@@ -1534,7 +1534,12 @@ fn map_hir_type_to_ir(t: &hir::HirType) -> TypeIR {
 }
 
 /// Infer IR type from HIR expression for local variable type inference
-fn infer_type_from_hir_expr(expr: &hir::HirExpr) -> TypeIR {
+
+fn infer_type_from_hir_expr_with_context(
+    expr: &hir::HirExpr,
+    locals_meta: &[LocalIR],
+    local_slots: &std::collections::HashMap<String, LocalId>,
+) -> TypeIR {
     use hir::HirExprKind as K;
     match &*expr.kind {
         K::Int(_) => TypeIR::I64,   // HIR Int is i64
@@ -1547,9 +1552,20 @@ fn infer_type_from_hir_expr(expr: &hir::HirExpr) -> TypeIR {
         K::Binary { .. } => TypeIR::I64, // Most binary ops result in i64
         K::Unary { .. } => TypeIR::I64,  // Most unary ops result in i64
         K::Call { .. } => TypeIR::I32,   // Default to i32 for function calls
-        K::Variable(_) => TypeIR::I32,   // Default to i32 for variables
+        K::Variable(name) => {
+            // Look up the variable type from already processed locals
+            if let Some(&local_id) = local_slots.get(name) {
+                if let Some(local_meta) = locals_meta.iter().find(|l| l.id == local_id) {
+                    local_meta.ty.clone()
+                } else {
+                    TypeIR::I32 // Fallback if not found
+                }
+            } else {
+                TypeIR::I32 // Default for unknown variables
+            }
+        }
         K::Pipeline { .. } => TypeIR::I32, // Pipeline results default to i32
-        _ => TypeIR::I32,                // Safe default for other expressions
+        _ => TypeIR::I32, // Safe default for other expressions
     }
 }
 
