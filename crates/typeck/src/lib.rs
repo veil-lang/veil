@@ -29,6 +29,8 @@ use veil_resolve::{Symbol, SymbolKind, SymbolTable};
 pub struct TypeCheckContext {
     /// Symbol table from resolution phase
     pub symbol_table: SymbolTable,
+    /// Local variable types for current scope
+    pub local_variables: HashMap<String, HirType>,
     /// Current function's return type
     pub current_return_type: Option<HirType>,
     /// Whether we're inside a loop (for break/continue)
@@ -106,6 +108,7 @@ impl TypeCheckContext {
     ) -> Self {
         Self {
             symbol_table,
+            local_variables: HashMap::new(),
             current_return_type: None,
             in_loop: false,
             in_safe: false,

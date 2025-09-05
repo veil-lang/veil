@@ -21,7 +21,10 @@ impl TypeChecker {
 
             // Variable references
             HirExprKind::Variable(name) => {
-                if let Some(symbol) = self.context.get_symbol_by_name(name) {
+                // First check local variable context
+                if let Some(var_type) = self.context.local_variables.get(name) {
+                    var_type.clone()
+                } else if let Some(symbol) = self.context.get_symbol_by_name(name) {
                     symbol.ty.clone().unwrap_or(HirType::Unknown)
                 } else {
                     self.error(format!("Undefined variable: {}", name));
@@ -922,13 +925,19 @@ impl TypeChecker {
             | HirBinaryOp::RangeInclusive
             | HirBinaryOp::RangeExclusive
             | HirBinaryOp::RangeFrom => {
-                if !self.is_integer_type(left_type) {
+                // Allow None/Optional(Unknown) for infinite ranges, otherwise require integers
+                let is_none_or_unknown = |ty: &HirType| matches!(ty, HirType::Optional(box_ty) if matches!(**box_ty, HirType::Unknown));
+
+                if !self.is_integer_type(left_type) && !is_none_or_unknown(left_type) {
                     self.error(format!(
                         "Range start must be integer, found {:?}",
                         left_type
                     ));
                 }
-                if !matches!(op, HirBinaryOp::RangeFrom) && !self.is_integer_type(right_type) {
+                if !matches!(op, HirBinaryOp::RangeFrom)
+                    && !self.is_integer_type(right_type)
+                    && !is_none_or_unknown(right_type)
+                {
                     self.error(format!("Range end must be integer, found {:?}", right_type));
                 }
                 Ok(HirType::Range)

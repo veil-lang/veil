@@ -540,6 +540,10 @@ pub enum BinOp {
     LtEq,
     And,
     Or,
+    Range,
+    RangeInclusive,
+    RangeFrom,
+    RangeTo,
 }
 
 impl fmt::Display for BinOp {
@@ -554,7 +558,7 @@ impl fmt::Display for BinOp {
                 BinOp::Div => "/",
                 BinOp::IDiv => "//",
                 BinOp::Pow => "**",
-                BinOp::Pow2 => "^",
+                BinOp::Pow2 => "**",
                 BinOp::Mod => "%",
                 BinOp::Gt => ">",
                 BinOp::Eq => "==",
@@ -564,6 +568,10 @@ impl fmt::Display for BinOp {
                 BinOp::LtEq => "<=",
                 BinOp::And => "&&",
                 BinOp::Or => "||",
+                BinOp::Range => "..",
+                BinOp::RangeInclusive => "..=",
+                BinOp::RangeFrom => "..>",
+                BinOp::RangeTo => "..<",
             }
         )
     }

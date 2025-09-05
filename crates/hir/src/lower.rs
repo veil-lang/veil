@@ -739,6 +739,64 @@ impl LoweringContext {
             ast::Expr::Loop(body, _) => HirExprKind::Loop {
                 body: self.lower_stmts_to_block(body),
             },
+
+            // Range expressions
+            ast::Expr::Range(start, end, range_type, _) => {
+                let op = match range_type {
+                    ast::RangeType::Exclusive => HirBinaryOp::Range,
+                    ast::RangeType::Inclusive => HirBinaryOp::RangeInclusive,
+                    _ => HirBinaryOp::Range,
+                };
+                HirExprKind::Binary {
+                    op,
+                    lhs: Box::new(self.lower_expr(start)?),
+                    rhs: Box::new(self.lower_expr(end)?),
+                }
+            }
+
+            ast::Expr::InfiniteRange(range_type, _) => {
+                // For infinite ranges, create unary operations or special patterns
+                let none_expr_id = self.next_node_id();
+                let none_expr = HirExpr {
+                    id: none_expr_id,
+                    kind: Box::new(HirExprKind::None),
+                };
+                match range_type {
+                    ast::RangeType::InfiniteUp => {
+                        // ..> becomes range from nothing to infinity
+                        HirExprKind::Binary {
+                            op: HirBinaryOp::RangeFrom,
+                            lhs: Box::new(none_expr.clone()),
+                            rhs: Box::new(none_expr),
+                        }
+                    }
+                    ast::RangeType::InfiniteDown => {
+                        // ..< becomes range from negative infinity to nothing
+                        HirExprKind::Binary {
+                            op: HirBinaryOp::RangeExclusive,
+                            lhs: Box::new(none_expr.clone()),
+                            rhs: Box::new(none_expr),
+                        }
+                    }
+                    ast::RangeType::Infinite => {
+                        // .. becomes full infinite range
+                        HirExprKind::Binary {
+                            op: HirBinaryOp::Range,
+                            lhs: Box::new(none_expr.clone()),
+                            rhs: Box::new(none_expr),
+                        }
+                    }
+                    _ => {
+                        // Fallback for any other range types
+                        HirExprKind::Binary {
+                            op: HirBinaryOp::Range,
+                            lhs: Box::new(none_expr.clone()),
+                            rhs: Box::new(none_expr),
+                        }
+                    }
+                }
+            }
+
             _ => {
                 return Err(LoweringError::UnsupportedConstruct(
                     "expression".to_string(),
@@ -829,6 +887,10 @@ impl LoweringContext {
             ast::BinOp::LtEq => HirBinaryOp::Le,
             ast::BinOp::Pow => HirBinaryOp::Pow,
             ast::BinOp::Pow2 => HirBinaryOp::Pow, // Treat Pow2 same as Pow
+            ast::BinOp::Range => HirBinaryOp::Range,
+            ast::BinOp::RangeInclusive => HirBinaryOp::RangeInclusive,
+            ast::BinOp::RangeFrom => HirBinaryOp::RangeFrom,
+            ast::BinOp::RangeTo => HirBinaryOp::RangeExclusive,
         }
     }
 

@@ -41,6 +41,13 @@ impl TypeChecker {
                 // Record the variable type on the pattern node (Typed-HIR attachment)
                 self.context.set_node_type(pattern.id, var_type.clone());
 
+                // Store variable type in local context for future lookups
+                if let veil_hir::HirPatternKind::Variable(var_name) = &*pattern.kind {
+                    self.context
+                        .local_variables
+                        .insert(var_name.clone(), var_type.clone());
+                }
+
                 // Check pattern compatibility with the type
                 self.check_pattern_against_type(pattern, &var_type)?;
 
