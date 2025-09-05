@@ -397,6 +397,7 @@ stmt = _{
     | if_stmt
     | block
     | expr_stmt
+    | match_expr_stmt
 }
 
 block = { LBRACE ~ S? ~ ( stmt ~ S? )* ~ RBRACE }
@@ -428,8 +429,11 @@ if_stmt = {
     KW_IF ~ S ~ ( "let" ~ S ~ pattern ~ S ~ EQ ~ S ~ expr ~ S | expr ~ S ) ~ block ~ ( S ~ KW_ELSE ~ S ~ ( if_stmt | block ) )?
 }
 
+match_expr_stmt = {
+    KW_MATCH ~ S ~ expr ~ S ~ LBRACE ~ S ~ ( match_arm ~ ( S ~ COMMA )? ~ S )* ~ RBRACE
+}
 match_arm = {
-    pattern ~ ( S ~ KW_IF ~ S ~ expr )? ~ S ~ FATARROW ~ S ~ ( stmt | expr | block )
+    pattern ~ ( S ~ KW_IF ~ S ~ expr )? ~ S ~ FATARROW ~ S ~ ( block | expr )
 }
 
 // Expressions
@@ -527,7 +531,7 @@ if_expr = {
 }
 
 match_expr = {
-    KW_MATCH ~ S ~ expr ~ S ~ LBRACE ~ S ~ ( match_arm ~ ( S ~ COMMA ~ S )? )* ~ S ~ RBRACE
+    KW_MATCH ~ S ~ expr ~ S ~ LBRACE ~ S ~ ( match_arm ~ ( S ~ COMMA )? ~ S )* ~ RBRACE
 }
 
 loop_expr = {

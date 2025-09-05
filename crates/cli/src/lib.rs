@@ -596,7 +596,6 @@ fn merge_imports_into_program(
 
         let content = fs::read_to_string(&item.path)
             .with_context(|| format!("Failed to read module {}", item.path.display()))?;
-        let content_len = content.len();
 
         // Parse the imported module on a dedicated thread with a larger stack to avoid
         // overflowing the main thread stack on Windows.
@@ -627,8 +626,6 @@ fn merge_imports_into_program(
 
             anyhow!("{}:{}: {}", clean_path, 0, msg)
         })?;
-
-        let fid = files.add(item.path.to_string_lossy().to_string(), content);
 
         // Merge exports from this module into the root based on how it was imported.
         match &item.import_type {
@@ -1219,7 +1216,7 @@ pub fn process_build(
             (run_result, pm, pcx)
         });
 
-    let (run_result, mut pm, mut pcx) = match spawn_res {
+    let (run_result, pm, mut pcx) = match spawn_res {
         Ok(handle) => match handle.join() {
             Ok(tuple) => tuple,
             Err(_) => {
