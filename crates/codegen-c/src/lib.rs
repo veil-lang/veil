@@ -386,7 +386,9 @@ impl IrCBackend {
                             declare_or_assign(res, &cty, &rhs, &mut out);
                         }
                         veil_ir::InstIR::Store { local, value } => {
-                            let _ = writeln!(out, "    l{} = {};", local.0, val_ref(*value));
+                            let cty = local_cty(*local);
+                            let _ =
+                                writeln!(out, "    l{} = ({} ){};", local.0, cty, val_ref(*value));
                         }
                         veil_ir::InstIR::Call { callee, args } => {
                             // If we have a prototype among IR functions, honor its return type.
