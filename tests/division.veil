@@ -62,7 +62,7 @@ test precedence_float_then_integer {
 }
 
 test division_assignment_ops_float {
-    var x: f64 = 20.0;
+    var mut x: f64 = 20.0;
     x /= 4.0;   /# becomes 5.0 #/
     const _x = x;
     return;

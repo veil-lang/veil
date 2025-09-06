@@ -23,7 +23,7 @@ test if_else_chains {
 }
 
 test while_loop_counter {
-    var i: i32 = 0 as i32;
+    var mut i: i32 = 0 as i32;
 
     while i < 3 as i32 {
         const tick = i;
@@ -36,7 +36,7 @@ test while_loop_counter {
 }
 
 test loop_with_early_return {
-    var n: i32 = 0 as i32;
+    var mut n: i32 = 0 as i32;
 
     loop {
         if n >= 0 {
