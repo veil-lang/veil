@@ -16,7 +16,7 @@ veil-resolve = { path = "../resolve" }
 codespan = "0.11.1"
 codespan-reporting = "0.11.1"
 indexmap = "2.2.6"
-thiserror = "1.0.50"
+thiserror = "2.0.16"
 
 [dev-dependencies]
 # Test utilities

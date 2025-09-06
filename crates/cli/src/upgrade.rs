@@ -40,37 +40,5 @@ pub fn run_upgrade(_no_remind: bool, _force: bool, verbose: bool, _channel: Chan
     ))
 }
 
-/// Check for package updates (placeholder).
-///
-/// This function will check for updates to installed ve packages.
-pub fn check_package_updates(verbose: bool) -> Result<Vec<String>> {
-    if verbose {
-        println!("Package update checking not yet implemented.");
-    }
-
-    // TODO: Implement package update checking
-    // This would involve:
-    // 1. Reading package manifest files
-    // 2. Checking remote repositories for newer versions
-    // 3. Resolving dependency conflicts
-    // 4. Returning list of updatable packages
-
-    Ok(vec![])
-}
-
-/// List installed packages (placeholder).
-///
-/// This function will list all currently installed ve packages.
-pub fn list_installed_packages(verbose: bool) -> Result<Vec<String>> {
-    if verbose {
-        println!("Package listing not yet implemented.");
-    }
-
-    // TODO: Implement package listing
-    // This would involve:
-    // 1. Reading local package registry
-    // 2. Scanning installed package directories
-    // 3. Returning package names and versions
-
-    Ok(vec![])
-}
+// Package management functions will be added in future releases
+// when the package system specification is complete.

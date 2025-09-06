@@ -807,10 +807,7 @@ impl TypeChecker {
                 let left_is_optional = matches!(left_type, HirType::Optional(_));
                 let right_is_optional = matches!(right_type, HirType::Optional(_));
 
-                if (left_is_numeric && right_is_numeric)
-                    || (left_is_range && right_is_range)
-                    || (left_is_range && right_is_numeric)
-                    || (left_is_numeric && right_is_range)
+                if (right_is_range || right_is_numeric) && (left_is_range || left_is_numeric)
                     || (left_is_bool && right_is_numeric)
                     || (left_is_numeric && right_is_bool)
                     || (left_is_optional && right_is_numeric)

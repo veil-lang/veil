@@ -767,24 +767,27 @@ mod tests {
 
         // Inspect normalized expr
         let HirItemKind::Function(f) = &program.items[0].kind else {
-            panic!("not function")
+            panic!("Expected function item, got something else");
         };
         let Some(e) = &f.body.expr else {
-            panic!("no expr")
+            panic!("Expected function body to have an expression");
         };
         match &*e.kind {
             HirExprKind::Call { func, args } => {
                 match &*func.kind {
                     HirExprKind::Variable(name) => assert_eq!(name, "b"),
-                    _ => panic!("func should be variable b"),
+                    _ => panic!("Expected func to be variable 'b', got {:?}", func.kind),
                 }
                 assert_eq!(args.len(), 1);
                 match &*args[0].kind {
                     HirExprKind::Variable(name) => assert_eq!(name, "a"),
-                    _ => panic!("arg should be variable a"),
+                    _ => panic!("Expected arg to be variable 'a', got {:?}", args[0].kind),
                 }
             }
-            _ => panic!("pipeline should be normalized to call"),
+            _ => panic!(
+                "Expected pipeline to be normalized to call, got {:?}",
+                e.kind
+            ),
         }
     }
 
@@ -833,7 +836,7 @@ mod tests {
         normalize_program(&mut program);
 
         let HirItemKind::Function(f) = &program.items[0].kind else {
-            panic!("not function")
+            panic!("Expected function item");
         };
         match &f.body.stmts[0].kind {
             HirStmtKind::Expr(e) => {
@@ -843,10 +846,13 @@ mod tests {
                         assert_eq!(b.stmts.len(), 2, "let tmp; assign");
                         assert!(b.expr.is_some(), "tail expression exists");
                     }
-                    _ => panic!("postfix increment should become block"),
+                    _ => panic!(
+                        "Expected postfix increment to become block, got {:?}",
+                        e.kind
+                    ),
                 }
             }
-            _ => panic!("first stmt should be expr"),
+            _ => panic!("Expected first stmt to be expr"),
         }
     }
 
@@ -914,10 +920,10 @@ mod tests {
 
         // Expect c(b(a))
         let HirItemKind::Function(f) = &program.items[0].kind else {
-            panic!("not function")
+            panic!("Expected function item");
         };
         let Some(e) = &f.body.expr else {
-            panic!("no expr")
+            panic!("Expected function body to have an expression");
         };
         match &*e.kind {
             HirExprKind::Call {
@@ -927,7 +933,7 @@ mod tests {
                 // c(...)
                 match &*cfunc.kind {
                     HirExprKind::Variable(name) => assert_eq!(name, "c"),
-                    _ => panic!("outer func should be 'c'"),
+                    _ => panic!("Expected outer func to be 'c', got {:?}", cfunc.kind),
                 }
                 assert_eq!(cargs.len(), 1);
                 // b(a)
@@ -938,18 +944,23 @@ mod tests {
                     } => {
                         match &*bfunc.kind {
                             HirExprKind::Variable(name) => assert_eq!(name, "b"),
-                            _ => panic!("inner func should be 'b'"),
+                            _ => panic!("Expected inner func to be 'b', got {:?}", bfunc.kind),
                         }
                         assert_eq!(bargs.len(), 1);
                         match &*bargs[0].kind {
                             HirExprKind::Variable(name) => assert_eq!(name, "a"),
-                            _ => panic!("innermost arg should be 'a'"),
+                            _ => {
+                                panic!("Expected innermost arg to be 'a', got {:?}", bargs[0].kind)
+                            }
                         }
                     }
-                    _ => panic!("expected b(a) as arg to c(...)"),
+                    _ => panic!("Expected b(a) as arg to c(...), got {:?}", cargs[0].kind),
                 }
             }
-            _ => panic!("pipeline chain should normalize to nested function calls"),
+            _ => panic!(
+                "Expected pipeline chain to normalize to nested function calls, got {:?}",
+                e.kind
+            ),
         }
     }
 
@@ -999,10 +1010,10 @@ mod tests {
         // if (__optN == none) { return none; }
         // __optN
         let HirItemKind::Function(f) = &program.items[0].kind else {
-            panic!("not function")
+            panic!("Expected function item");
         };
         let Some(e) = &f.body.expr else {
-            panic!("no expr")
+            panic!("Expected function body to have an expression");
         };
         match &*e.kind {
             HirExprKind::Block(b) => {
@@ -1014,7 +1025,7 @@ mod tests {
                         assert!(name.starts_with("__opt"), "temp should be __optN");
                         // init should exist (not an Option anymore)
                     }
-                    _ => panic!("first stmt should be let"),
+                    _ => panic!("Expected first stmt to be let, got {:?}", b.stmts[0].kind),
                 }
                 // stmt[1] is if-expression wrapped as statement
                 match &b.stmts[1].kind {
@@ -1043,7 +1054,7 @@ mod tests {
                                         "lhs should be temp variable"
                                     );
                                 }
-                                _ => panic!("condition should be binary eq"),
+                                _ => panic!("Expected condition to be binary eq"),
                             }
                             // then branch returns none
                             assert_eq!(
@@ -1058,12 +1069,12 @@ mod tests {
                                         "return none"
                                     );
                                 }
-                                _ => panic!("then branch should be return none"),
+                                _ => panic!("Expected then branch to be return none"),
                             }
                         }
-                        _ => panic!("second stmt should be if-expression"),
+                        _ => panic!("Expected second stmt to be if-expression"),
                     },
-                    _ => panic!("second stmt should be expr (if)"),
+                    _ => panic!("Expected second stmt to be expr (if)"),
                 }
                 // tail expr is temp variable
                 let tail = b.expr.as_ref().expect("tail expr expected");
@@ -1072,7 +1083,10 @@ mod tests {
                     "tail should be temp variable"
                 );
             }
-            _ => panic!("postfix '?' should normalize to block with early-return pattern"),
+            _ => panic!(
+                "Expected postfix '?' to normalize to block with early-return pattern, got {:?}",
+                e.kind
+            ),
         }
     }
 }

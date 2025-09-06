@@ -704,16 +704,135 @@ impl<'a> LoweringCtx<'a> {
                     .lower_expr(expr)
                     .unwrap_or_else(|| self.emit(self.cur_bb, InstIR::Nop));
                 use hir::HirUnaryOp::*;
-                let inst = match op {
-                    Not => InstIR::Not { value: v },
-                    Minus => InstIR::Neg { value: v },
-                    Plus => InstIR::Pos { value: v },
-                    PreInc => InstIR::Pos { value: v }, // TODO: Implement proper pre-increment
-                    PostInc => InstIR::Pos { value: v }, // TODO: Implement proper post-increment
-                    PreDec => InstIR::Neg { value: v }, // TODO: Implement proper pre-decrement
-                    PostDec => InstIR::Neg { value: v }, // TODO: Implement proper post-decrement
-                };
-                Some(self.emit(self.cur_bb, inst))
+                match op {
+                    Not => Some(self.emit(self.cur_bb, InstIR::Not { value: v })),
+                    Minus => Some(self.emit(self.cur_bb, InstIR::Neg { value: v })),
+                    Plus => Some(self.emit(self.cur_bb, InstIR::Pos { value: v })),
+                    PreInc => {
+                        // Pre-increment: load, add 1, store, return new value
+                        if let hir::HirExprKind::Variable(var_name) = &*expr.kind {
+                            if let Some(&local_id) = self.local_slots.get(var_name) {
+                                let old_val =
+                                    self.emit(self.cur_bb, InstIR::Load { local: local_id });
+                                let one = self.emit(self.cur_bb, InstIR::ConstInt { value: 1 });
+                                let new_val = self.emit(
+                                    self.cur_bb,
+                                    InstIR::Add {
+                                        lhs: old_val,
+                                        rhs: one,
+                                    },
+                                );
+                                self.emit(
+                                    self.cur_bb,
+                                    InstIR::Store {
+                                        local: local_id,
+                                        value: new_val,
+                                    },
+                                );
+                                Some(new_val)
+                            } else {
+                                // Fallback for non-local variables
+                                Some(self.emit(self.cur_bb, InstIR::Pos { value: v }))
+                            }
+                        } else {
+                            // Fallback for non-variable expressions
+                            Some(self.emit(self.cur_bb, InstIR::Pos { value: v }))
+                        }
+                    }
+                    PostInc => {
+                        // Post-increment: load, add 1, store, return old value
+                        if let hir::HirExprKind::Variable(var_name) = &*expr.kind {
+                            if let Some(&local_id) = self.local_slots.get(var_name) {
+                                let old_val =
+                                    self.emit(self.cur_bb, InstIR::Load { local: local_id });
+                                let one = self.emit(self.cur_bb, InstIR::ConstInt { value: 1 });
+                                let new_val = self.emit(
+                                    self.cur_bb,
+                                    InstIR::Add {
+                                        lhs: old_val,
+                                        rhs: one,
+                                    },
+                                );
+                                self.emit(
+                                    self.cur_bb,
+                                    InstIR::Store {
+                                        local: local_id,
+                                        value: new_val,
+                                    },
+                                );
+                                Some(old_val)
+                            } else {
+                                // Fallback for non-local variables
+                                Some(self.emit(self.cur_bb, InstIR::Pos { value: v }))
+                            }
+                        } else {
+                            // Fallback for non-variable expressions
+                            Some(self.emit(self.cur_bb, InstIR::Pos { value: v }))
+                        }
+                    }
+                    PreDec => {
+                        // Pre-decrement: load, subtract 1, store, return new value
+                        if let hir::HirExprKind::Variable(var_name) = &*expr.kind {
+                            if let Some(&local_id) = self.local_slots.get(var_name) {
+                                let old_val =
+                                    self.emit(self.cur_bb, InstIR::Load { local: local_id });
+                                let one = self.emit(self.cur_bb, InstIR::ConstInt { value: 1 });
+                                let new_val = self.emit(
+                                    self.cur_bb,
+                                    InstIR::Sub {
+                                        lhs: old_val,
+                                        rhs: one,
+                                    },
+                                );
+                                self.emit(
+                                    self.cur_bb,
+                                    InstIR::Store {
+                                        local: local_id,
+                                        value: new_val,
+                                    },
+                                );
+                                Some(new_val)
+                            } else {
+                                // Fallback for non-local variables
+                                Some(self.emit(self.cur_bb, InstIR::Neg { value: v }))
+                            }
+                        } else {
+                            // Fallback for non-variable expressions
+                            Some(self.emit(self.cur_bb, InstIR::Neg { value: v }))
+                        }
+                    }
+                    PostDec => {
+                        // Post-decrement: load, subtract 1, store, return old value
+                        if let hir::HirExprKind::Variable(var_name) = &*expr.kind {
+                            if let Some(&local_id) = self.local_slots.get(var_name) {
+                                let old_val =
+                                    self.emit(self.cur_bb, InstIR::Load { local: local_id });
+                                let one = self.emit(self.cur_bb, InstIR::ConstInt { value: 1 });
+                                let new_val = self.emit(
+                                    self.cur_bb,
+                                    InstIR::Sub {
+                                        lhs: old_val,
+                                        rhs: one,
+                                    },
+                                );
+                                self.emit(
+                                    self.cur_bb,
+                                    InstIR::Store {
+                                        local: local_id,
+                                        value: new_val,
+                                    },
+                                );
+                                Some(old_val)
+                            } else {
+                                // Fallback for non-local variables
+                                Some(self.emit(self.cur_bb, InstIR::Neg { value: v }))
+                            }
+                        } else {
+                            // Fallback for non-variable expressions
+                            Some(self.emit(self.cur_bb, InstIR::Neg { value: v }))
+                        }
+                    }
+                }
             }
             // Casts
             K::Cast { expr, ty } => {
@@ -1110,16 +1229,17 @@ impl<'a> LoweringCtx<'a> {
                 // If assigning to a local slot, emit a Store; otherwise just evaluate RHS
                 if let hir::HirExprKind::Variable(var_name) = &*lhs.kind
                     && let Some(lid) = self.local_slots.get(var_name).copied()
-                        && let Some(v) = self.lower_expr(rhs) {
-                            let _ = self.emit(
-                                self.cur_bb,
-                                InstIR::Store {
-                                    local: lid,
-                                    value: v,
-                                },
-                            );
-                            return None;
-                        }
+                    && let Some(v) = self.lower_expr(rhs)
+                {
+                    let _ = self.emit(
+                        self.cur_bb,
+                        InstIR::Store {
+                            local: lid,
+                            value: v,
+                        },
+                    );
+                    return None;
+                }
 
                 let _ = self.lower_expr(rhs);
                 None
@@ -1428,7 +1548,6 @@ fn map_hir_type_to_ir(t: &hir::HirType) -> TypeIR {
 }
 
 /// Infer IR type from HIR expression for local variable type inference
-
 fn infer_type_from_hir_expr_with_context(
     expr: &hir::HirExpr,
 
@@ -1483,9 +1602,8 @@ fn infer_type_from_hir_expr_with_context(
 }
 
 /// Infer the appropriate printf format specifier for an expression in a template string.
-
+///
 /// This uses local type information whenever available to avoid hardcoding function names.
-
 fn infer_format_specifier_for_expr(
     expr: &hir::HirExpr,
     locals_meta: &[LocalIR],

@@ -3,7 +3,6 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[allow(dead_code)]
 pub enum Type {
     I32,
     Bool,
@@ -35,18 +34,6 @@ pub enum Type {
     GenericInstance(String, Vec<Type>),
     Optional(Box<Type>),
     NoneType,
-}
-
-impl Type {
-    #[allow(dead_code)]
-    pub(crate) fn is_pointer(&self) -> bool {
-        matches!(self, Type::Pointer(_) | Type::RawPtr)
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn is_array(&self) -> bool {
-        matches!(self, Type::Array(_))
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -485,28 +472,6 @@ impl Expr {
             Expr::Loop(_, info) => info,
             Expr::Void(info) => info,
             Expr::None(info) => info,
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn is_constant(&self) -> bool {
-        matches!(
-            self,
-            Expr::Int(_, _)
-                | Expr::Str(_, _)
-                | Expr::Bool(_, _)
-                | Expr::F32(_, _)
-                | Expr::F64(_, _)
-                | Expr::None(_)
-        )
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn is_pointer_cast(&self) -> bool {
-        if let Expr::Cast(inner, target_ty, _) = self {
-            inner.get_type().is_pointer() && *target_ty == Type::I32
-        } else {
-            false
         }
     }
 }
