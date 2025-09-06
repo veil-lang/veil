@@ -1,0 +1,27 @@
+[package]
+name = "veil-syntax"
+version = "0.0.1"
+edition = "2024"
+publish = false
+description = "Veil syntax crate: Pest grammar and AST adapter."
+
+[lib]
+name = "veil_syntax"
+path = "src/lib.rs"
+
+[features]
+grammar-validation = ["dep:pest_meta"]
+default = []
+
+[dependencies]
+pest = "2.8.1"
+pest_derive = "2.8.1"
+# Optional: used when the `grammar-validation` feature is enabled
+pest_meta = { version = "2.8.1", optional = true }
+
+codespan = "0.11.1"
+
+# Workspace crates
+veil-lexer = { path = "../lexer" }
+veil-diagnostics = { path = "../diagnostics" }
+veil-ast = { path = "../ast" }

@@ -1,7 +1,29 @@
 #!/bin/bash
 # Veil Installation Script for Linux (binary release, July 2025)
 # Does NOT require Git/Rust for install from released binaries
-# Install: bash install.sh
+# Install: bash install.sh [--force] [--verbose]
+
+# Parse command line arguments
+FORCE_MODE=false
+VERBOSE_MODE=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --force)
+            FORCE_MODE=true
+            shift
+            ;;
+        --verbose)
+            VERBOSE_MODE=true
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Usage: $0 [--force] [--verbose]"
+            exit 1
+            ;;
+    esac
+done
 
 INSTALL_DIR="$HOME/.veil"
 TEMP_DIR=$(mktemp -d -t veil-install-XXXXXX)
@@ -23,10 +45,16 @@ function print_msg() {
 }
 
 function exit_with_pause() {
-    echo "Press Enter to exit..."
-    read -r
+    if [ "$FORCE_MODE" = false ]; then
+        echo "Press Enter to exit..."
+        read -r
+    fi
     exit 1
 }
+
+if [ "$VERBOSE_MODE" = true ]; then
+    print_msg 'INFO' "Running in verbose mode with force=$FORCE_MODE"
+fi
 
 print_msg 'INFO' 'Checking dependencies...'
 
@@ -64,7 +92,11 @@ asset_pattern="veil-${asset_arch}-unknown-linux-gnu.tar.gz"
 download_url=""
 
 # Try to get latest release first
-print_msg "INFO" "Checking latest Veil release..."
+if [ "$VERBOSE_MODE" = true ]; then
+    print_msg "INFO" "Checking latest Veil release..."
+else
+    print_msg "INFO" "Checking latest Veil release..."
+fi
 api_url="https://api.github.com/repos/veil-lang/veil/releases/latest"
 
 if release_data=$(curl -s -H "User-Agent: VeilInstaller" "$api_url" 2>/dev/null); then
@@ -105,10 +137,19 @@ if [ -z "$download_url" ]; then
 fi
 
 # Test if download URL is accessible
-print_msg "INFO" "Testing download URL..."
+if [ "$VERBOSE_MODE" = true ]; then
+    print_msg "INFO" "Testing download URL: $download_url"
+else
+    print_msg "INFO" "Testing download URL..."
+fi
+
 if ! curl -s -I "$download_url" | grep -q "200 OK"; then
     print_msg "ERROR" "Download URL is not accessible: $download_url"
-    exit_with_pause
+    if [ "$FORCE_MODE" = false ]; then
+        exit_with_pause
+    else
+        print_msg "WARNING" "Continuing despite inaccessible URL due to --force flag"
+    fi
 fi
 
 # Download archive
@@ -116,9 +157,16 @@ asset_name=$(basename "$download_url")
 print_msg "INFO" "Downloading $asset_name..."
 archive_path="$TEMP_DIR/$asset_name"
 
-if ! curl -L -H "User-Agent: VeilInstaller" "$download_url" -o "$archive_path"; then
-    print_msg "ERROR" "Failed to download Veil archive."
-    exit_with_pause
+if [ "$VERBOSE_MODE" = true ]; then
+    if ! curl -L -H "User-Agent: VeilInstaller" "$download_url" -o "$archive_path" --progress-bar; then
+        print_msg "ERROR" "Failed to download Veil archive."
+        exit_with_pause
+    fi
+else
+    if ! curl -L -H "User-Agent: VeilInstaller" "$download_url" -o "$archive_path" -s; then
+        print_msg "ERROR" "Failed to download Veil archive."
+        exit_with_pause
+    fi
 fi
 
 print_msg "SUCCESS" "Archive downloaded."

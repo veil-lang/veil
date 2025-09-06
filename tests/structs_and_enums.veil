@@ -1,0 +1,22 @@
+/# Struct and enum declarations (compilation targets, no instantiation) #/
+
+pub struct Point {
+    x: i32,
+    y: i32,
+}
+
+pub(crate) enum Color {
+    Red = 0,
+    Green = 1,
+    Blue = 2,
+}
+
+enum OptionI32 {
+    Some(i32),
+    Nothing,
+}
+
+test decls_compile {
+    /# Declarations above should be sufficient for this test to compile #/
+    return;
+}

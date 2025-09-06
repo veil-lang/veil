@@ -1,0 +1,47 @@
+import std::prelude;
+
+fn add_one(x: i32) -> i32 {
+    return x + 1;
+}
+
+fn multiply_by_two(x: i32) -> i32 {
+    return x * 2;
+}
+
+fn to_string_repr(x: i32) -> string {
+    return "value";
+}
+
+fn main() -> void {
+    /# Test basic pipeline syntax #/
+    const x = 5;
+
+    /# Simple pipeline: x |> add_one #/
+    const result1 = x |> add_one;
+
+    /# Chained pipeline: x |> add_one |> multiply_by_two #/
+    const result2 = x |> add_one |> multiply_by_two;
+
+    /# Complex pipeline with multiple transformations #/
+    const result3 = x
+        |> add_one
+        |> multiply_by_two
+        |> to_string_repr;
+
+    /# Pipeline with literals #/
+    const result4 = 10 |> add_one |> multiply_by_two;
+
+    /# Store results to avoid unused variable warnings #/
+    const _ = result1;
+    const _ = result2;
+    const _ = result3;
+    const _ = result4;
+
+    println("Pipeline results:");
+    println(`result1: {result1}`);
+    println(`result2: {result2}`);
+    println(`result3: {result3}`);
+    println(`result4: {result4}`);
+
+    return;
+}

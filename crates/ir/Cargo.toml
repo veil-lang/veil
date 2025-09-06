@@ -1,0 +1,23 @@
+[package]
+name = "veil-ir"
+version = "0.0.1"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Intermediate Representation for the Veil compiler (post-monomorphization)."
+publish = false
+
+
+
+[lib]
+name = "veil_ir"
+path = "src/lib.rs"
+
+[dependencies]
+veil-ast = { path = "../ast" }
+veil-hir = { path = "../hir" }
+serde = { version = "1.0", features = ["derive"] }
+indexmap = { version = "2.2", features = ["serde"] }
+ahash = "0.8"
+
+[dev-dependencies]
+serde_json = "1.0"

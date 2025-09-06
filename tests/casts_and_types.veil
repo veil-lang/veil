@@ -1,0 +1,53 @@
+/# Casts and primitive type annotations #/
+
+test simple_as_casts {
+    const i = 1 as i32;
+    const j = 2 as i32;
+
+    /# Upcast to wider int, then to float #/
+    const sum64 = (i + j) as i64;
+    const f = 3.25 as f64;
+
+    /# Back to i32 for a combined sink value #/
+    const sink = (sum64 as i32) + (f as i32);
+    const _ = sink;
+    return;
+}
+
+test primitive_type_annotations_strict_match {
+    const a: i32 = 42;
+    const b: f64 = 1.5;
+    const c: bool = true;
+    const d: string = "veil";
+    const e: str = "lang";
+
+    /# Exercise equality and simple arithmetic in typed context #/
+    const _ = (a == 42) & c;
+    const _ = b + 2.5;
+    const _ = d;
+    const _ = e;
+    return;
+}
+
+test chained_casts_roundtrip {
+    const x = 7 as i32;
+
+    /# i32 -> i64 -> f64 -> i32 #/
+    const y = ((x as i64) as f64) as i32;
+
+    /# Use y so the chain is not optimized away #/
+    const _ = y + 1 as i32;
+    return;
+}
+
+test mixed_casts_in_expressions {
+    const i = 10 as i32;
+    const f = 2.5 as f64;
+
+    /# Mix arithmetic with explicit casts #/
+    const r = (i as f64) / f + 3.0;
+    const back = r as i32;
+
+    const _ = back;
+    return;
+}

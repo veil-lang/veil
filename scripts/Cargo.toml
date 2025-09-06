@@ -1,0 +1,11 @@
+[package]
+name = "veil-scripts"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "validate_grammar"
+path = "src/validate_grammar.rs"
+
+[dependencies]
+veil-syntax = { path = "../crates/syntax", features = ["grammar-validation"] }

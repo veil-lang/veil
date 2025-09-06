@@ -1,0 +1,19 @@
+[package]
+name = "veil-helpers"
+version = "0.1.0"
+edition = "2024"
+description = "Helper utilities for the Veil toolchain (CLI validation, error formatting, platform helpers)"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lib]
+name = "veil_helpers"
+path = "src/lib.rs"
+crate-type = ["rlib"]
+
+[dependencies]
+anyhow = "1.0.95"
+codespan = "0.11.1"
+codespan-reporting = "0.11.0"
+shell-words = "1.1.0"
+which = "8.0.0"

@@ -1,37 +1,28 @@
-#[header="stdio.h"]
-foreign fn printf(fmt: string, ...) -> i32;
+/# Minimal io module for testing imports and visibility #/
 
-#[header="stdio.h"]
-foreign fn getchar() -> i32;
-
-foreign fn ve_arena_alloc(size: size_t) -> rawptr;
-
-#[header="stdlib.h"]
-foreign var stdin: rawptr;
-
-export fn print(s: string) {
-    printf("%s", s);
+export fn write_char(c: string) -> void {
+    /# Stub implementation #/
+    return;
 }
 
-export fn println(s: string) {
-    printf("%s\n", s);
+export fn read_char() -> string {
+    /# Stub implementation #/
+    return "x";
 }
 
-export fn read_line() -> string {
-    let buf_size: size_t = 1024;
-    let buffer: *u8 = ve_arena_alloc(buf_size) as *u8;
-
-    let i: size_t = 0;
-    let c = getchar();
-
-    while c != -1 && c != 10 && i < buf_size - 1 {
-        buffer[i] = c as u8;
-        i = i + 1;
-        c = getchar();
-    }
-
-    buffer[i] = 0;
-
-    return buffer as string;
+pub fn io_function() -> void {
+    return;
 }
 
+pub(crate) fn io_crate_function() -> void {
+    return;
+}
+
+export struct IoHandle {
+    pub id: i32,
+}
+
+export enum IoResult {
+    Success,
+    Error(i32),
+}
