@@ -1201,8 +1201,32 @@ pub fn parse_ast_with_warnings(
                 let expr = parse_expr(pair);
                 Stmt::Expr(expr.clone(), Span::new(sp.start() as u32, sp.end() as u32))
             }
+            R::expr_stmt => {
+                // Parse expression statement - find the expression child
+                let span = Span::new(sp.start() as u32, sp.end() as u32);
+                for child in pair.into_inner() {
+                    match child.as_rule() {
+                        // Skip whitespace and semicolons
+                        R::WS | R::SEMI => continue,
+                        // Parse the actual expression
+                        _ => {
+                            let expr = parse_expr(child);
+                            return Stmt::Expr(expr, span);
+                        }
+                    }
+                }
+                // Fallback if no expression found
+                Stmt::Expr(
+                    ast::Expr::Void(ast::ExprInfo {
+                        span,
+                        ty: ast::Type::Void,
+                        is_tail: false,
+                    }),
+                    span,
+                )
+            }
             _ => {
-                // expression statement
+                // expression statement fallback
                 let expr = parse_expr(pair);
                 Stmt::Expr(expr.clone(), Span::new(sp.start() as u32, sp.end() as u32))
             }
@@ -1213,6 +1237,10 @@ pub fn parse_ast_with_warnings(
         let mut out = Vec::new();
         for s in block.into_inner() {
             match s.as_rule() {
+                R::stmt => {
+                    // Now that stmt is non-silent, parse it directly
+                    out.push(parse_stmt(s));
+                }
                 R::const_stmt
                 | R::var_stmt
                 | R::return_stmt

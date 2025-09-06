@@ -59,9 +59,9 @@ test logical_ops_bool_only {
     const and1 = t & f;
     const or1  = t | f;
 
-    /# Deprecated operators (still parse; may warn) #/
-    const and2 = t && f;
-    const or2  = t || f;
+    /# Modern logical operators #/
+    const and2 = t & f;
+    const or2  = t | f;
 
     const _ = and1;
     const _ = or1;

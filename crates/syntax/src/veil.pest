@@ -383,8 +383,8 @@ where_pred = { ty ~ S ~ COLON ~ S ~ trait_bounds }
 
 trait_bounds = { ty_path ~ ( S ~ "+" ~ S ~ ty_path )* }
 
-// Statements
-stmt = _{
+// Statements (updated to fix const parsing)
+stmt = {
       const_stmt
     | var_stmt
     | return_stmt

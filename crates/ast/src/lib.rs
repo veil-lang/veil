@@ -3,49 +3,34 @@
 #![allow(elided_lifetimes_in_paths)]
 #![deny(unused_must_use)]
 
-//! Veil AST facade crate
+//! Veil AST crate
 //!
-//! Purpose
-//! - Provide a temporary facade that exposes the existing AST from the root compiler crate,
-//!   so new workspace crates (e.g., `syntax`) can depend on a stable `veil-ast` crate
-//!   while we migrate code into dedicated pass crates.
+//! This crate provides the core Abstract Syntax Tree (AST) definitions for the Veil language.
+//! It contains all the data structures representing parsed Veil code, including:
 //!
-//! Behavior
-//! - By default (no special feature flags), this crate includes the root AST source file
-//!   directly via `include!`, so downstream users can `use veil_ast::*` and obtain the same
-//!   types currently defined in `veil/src/ast.rs`.
-//! - Optionally, with the `reexport-root` Cargo feature enabled, this crate will instead
-//!   re-export the root crate’s AST module (`ve::ast::*`). This can be useful when the
-//!   include-path approach is undesirable on a particular setup.
+//! - Type definitions (primitives, structs, enums, generics, etc.)
+//! - Expression nodes (literals, binary ops, function calls, etc.)
+//! - Statement nodes (variable declarations, control flow, etc.)
+//! - Declaration nodes (functions, structs, traits, etc.)
+//! - Program structure and metadata
 //!
-/// Default path: include the current root AST source directly.
-///
-/// Notes:
-/// - This uses an absolute path computed from this crate’s manifest directory to reach
-///   the root `src/ast.rs`.
-/// - The included source will be compiled in the context of this crate. Ensure that any
-///   dependencies used by the AST (e.g., `codespan`) are also available to this crate.
-///
-/// If you encounter path issues on your platform, enable the `reexport-root` feature
-/// as a temporary workaround.
+//! This crate is used by the parser to build AST from source code, and by all
+//! subsequent compiler passes for analysis and transformation.
+//!
+/// Veil AST module containing all core language constructs.
 pub mod ast;
 pub use ast::*;
 
-/// A small sanity test to ensure the facade compiles and exposes at least one well-known type.
-/// This uses conditional compilation because the actual exposed items come from the included
-/// or re-exported root source.
+/// Basic compile-time tests for the AST module.
 #[cfg(test)]
-mod facade_tests {
-    // We cannot name specific types here beyond trivial compile checks because they come
-    // from the included root source file. Instead, we just ensure the crate compiles and
-    // at least one commonly known symbol path resolves in typical setups.
+mod tests {
+    use super::*;
 
     #[test]
-    fn facade_compiles() {
-        // If the AST defines a common type like `Type` (as in the current root AST),
-        // try to reference it. This test is intentionally light-touch to avoid breaking
-        // if the root AST evolves during migration.
-        let _maybe_compile = true;
-        assert!(_maybe_compile);
+    fn ast_types_available() {
+        // Verify core AST types are accessible
+        let _type_example = Type::I32;
+        let _visibility_example = Visibility::Private;
+        assert!(true);
     }
 }

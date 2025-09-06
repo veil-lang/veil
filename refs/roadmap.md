@@ -257,7 +257,7 @@ Scope
 
 Checklist
 
-- [ ] Mono over HIR; remove legacy AST-level mono paths.
+- [ ] Mono over HIR; remove AST-level mono paths.
 - [ ] Golden IR dumps for parity.
 
 Acceptance Criteria

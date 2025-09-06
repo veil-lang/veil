@@ -173,9 +173,9 @@ ve build program.veil --cache-stats
 fn main() {
     const name = "Alice";           /# String inference
     const age: i32 = 30;           /# Explicit type
-    var score: u32 = 100;         /# Immutable variable
-    score = score + 10;           /# Cannot modify Immutable variables XX
-    var mut height = 5.6;              /# Immutable f64 inference
+    const score: u32 = 100;        /# Immutable constant
+    /# score = score + 10;         /# Cannot modify constants
+    var height = 5.6;              /# Mutable f64 inference
     height = height + 0.1;         /# Can modify mutable variables
     print(`Hello, {name}! Age: {age}, Height: {height}`);
 }
