@@ -385,9 +385,9 @@ fn install_with_cargo(archive_path: &PathBuf, verbose: bool) -> Result<()> {
         fs::copy(&current_exe, &backup_path)?;
     }
 
-    // Use cargo install --path to build and install
+    // Use cargo install --path to build and install the CLI package specifically
     let mut cmd = Command::new("cargo");
-    cmd.args(&["install", "--path", ".", "--force"]);
+    cmd.args(&["install", "--path", "crates/cli", "--force"]);
 
     // Set the working directory to the extracted source
     cmd.current_dir(&source_dir);
@@ -397,7 +397,7 @@ fn install_with_cargo(archive_path: &PathBuf, verbose: bool) -> Result<()> {
     }
 
     if verbose {
-        println!("🔨 Running: cargo install --path . --force");
+        println!("🔨 Running: cargo install --path crates/cli --force");
     }
 
     let output = cmd
