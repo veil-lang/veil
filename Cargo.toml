@@ -18,6 +18,7 @@ members = [
   "crates/runtime",
   "crates/attr",
   "apps/vec",
+  "scripts",
 ]
 # Planned workspace crates (to be added as they are created):
 #   crates/diagnostics
