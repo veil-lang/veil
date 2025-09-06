@@ -12,7 +12,7 @@
  - On Windows/MinGW: emits `-Wl,--stack,<bytes>`
  - On non-Windows targets: no-op.
 
- Default stack size: 64 MiB (can be overridden by setting VEIL_STACK_MB >= 4).
+ Default stack size: 1024 MiB (can be overridden by setting VEIL_STACK_MB >= 4).
 */
 
 use std::env;
@@ -28,7 +28,7 @@ fn main() {
         .ok()
         .and_then(|v| v.parse::<u64>().ok())
         .filter(|&mb| mb >= 4)
-        .unwrap_or(64);
+        .unwrap_or(1024);
 
     let bytes = stack_mb * 1024 * 1024;
 

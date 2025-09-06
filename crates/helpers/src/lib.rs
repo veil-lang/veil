@@ -380,7 +380,6 @@ pub fn prepare_windows_clang_args(
 
 #[cfg(target_os = "windows")]
 fn discover_msvc_lib_paths() -> Vec<PathBuf> {
-    use std::fs;
     let mut paths = Vec::new();
 
     if let Ok(vctools) = std::env::var("VCToolsInstallDir") {
