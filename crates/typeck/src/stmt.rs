@@ -327,6 +327,15 @@ impl TypeChecker {
             // Range compatibility
             (Range, Range) => true,
 
+            // Array compatibility
+            (Array(inner1), Array(inner2)) => self.strict_type_match(inner1, inner2),
+            (SizedArray(inner1, size1), SizedArray(inner2, size2)) => {
+                size1 == size2 && self.strict_type_match(inner1, inner2)
+            }
+            // Allow sized array to match unsized array annotation (for convenience)
+            (Array(inner1), SizedArray(inner2, _)) => self.strict_type_match(inner1, inner2),
+            // But not the reverse - unsized cannot match sized annotation
+
             // Everything else is incompatible for explicit annotations
             _ => false,
         }

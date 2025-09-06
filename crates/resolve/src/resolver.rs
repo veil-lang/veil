@@ -981,16 +981,19 @@ impl Resolver {
                 // Resolve initializer
                 self.resolve_expression(init)?;
 
-                // Define the constant variable in the current scope
-                let symbol = Symbol::new(
-                    self.context.symbol_table.next_symbol_id(),
-                    name.clone(),
-                    SymbolKind::Variable,
-                    self.context.current_module(),
-                    stmt.id,
-                );
-                if let Err(e) = self.context.define_symbol(symbol) {
-                    self.context.add_error(e);
+                // Wildcard constant (_) doesn't define a symbol
+                if name != "_" {
+                    // Define the constant variable in the current scope
+                    let symbol = Symbol::new(
+                        self.context.symbol_table.next_symbol_id(),
+                        name.clone(),
+                        SymbolKind::Variable,
+                        self.context.current_module(),
+                        stmt.id,
+                    );
+                    if let Err(e) = self.context.define_symbol(symbol) {
+                        self.context.add_error(e);
+                    }
                 }
             }
             HirStmtKind::Var {
@@ -1007,17 +1010,20 @@ impl Resolver {
                 // Resolve initializer
                 self.resolve_expression(init)?;
 
-                // Define the variable in the current scope
-                let symbol = Symbol::new(
-                    self.context.symbol_table.next_symbol_id(),
-                    name.clone(),
-                    SymbolKind::Variable,
-                    self.context.current_module(),
-                    stmt.id,
-                )
-                .with_mutability(*is_mutable);
-                if let Err(e) = self.context.define_symbol(symbol) {
-                    self.context.add_error(e);
+                // Wildcard variable (_) doesn't define a symbol
+                if name != "_" {
+                    // Define the variable in the current scope
+                    let symbol = Symbol::new(
+                        self.context.symbol_table.next_symbol_id(),
+                        name.clone(),
+                        SymbolKind::Variable,
+                        self.context.current_module(),
+                        stmt.id,
+                    )
+                    .with_mutability(*is_mutable);
+                    if let Err(e) = self.context.define_symbol(symbol) {
+                        self.context.add_error(e);
+                    }
                 }
             }
             HirStmtKind::Assign { lhs, rhs } => {
