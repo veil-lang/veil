@@ -33,15 +33,19 @@ impl TypeChecker {
                 // Determine the constant's type
                 let const_type = ty.clone().unwrap_or(init_type);
 
-                // Store constant type in local context for future lookups
+                // Store constant type and mutability (always immutable) in local context for future lookups
                 self.context
-                    .local_variables
-                    .insert(name.clone(), const_type.clone());
+                    .define_local_variable(name.clone(), const_type.clone(), false);
 
                 Ok(const_type)
             }
 
-            HirStmtKind::Var { name, ty, init, .. } => {
+            HirStmtKind::Var {
+                name,
+                ty,
+                init,
+                is_mutable,
+            } => {
                 // Type check the initializer
                 let init_type = self.check_expr(init)?;
 
@@ -58,10 +62,9 @@ impl TypeChecker {
                 // Determine the variable's type
                 let var_type = ty.clone().unwrap_or(init_type);
 
-                // Store variable type in local context for future lookups
+                // Store variable type and mutability in local context for future lookups
                 self.context
-                    .local_variables
-                    .insert(name.clone(), var_type.clone());
+                    .define_local_variable(name.clone(), var_type.clone(), *is_mutable);
 
                 Ok(var_type)
             }
@@ -69,6 +72,31 @@ impl TypeChecker {
             HirStmtKind::Assign { lhs, rhs } => {
                 let target_type = self.check_expr(lhs)?;
                 let value_type = self.check_expr(rhs)?;
+
+                // Check mutability: assignment target must be a mutable variable
+                if let veil_hir::HirExprKind::Variable(var_name) = &*lhs.kind {
+                    match self.context.is_variable_mutable(var_name) {
+                        Some(true) => {
+                            // Variable is mutable, assignment is allowed
+                        }
+                        Some(false) => {
+                            self.error(format!(
+                                "Cannot assign to immutable variable '{}'",
+                                var_name
+                            ));
+                        }
+                        None => {
+                            self.error(format!(
+                                "Cannot assign to undefined variable '{}'",
+                                var_name
+                            ));
+                        }
+                    }
+                } else {
+                    // For now, only support assignment to simple variables
+                    // TODO: Add support for field assignments, array indexing, etc.
+                    self.error("Assignment target must be a variable".to_string());
+                }
 
                 // Record types for both sides to attach TypeIds in the Typed-HIR map
                 self.context.set_node_type(lhs.id, target_type.clone());

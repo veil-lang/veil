@@ -251,9 +251,9 @@ fn discover_veil_files_recursive(dir: &PathBuf, veil_files: &mut Vec<PathBuf>) -
                     || name == "target"
                     || name == "build"
                     || name == "node_modules")
-                {
-                    continue;
-                }
+            {
+                continue;
+            }
             discover_veil_files_recursive(&path, veil_files)?;
         } else if path.extension().and_then(|s| s.to_str()) == Some("veil") {
             veil_files.push(path);
@@ -379,47 +379,48 @@ fn generate_test_program(original_content: &str, test_name: &str) -> Result<Stri
         let src = original_content;
         let pattern = format!("test {}", test_name);
         if let Some(p) = src.find(&pattern)
-            && let Some(rel) = src[p..].find('{') {
-                let start = p + rel;
-                let bytes = src.as_bytes();
-                let mut i = start;
-                let mut depth: i32 = 0;
+            && let Some(rel) = src[p..].find('{')
+        {
+            let start = p + rel;
+            let bytes = src.as_bytes();
+            let mut i = start;
+            let mut depth: i32 = 0;
 
-                // Advance to first '{' and initialize depth
-                while i < bytes.len() {
-                    if bytes[i] as char == '{' {
-                        depth = 1;
-                        i += 1;
-                        break;
-                    }
+            // Advance to first '{' and initialize depth
+            while i < bytes.len() {
+                if bytes[i] as char == '{' {
+                    depth = 1;
                     i += 1;
+                    break;
                 }
-                let content_start = i;
-
-                // Find matching closing brace, allowing nested braces
-                while i < bytes.len() && depth > 0 {
-                    let ch = bytes[i] as char;
-                    if ch == '{' {
-                        depth += 1;
-                    } else if ch == '}' {
-                        depth -= 1;
-                        if depth == 0 {
-                            // Extract body and indent into main()
-                            let body = &src[content_start..i];
-                            for line in body.lines() {
-                                filtered_lines.push(format!("    {}", line));
-                            }
-                            // Always add return; at the end if not already present
-                            if !body.lines().any(|line| line.trim().starts_with("return")) {
-                                filtered_lines.push("    return;".to_string());
-                            }
-                            filtered_lines.push("}".to_string());
-                            return Ok(filtered_lines.join("\n"));
-                        }
-                    }
-                    i += 1;
-                }
+                i += 1;
             }
+            let content_start = i;
+
+            // Find matching closing brace, allowing nested braces
+            while i < bytes.len() && depth > 0 {
+                let ch = bytes[i] as char;
+                if ch == '{' {
+                    depth += 1;
+                } else if ch == '}' {
+                    depth -= 1;
+                    if depth == 0 {
+                        // Extract body and indent into main()
+                        let body = &src[content_start..i];
+                        for line in body.lines() {
+                            filtered_lines.push(format!("    {}", line));
+                        }
+                        // Always add return; at the end if not already present
+                        if !body.lines().any(|line| line.trim().starts_with("return")) {
+                            filtered_lines.push("    return;".to_string());
+                        }
+                        filtered_lines.push("}".to_string());
+                        return Ok(filtered_lines.join("\n"));
+                    }
+                }
+                i += 1;
+            }
+        }
     }
     // Fallback: call the test by name if we failed to extract body
     filtered_lines.push(format!("    {}();", test_name));

@@ -36,7 +36,11 @@ pub fn run_benchmark(input: PathBuf, iterations: usize, verbose: bool) -> Result
 
         // Use the extracted CLI pipeline end-to-end for a realistic run.
         // We mark is_test=true so we don't execute the produced binary.
-        let output = build_dir.join(format!("benchmark_run_{}.exe", i));
+        let output = if cfg!(windows) {
+            build_dir.join(format!("benchmark_run_{}.exe", i))
+        } else {
+            build_dir.join(format!("benchmark_run_{}", i))
+        };
         let _built = crate::process_build(
             input.clone(),
             output,

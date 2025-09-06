@@ -37,14 +37,12 @@ struct GitHubAsset {
 }
 
 /// Update channel configuration
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum UpdateChannel {
     #[default]
-    Stable,  // Regular releases only
+    Stable, // Regular releases only
     Nightly, // Pre-releases (nightly builds)
 }
-
 
 impl std::fmt::Display for UpdateChannel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -247,7 +245,8 @@ fn get_latest_release(channel: UpdateChannel) -> Result<GitHubRelease> {
 
             // Find the latest pre-release
             let latest_prerelease = releases
-                .into_iter().find(|r| r.prerelease && !r.draft)
+                .into_iter()
+                .find(|r| r.prerelease && !r.draft)
                 .ok_or_else(|| anyhow!("No nightly releases found"))?;
 
             Ok(latest_prerelease)

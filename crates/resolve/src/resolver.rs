@@ -993,7 +993,12 @@ impl Resolver {
                     self.context.add_error(e);
                 }
             }
-            HirStmtKind::Var { name, ty, init, .. } => {
+            HirStmtKind::Var {
+                name,
+                ty,
+                init,
+                is_mutable,
+            } => {
                 // Resolve type annotation if present
                 if let Some(type_annotation) = ty {
                     self.resolve_type_annotation(type_annotation)?;
@@ -1009,7 +1014,8 @@ impl Resolver {
                     SymbolKind::Variable,
                     self.context.current_module(),
                     stmt.id,
-                );
+                )
+                .with_mutability(*is_mutable);
                 if let Err(e) = self.context.define_symbol(symbol) {
                     self.context.add_error(e);
                 }

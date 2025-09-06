@@ -19,6 +19,24 @@ use veil_helpers::{get_bundled_clang_path, validate_ve_file};
 use veil_hir as hir;
 use veil_ir as ir;
 use veil_normalize as normalize;
+
+/// Get the default output filename for the current platform
+fn default_output_name() -> &'static str {
+    if cfg!(windows) {
+        "program.exe"
+    } else {
+        "program"
+    }
+}
+
+/// Get the default build output filename for the current platform
+fn default_build_output_name() -> &'static str {
+    if cfg!(windows) {
+        "build/program.exe"
+    } else {
+        "build/program"
+    }
+}
 use veil_resolve as resolve;
 use veil_typeck as typeck;
 pub mod benchmark;
@@ -107,7 +125,7 @@ pub struct Args {
     #[arg(required = true, value_parser = validate_ve_file, value_name = "FILE[.veil]")]
     input: Option<PathBuf>,
 
-    #[arg(short, long, default_value = "program.exe")]
+    #[arg(short, long, default_value = default_output_name())]
     output: PathBuf,
 
     #[arg(long, action = clap::ArgAction::SetFalse)]
@@ -144,7 +162,7 @@ enum Command {
         #[arg(value_parser = validate_ve_file)]
         input: PathBuf,
 
-        #[arg(short, long, default_value = "build/program.exe")]
+        #[arg(short, long, default_value = default_build_output_name())]
         output: PathBuf,
 
         #[arg(long, action = clap::ArgAction::SetFalse)]

@@ -31,6 +31,8 @@ pub struct TypeCheckContext {
     pub symbol_table: SymbolTable,
     /// Local variable types for current scope
     pub local_variables: HashMap<String, HirType>,
+    /// Local variable mutability for current scope
+    pub local_mutability: HashMap<String, bool>,
     /// Current function's return type
     pub current_return_type: Option<HirType>,
     /// Whether we're inside a loop (for break/continue)
@@ -101,18 +103,15 @@ impl TypeInterner {
 }
 
 impl TypeCheckContext {
-    pub fn new(
-        symbol_table: SymbolTable,
-        file_id: FileId,
-        current_module: Option<ModuleId>,
-    ) -> Self {
+    pub fn new(symbol_table: SymbolTable, file_id: FileId, span_map: Option<SpanMap>) -> Self {
         Self {
             symbol_table,
             local_variables: HashMap::new(),
+            local_mutability: HashMap::new(),
             current_return_type: None,
             in_loop: false,
             in_safe: false,
-            current_module,
+            current_module: None,
             file_id,
             break_types: Vec::new(),
             inferring_return_type: false,
@@ -121,7 +120,7 @@ impl TypeCheckContext {
             node_types: HashMap::new(),
             node_type_ids: HashMap::new(),
             type_interner: TypeInterner::new(),
-            span_map: None,
+            span_map,
         }
     }
 
@@ -189,6 +188,27 @@ impl TypeCheckContext {
             location,
             reason,
         });
+    }
+
+    /// Check if a variable is mutable (local scope first, then global)
+    pub fn is_variable_mutable(&self, name: &str) -> Option<bool> {
+        // Check local variables first
+        if let Some(&is_mutable) = self.local_mutability.get(name) {
+            return Some(is_mutable);
+        }
+
+        // Check global symbol table
+        if let Some(symbol) = self.get_symbol_by_name(name) {
+            return Some(symbol.is_mutable);
+        }
+
+        None
+    }
+
+    /// Store a local variable with its type and mutability
+    pub fn define_local_variable(&mut self, name: String, ty: HirType, is_mutable: bool) {
+        self.local_variables.insert(name.clone(), ty);
+        self.local_mutability.insert(name, is_mutable);
     }
 
     /// Check if type is compatible with another
@@ -418,8 +438,10 @@ impl TypeChecker {
         file_id: FileId,
         current_module: Option<ModuleId>,
     ) -> Self {
+        let mut context = TypeCheckContext::new(symbol_table, file_id, None);
+        context.current_module = current_module;
         Self {
-            context: TypeCheckContext::new(symbol_table, file_id, current_module),
+            context,
             errors: Vec::new(),
         }
     }

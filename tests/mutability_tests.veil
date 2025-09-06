@@ -1,0 +1,61 @@
+/# Test file for mutability enforcement in Veil v2.0
+
+/# Test 1: Basic mutable variable assignment (should work)
+test test_mutable_assignment {
+    var mut x = 10;
+    x = 20; /# This should be allowed
+}
+
+/# Test 2: Multiple assignments to mutable variable
+test test_multiple_assignments {
+    var mut counter = 0;
+    counter = 1;
+    counter = 2;
+    counter = 3; /# All should work
+}
+
+/# Test 3: Mixed mutability - only assign to mutable ones
+test test_mixed_mutability {
+    var mut a = 1;
+    var b = 2;
+    const C = 3;
+
+    a = 10; /# Should work - a is mutable
+    /# Don't assign to b or C - they are immutable
+}
+
+/# Test 4: Mutable variable with type compatibility
+test test_type_compatible_assignment {
+    var mut x: i32 = 10;
+    x = 20; /# Should work - same type
+}
+
+/# Test 5: Nested scope mutability
+test test_nested_scope {
+    var mut outer = 1;
+    {
+        var mut inner = 2;
+        outer = 10; /# Should work
+        inner = 20; /# Should work
+    }
+    outer = 30; /# Should work
+}
+
+/# Test 6: Constant variables remain immutable
+test test_const_immutability {
+    const PI = 3.14159;
+    const MAX_SIZE = 1024;
+    /# These should only be readable, not writable
+    var area = PI * 10.0 * 10.0;
+    var buffer_size = MAX_SIZE;
+}
+
+/# Test 7: Regular var is immutable by default
+test test_var_immutability {
+    var name = "Alice";
+    var age = 25;
+    /# Can read these values
+    var greeting = name;
+    var next_year = age + 1;
+    /# But cannot modify them (would cause compile error)
+}

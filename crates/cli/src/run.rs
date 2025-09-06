@@ -5,7 +5,11 @@ use std::path::PathBuf;
 /// Uses the extracted end-to-end pipeline from this crate.
 pub fn run_project(input: PathBuf, verbose: bool) -> Result<()> {
     // Default output name; process_build will place it under <input_dir>/build/
-    let output = PathBuf::from("program.exe");
+    let output = if cfg!(windows) {
+        PathBuf::from("program.exe")
+    } else {
+        PathBuf::from("program")
+    };
 
     // Build and run (process_build executes the binary when is_test = false)
     let _built = crate::process_build(
