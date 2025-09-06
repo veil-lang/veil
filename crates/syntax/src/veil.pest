@@ -37,7 +37,6 @@ module_path = @{ ident ~ ( ( "::" | "/" ) ~ ident )* }  // Accept both '::' and 
 KW_FN          = @{ "fn" ~ !ident_continue }
 KW_TEST        = @{ "test" ~ !ident_continue }
 KW_VAR         = @{ "var" ~ !ident_continue }
-KW_MUT         = @{ "mut" ~ !ident_continue }
 KW_CONST       = @{ "const" ~ !ident_continue }
 KW_IF          = @{ "if" ~ !ident_continue }
 KW_ELSE        = @{ "else" ~ !ident_continue }
@@ -407,7 +406,7 @@ const_stmt = {
     KW_CONST ~ S ~ ident ~ ( S ~ COLON ~ S ~ ty )? ~ S ~ EQ ~ S ~ expr ~ WS? ~ SEMI
 }
 var_stmt = {
-    KW_VAR ~ ( S ~ KW_MUT )? ~ S ~ ident ~ ( S ~ COLON ~ S ~ ty )? ~ S ~ EQ ~ S ~ expr ~ WS? ~ SEMI
+    KW_VAR ~ S ~ ident ~ ( S ~ COLON ~ S ~ ty )? ~ S ~ EQ ~ S ~ expr ~ WS? ~ SEMI
 }
 
 return_stmt = { KW_RETURN ~ ( S ~ expr )? ~ WS? ~ SEMI }

@@ -1,40 +1,40 @@
 /# Test file for mutability enforcement in Veil v2.0
 
-/# Test 1: Basic mutable variable assignment (should work)
+/# Test 1: Basic variable assignment (should work - var is mutable by design)
 test test_mutable_assignment {
-    var mut x = 10;
+    var x = 10;
     x = 20; /# This should be allowed
 }
 
-/# Test 2: Multiple assignments to mutable variable
+/# Test 2: Multiple assignments to variable
 test test_multiple_assignments {
-    var mut counter = 0;
+    var counter = 0;
     counter = 1;
     counter = 2;
     counter = 3; /# All should work
 }
 
-/# Test 3: Mixed mutability - only assign to mutable ones
+/# Test 3: Mixed mutability - var is mutable, const is immutable
 test test_mixed_mutability {
-    var mut a = 1;
+    var a = 1;
     var b = 2;
     const C = 3;
 
-    a = 10; /# Should work - a is mutable
-    /# Don't assign to b or C - they are immutable
+    a = 10; /# Should work - var is mutable by design
+    /# Don't assign to C - const is immutable
 }
 
-/# Test 4: Mutable variable with type compatibility
+/# Test 4: Variable with type compatibility
 test test_type_compatible_assignment {
-    var mut x: i32 = 10;
+    var x: i32 = 10;
     x = 20; /# Should work - same type
 }
 
-/# Test 5: Nested scope mutability
+/# Test 5: Nested scope variable assignment
 test test_nested_scope {
-    var mut outer = 1;
+    var outer = 1;
     {
-        var mut inner = 2;
+        var inner = 2;
         outer = 10; /# Should work
         inner = 20; /# Should work
     }
@@ -50,12 +50,14 @@ test test_const_immutability {
     var buffer_size = MAX_SIZE;
 }
 
-/# Test 7: Regular var is immutable by default
-test test_var_immutability {
+/# Test 7: Variables can be reassigned (var is mutable by design)
+test test_var_mutability {
     var name = "Alice";
     var age = 25;
     /# Can read these values
     var greeting = name;
     var next_year = age + 1;
-    /# But cannot modify them (would cause compile error)
+    /# Can also modify them
+    name = "Bob";
+    age = 30;
 }

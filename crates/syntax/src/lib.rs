@@ -1038,10 +1038,9 @@ pub fn parse_ast_with_warnings(
                 )
             }
             R::var_stmt => {
-                // var (mut)? name (: type)? = expr;
+                // var name (: type)? = expr;
                 let mut name = String::new();
                 let mut ty = None;
-                let mut is_mutable = false;
                 let mut expr = ast::Expr::Void(ast::ExprInfo {
                     span: Span::new(sp.start() as u32, sp.end() as u32),
                     ty: ast::Type::Unknown,
@@ -1049,7 +1048,6 @@ pub fn parse_ast_with_warnings(
                 });
                 for c in pair.into_inner() {
                     match c.as_rule() {
-                        R::KW_MUT => is_mutable = true,
                         R::ident => name = c.as_str().to_string(),
                         R::ty => ty = Some(parse_type(c)),
                         R::expr | R::assignment_expr => expr = parse_expr(c),
@@ -1060,7 +1058,7 @@ pub fn parse_ast_with_warnings(
                     name,
                     ty,
                     expr,
-                    is_mutable,
+                    true, // var is mutable by design
                     Span::new(sp.start() as u32, sp.end() as u32),
                 )
             }

@@ -2,13 +2,13 @@
 
 /# Test 1: Basic mutable variable assignment (should work)
 fn test_mutable_assignment() {
-    var mut x = 10;
+    var x = 10;
     x = 20; /# This should be allowed
 }
 
 /# Test 2: Multiple assignments to mutable variable
 fn test_multiple_assignments() {
-    var mut counter = 0;
+    var counter = 0;
     counter = 1;
     counter = 2;
     counter = 3; /# All should work
@@ -16,7 +16,7 @@ fn test_multiple_assignments() {
 
 /# Test 3: Mixed mutability - only assign to mutable ones
 fn test_mixed_mutability() {
-    var mut a = 1;
+    var a = 1;
     var b = 2;
     const C = 3;
 
@@ -26,15 +26,15 @@ fn test_mixed_mutability() {
 
 /# Test 4: Mutable variable with type compatibility
 fn test_type_compatible_assignment() {
-    var mut x: i32 = 10;
+    var x: i32 = 10;
     x = 20; /# Should work - same type
 }
 
 /# Test 5: Nested scope mutability
 fn test_nested_scope() {
-    var mut outer = 1;
+    var outer = 1;
     {
-        var mut inner = 2;
+        var inner = 2;
         outer = 10; /# Should work
         inner = 20; /# Should work
     }

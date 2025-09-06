@@ -527,14 +527,14 @@ The `comptime` environment is sandboxed and cannot perform I/O. Execution is als
 - **Increment/Decrement Operators**: Veil supports both prefix and postfix increment (++) and decrement (--) operators for integers only (i8..i64, u8..u64). The prefix version (++x, --x) modifies the variable and returns the new value, while the postfix version (x++, x--) returns the original value and then modifies the variable. These operators are syntactic sugar for x += 1 and x -= 1 respectively. Applying ++/-- to non-integer types is a compile-time error, and these operators require a var binding.
 
 ```veil
-var mut counter = 0;
+var counter = 0;
 var a = ++counter;  /# counter becomes 1, a is 1
 var b = counter++;  /# b is 1, counter becomes 2
 var c = --counter;  /# counter becomes 1, c is 1
 var d = counter--;  /# d is 1, counter becomes 0
 ```
 
-- **Immutability by Default**: var creates immutable bindings by default, which encourages safer programming. const is for compile-time constants. var mut is used for explicit mutability when state changes are necessary, making these locations easy to spot and reason about.
+- **Clear Mutability Model**: const creates immutable compile-time constants, while var creates mutable runtime variables. This simple two-tier system makes mutability intentions clear without verbose syntax.
 
 - **Union Types (|)**: string | int can hold either type. The compiler enforces that you handle all cases, typically with a match statement, eliminating a whole category of runtime type errors.
 
@@ -3579,7 +3579,7 @@ const future = async {
 ```ebnf
 variable_declaration ::= (const_declaration | var_declaration) ';'
 const_declaration    ::= 'const' identifier (':' type)? '=' expression
-var_declaration      ::= 'var' ('mut')? identifier (':' type)? '=' expression
+var_declaration      ::= 'var' identifier (':' type)? '=' expression
 ```
 
 **Examples:**
@@ -3587,17 +3587,16 @@ var_declaration      ::= 'var' ('mut')? identifier (':' type)? '=' expression
 ```veil
 const PI = 3.14159;                    // Compile-time constant
 const MAX_USERS: i32 = 1000;          // Typed constant
-var name = "Alice";                    // Immutable variable
-var age: i32 = 25;                     // Typed immutable variable
-var mut counter = 0;                   // Mutable variable
-var mut buffer: [u8; 1024] = [0; 1024]; // Typed mutable variable
+var name = "Alice";                    // Mutable variable
+var age: i32 = 25;                     // Typed mutable variable
+var counter = 0;                       // Mutable variable
+var buffer: [u8; 1024] = [0; 1024];   // Typed mutable variable
 ```
 
 **Semantics:**
 
-- `const` declarations create compile-time constants. The value must be computable at compile time.
-- `var` declarations create immutable variables. The value is computed at runtime but cannot be modified.
-- `var mut` declarations create mutable variables that can be modified after initialization.
+- `const` declarations create compile-time constants. The value must be computable at compile time and cannot be modified.
+- `var` declarations create mutable variables. The value is computed at runtime and can be modified after initialization.
 
 ### 14.2 Expression Statements
 

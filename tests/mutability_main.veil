@@ -2,19 +2,19 @@
 
 fn main() {
     /# Test 1: Basic mutable variable assignment (should work)
-    var mut x = 10;
+    var x = 10;
     x = 20; /# This should be allowed
     println("Mutable assignment works!");
 
     /# Test 2: Multiple assignments to mutable variable
-    var mut counter = 0;
+    var counter = 0;
     counter = 1;
     counter = 2;
     counter = 3; /# All should work
     println("Multiple assignments work!");
 
     /# Test 3: Mixed mutability - only assign to mutable ones
-    var mut a = 1;
+    var a = 1;
     var b = 2;
     const C = 3;
 
@@ -23,14 +23,14 @@ fn main() {
     println("Mixed mutability test passed!");
 
     /# Test 4: Mutable variable with type compatibility
-    var mut y: i32 = 10;
+    var y: i32 = 10;
     y = 20; /# Should work - same type
     println("Type compatible assignment works!");
 
     /# Test 5: Nested scope mutability
-    var mut outer = 1;
+    var outer = 1;
     {
-        var mut inner = 2;
+        var inner = 2;
         outer = 10; /# Should work
         inner = 20; /# Should work
     }
