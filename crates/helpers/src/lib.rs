@@ -7,6 +7,7 @@
 
 use anyhow::Result;
 use codespan::{FileId, Files};
+#[cfg(target_os = "windows")]
 use std::fs;
 use std::path::{Path, PathBuf};
 

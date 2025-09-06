@@ -33,8 +33,7 @@ fn main() -> Result<()> {
             test_name,
             verbose,
             list,
-            recursive,
-        }) => cli::test::run_test(input, test_name, verbose, list, recursive),
+        }) => cli::test::run_test(input, test_name, verbose, list),
         Ok(cli::CliCommand::Init {
             directory,
             project_name,
