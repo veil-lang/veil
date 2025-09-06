@@ -1,8 +1,8 @@
 /*!
- Root build script for the workspace (binary: `veil`).
+ Build script for the CLI crate (binary: `ve`).
 
  Purpose:
- - Increase the Windows stack size for the final `veil` executable to mitigate
+ - Increase the Windows stack size for the `ve` executable to mitigate
    stack overflows observed in deep compilation pipelines (parse → lower →
    resolve → typeck → monomorphize → IR → codegen).
  - Allow user override via `VEIL_STACK_MB` environment variable.
