@@ -7,7 +7,7 @@
 
 use anyhow::Result;
 use codespan::{FileId, Files};
-
+use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Extract a "line:col" string from a codespan diagnostic for a specific file.
