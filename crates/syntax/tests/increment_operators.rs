@@ -15,13 +15,11 @@ fn parse_expr_from_source(source: &str) -> Expr {
     let program = parse_ast(&files, file_id).expect("Parse should succeed");
 
     // Extract the first function and its first statement
-    if let Some(func) = program.functions.first() {
-        if let Some(stmt) = func.body.first() {
-            if let veil_ast::Stmt::Expr(expr, _) = stmt {
+    if let Some(func) = program.functions.first()
+        && let Some(stmt) = func.body.first()
+            && let veil_ast::Stmt::Expr(expr, _) = stmt {
                 return expr.clone();
             }
-        }
-    }
 
     panic!("Expected expression statement in function body");
 }

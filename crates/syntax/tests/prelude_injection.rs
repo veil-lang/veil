@@ -252,7 +252,7 @@ fn main() -> void {
     // Should have 2 imports: auto-injected prelude + manual prelude
     // This might be redundant but ensures the auto-injection doesn't break existing code
     assert!(
-        program.imports.len() >= 1,
+        !program.imports.is_empty(),
         "Should have at least the manual prelude import"
     );
 

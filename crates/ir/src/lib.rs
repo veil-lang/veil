@@ -1108,9 +1108,9 @@ impl<'a> LoweringCtx<'a> {
 
             S::Assign { lhs, rhs } => {
                 // If assigning to a local slot, emit a Store; otherwise just evaluate RHS
-                if let hir::HirExprKind::Variable(var_name) = &*lhs.kind {
-                    if let Some(lid) = self.local_slots.get(var_name).copied() {
-                        if let Some(v) = self.lower_expr(rhs) {
+                if let hir::HirExprKind::Variable(var_name) = &*lhs.kind
+                    && let Some(lid) = self.local_slots.get(var_name).copied()
+                        && let Some(v) = self.lower_expr(rhs) {
                             let _ = self.emit(
                                 self.cur_bb,
                                 InstIR::Store {
@@ -1120,8 +1120,6 @@ impl<'a> LoweringCtx<'a> {
                             );
                             return None;
                         }
-                    }
-                }
 
                 let _ = self.lower_expr(rhs);
                 None

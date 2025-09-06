@@ -596,13 +596,12 @@ impl TypeChecker {
         } else if block.stmts.len() == 1 {
             // If block has exactly one statement and no tail expression,
             // check if it's an expression statement and return its type
-            if let Some(stmt) = block.stmts.first_mut() {
-                if let veil_hir::HirStmtKind::Expr(expr) = &mut stmt.kind {
+            if let Some(stmt) = block.stmts.first_mut()
+                && let veil_hir::HirStmtKind::Expr(expr) = &mut stmt.kind {
                     let ty = self.check_expr(expr)?;
                     self.context.set_node_type(expr.id, ty.clone());
                     last_type = ty;
                 }
-            }
         }
 
         Ok(last_type)
@@ -729,8 +728,8 @@ impl TypeChecker {
     /// Type-check impl blocks: validate trait_ref exists and method duplicates
     fn check_impl(&mut self, imp: &mut HirImpl) -> Result<(), Vec<Diag>> {
         // Validate trait_ref existence if provided
-        if let Some(trait_type) = &imp.trait_ref {
-            if let HirType::Unresolved(trait_name) = trait_type {
+        if let Some(trait_type) = &imp.trait_ref
+            && let HirType::Unresolved(trait_name) = trait_type {
                 let is_trait = self
                     .context
                     .symbol_table
@@ -746,7 +745,6 @@ impl TypeChecker {
                     );
                 }
             }
-        }
 
         // Check duplicate methods in impl
         use std::collections::HashSet;

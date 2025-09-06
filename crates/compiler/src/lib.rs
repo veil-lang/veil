@@ -439,7 +439,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let mut cx = PassCx::new(temp.path(), true);
         let mut pm = PassManager::with_fs_cache(temp.path(), "fp-test-1", true);
-        let pass = IdentityPass::default();
+        let pass = IdentityPass;
 
         let key_seed = b"hello";
         let input = b"payload".to_vec();

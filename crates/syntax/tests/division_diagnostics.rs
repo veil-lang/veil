@@ -54,7 +54,7 @@ fn parse_expr_from_source(source: &str) -> Expr {
     if let Some(func) = program.functions.first() {
         if let Some(stmt) = func.body.first() {
             match stmt {
-                veil_ast::Stmt::Expr(expr, _) => return expr.clone(),
+                veil_ast::Stmt::Expr(expr, _) => expr.clone(),
                 other => panic!(
                     "Found statement type: {:?}, expected expression statement",
                     other
