@@ -287,10 +287,16 @@ pub struct HirStmt {
 #[derive(Debug, Clone, PartialEq)]
 pub enum HirStmtKind {
     Expr(HirExpr),
-    Let {
-        pattern: HirPattern,
+    Const {
+        name: String,
         ty: Option<HirType>,
-        init: Option<HirExpr>,
+        init: HirExpr,
+    },
+    Var {
+        name: String,
+        ty: Option<HirType>,
+        init: HirExpr,
+        is_mutable: bool,
     },
     Assign {
         lhs: HirExpr,

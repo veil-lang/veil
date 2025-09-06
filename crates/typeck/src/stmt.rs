@@ -16,42 +16,54 @@ impl TypeChecker {
                 self.check_expr(expr)
             }
 
-            HirStmtKind::Let { pattern, ty, init } => {
-                // Type check the initializer if present
-                let init_type = if let Some(init_expr) = init {
-                    Some(self.check_expr(init_expr)?)
-                } else {
-                    None
-                };
+            HirStmtKind::Const { name, ty, init } => {
+                // Type check the initializer
+                let init_type = self.check_expr(init)?;
 
                 // Check type annotation if present
                 if let Some(annotation) = ty
-                    && let Some(ref init_ty) = init_type
-                    && !self.context.types_compatible(annotation, init_ty)
+                    && !self.strict_type_match(annotation, &init_type)
                 {
                     self.error(format!(
                         "Type annotation {:?} does not match initializer type {:?}",
-                        annotation, init_ty
+                        annotation, init_type
+                    ));
+                }
+
+                // Determine the constant's type
+                let const_type = ty.clone().unwrap_or(init_type);
+
+                // Store constant type in local context for future lookups
+                self.context
+                    .local_variables
+                    .insert(name.clone(), const_type.clone());
+
+                Ok(const_type)
+            }
+
+            HirStmtKind::Var { name, ty, init, .. } => {
+                // Type check the initializer
+                let init_type = self.check_expr(init)?;
+
+                // Check type annotation if present
+                if let Some(annotation) = ty
+                    && !self.strict_type_match(annotation, &init_type)
+                {
+                    self.error(format!(
+                        "Type annotation {:?} does not match initializer type {:?}",
+                        annotation, init_type
                     ));
                 }
 
                 // Determine the variable's type
-                let var_type = ty.clone().or(init_type).unwrap_or(HirType::Unknown);
-
-                // Record the variable type on the pattern node (Typed-HIR attachment)
-                self.context.set_node_type(pattern.id, var_type.clone());
+                let var_type = ty.clone().unwrap_or(init_type);
 
                 // Store variable type in local context for future lookups
-                if let veil_hir::HirPatternKind::Variable(var_name) = &*pattern.kind {
-                    self.context
-                        .local_variables
-                        .insert(var_name.clone(), var_type.clone());
-                }
+                self.context
+                    .local_variables
+                    .insert(name.clone(), var_type.clone());
 
-                // Check pattern compatibility with the type
-                self.check_pattern_against_type(pattern, &var_type)?;
-
-                Ok(HirType::Void) // Let statements don't produce values
+                Ok(var_type)
             }
 
             HirStmtKind::Assign { lhs, rhs } => {
@@ -254,6 +266,43 @@ impl TypeChecker {
 
         Ok(())
     }
+
+    /// Strict type matching for explicit type annotations
+    /// This is more restrictive than general type compatibility
+    fn strict_type_match(&self, expected: &HirType, actual: &HirType) -> bool {
+        use HirType::*;
+
+        match (expected, actual) {
+            // Exact matches are always allowed
+            (I8, I8) | (I16, I16) | (I32, I32) | (I64, I64) => true,
+            (U8, U8) | (U16, U16) | (U32, U32) | (U64, U64) => true,
+            (F32, F32) | (F64, F64) => true,
+            (Bool, Bool) | (String, String) | (Char, Char) => true,
+            (Void, Void) | (Never, Never) => true,
+
+            // Allow some safe numeric promotions for explicit annotations
+            // Integer widening (only upward)
+            (I16, I8) | (I32, I8) | (I64, I8) => true,
+            (I32, I16) | (I64, I16) => true,
+            (I64, I32) => true,
+            (U16, U8) | (U32, U8) | (U64, U8) => true,
+            (U32, U16) | (U64, U16) => true,
+            (U64, U32) => true,
+
+            // Float widening
+            (F64, F32) => true,
+
+            // Integer to float (safe)
+            (F32, I8) | (F32, I16) | (F32, U8) | (F32, U16) => true,
+            (F64, I8) | (F64, I16) | (F64, I32) | (F64, U8) | (F64, U16) | (F64, U32) => true,
+
+            // Range compatibility
+            (Range, Range) => true,
+
+            // Everything else is incompatible for explicit annotations
+            _ => false,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -269,25 +318,23 @@ mod tests {
         let fid = files.add("test.veil".to_string(), String::new());
         let mut checker = TypeChecker::new(symbol_table, fid, None);
 
-        // Create a simple let statement: let x = 42;
+        // Create a simple var statement: var x = 42;
         let mut stmt = HirStmt {
             id: NodeId::new(1),
-            kind: HirStmtKind::Let {
-                pattern: HirPattern {
-                    id: NodeId::new(2),
-                    kind: Box::new(HirPatternKind::Variable("x".to_string())),
-                },
+            kind: HirStmtKind::Var {
+                name: "x".to_string(),
                 ty: Some(HirType::I32),
-                init: Some(HirExpr {
+                init: HirExpr {
                     id: NodeId::new(3),
                     kind: Box::new(HirExprKind::Int(42)),
-                }),
+                },
+                is_mutable: false,
             },
         };
 
         let result = checker.check_stmt(&mut stmt);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), HirType::Void);
+        assert_eq!(result.unwrap(), HirType::I32);
     }
 
     #[test]
@@ -298,18 +345,17 @@ mod tests {
         let mut checker = TypeChecker::new(symbol_table, fid, None);
 
         // Create a let statement with type mismatch: let x: bool = 42;
+        // Create var statement with mismatched type: var x: bool = 42;
         let mut stmt = HirStmt {
             id: NodeId::new(1),
-            kind: HirStmtKind::Let {
-                pattern: HirPattern {
-                    id: NodeId::new(2),
-                    kind: Box::new(HirPatternKind::Variable("x".to_string())),
-                },
+            kind: HirStmtKind::Var {
+                name: "x".to_string(),
                 ty: Some(HirType::Bool),
-                init: Some(HirExpr {
+                init: HirExpr {
                     id: NodeId::new(3),
                     kind: Box::new(HirExprKind::Int(42)),
-                }),
+                },
+                is_mutable: false,
             },
         };
 

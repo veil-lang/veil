@@ -101,7 +101,6 @@ COLON = { ":" }
 
 KW_FN = @{ "fn" ~ !ident_continue }
 KW_TEST = @{ "test" ~ !ident_continue }
-KW_LET = @{ "let" ~ !ident_continue }
 KW_VAR = @{ "var" ~ !ident_continue }
 KW_IF = @{ "if" ~ !ident_continue }
 KW_ELSE = @{ "else" ~ !ident_continue }
@@ -159,7 +158,7 @@ TY_F64B = @{ "f64" ~ !ident_continue }
 
 token = {
       COMMENT
-    | KW_FN | KW_TEST | KW_LET | KW_VAR | KW_IF | KW_ELSE | KW_RETURN | KW_RAWPTR | KW_DEFER
+    | KW_FN | KW_TEST | KW_VAR | KW_IF | KW_ELSE | KW_RETURN | KW_RAWPTR | KW_DEFER
     | KW_SAFE | KW_AS | KW_WHILE | KW_FOR | KW_STEP | KW_LOOP | KW_IMPORT | KW_FROM | KW_EXPORT
     | KW_STRUCT | KW_IMPL | KW_NEW | KW_CONSTRUCTOR | KW_ENUM | KW_MATCH | KW_TRUE | KW_FALSE
     | KW_NONE1 | KW_NONE2 | KW_IN | KW_FOREIGN
@@ -1014,8 +1013,8 @@ pub fn parse_ast_with_warnings(
                 parse_block_stmts(pair.clone()),
                 Span::new(sp.start() as u32, sp.end() as u32),
             ),
-            R::let_stmt => {
-                // let name (: type)? = expr;
+            R::const_stmt => {
+                // const name (: type)? = expr;
                 let mut name = String::new();
                 let mut ty = None;
                 let mut expr = ast::Expr::Void(ast::ExprInfo {
@@ -1031,23 +1030,39 @@ pub fn parse_ast_with_warnings(
                         _ => {}
                     }
                 }
-                Stmt::Let(
+                Stmt::Const(
                     name,
                     ty,
                     expr,
                     Span::new(sp.start() as u32, sp.end() as u32),
-                    ast::Visibility::Private,
                 )
             }
             R::var_stmt => {
+                // var (mut)? name (: type)? = expr;
                 let mut name = String::new();
-                let span = Span::new(sp.start() as u32, sp.end() as u32);
+                let mut ty = None;
+                let mut is_mutable = false;
+                let mut expr = ast::Expr::Void(ast::ExprInfo {
+                    span: Span::new(sp.start() as u32, sp.end() as u32),
+                    ty: ast::Type::Unknown,
+                    is_tail: false,
+                });
                 for c in pair.into_inner() {
-                    if c.as_rule() == R::ident {
-                        name = c.as_str().to_string()
+                    match c.as_rule() {
+                        R::KW_MUT => is_mutable = true,
+                        R::ident => name = c.as_str().to_string(),
+                        R::ty => ty = Some(parse_type(c)),
+                        R::expr | R::assignment_expr => expr = parse_expr(c),
+                        _ => {}
                     }
                 }
-                Stmt::Var(name, None, span)
+                Stmt::Var(
+                    name,
+                    ty,
+                    expr,
+                    is_mutable,
+                    Span::new(sp.start() as u32, sp.end() as u32),
+                )
             }
             R::return_stmt => {
                 let mut expr = None;
@@ -1200,7 +1215,7 @@ pub fn parse_ast_with_warnings(
         let mut out = Vec::new();
         for s in block.into_inner() {
             match s.as_rule() {
-                R::let_stmt
+                R::const_stmt
                 | R::var_stmt
                 | R::return_stmt
                 | R::defer_stmt
@@ -2010,7 +2025,6 @@ pub fn lex_raw(files: &Files<String>, file_id: FileId) -> Result<Vec<RawSpanned>
                 // Keywords
                 Rule::KW_FN
                 | Rule::KW_TEST
-                | Rule::KW_LET
                 | Rule::KW_VAR
                 | Rule::KW_IF
                 | Rule::KW_ELSE

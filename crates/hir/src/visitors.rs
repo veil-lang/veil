@@ -124,14 +124,18 @@ pub trait HirVisitor {
     fn walk_stmt(&mut self, stmt: &HirStmt) -> Self::Output {
         match &stmt.kind {
             HirStmtKind::Expr(expr) => self.visit_expr(expr),
-            HirStmtKind::Let { pattern, ty, init } => {
-                self.visit_pattern(pattern);
+            HirStmtKind::Const { ty, init, .. } => {
                 if let Some(ty) = ty {
                     self.visit_type(ty);
                 }
-                if let Some(init) = init {
-                    self.visit_expr(init);
+                self.visit_expr(init);
+                self.default_output()
+            }
+            HirStmtKind::Var { ty, init, .. } => {
+                if let Some(ty) = ty {
+                    self.visit_type(ty);
                 }
+                self.visit_expr(init);
                 self.default_output()
             }
             HirStmtKind::Assign { lhs, rhs } => {
@@ -494,14 +498,18 @@ pub trait HirVisitorMut {
     fn walk_stmt(&mut self, stmt: &mut HirStmt) -> Self::Output {
         match &mut stmt.kind {
             HirStmtKind::Expr(expr) => self.visit_expr(expr),
-            HirStmtKind::Let { pattern, ty, init } => {
-                self.visit_pattern(pattern);
+            HirStmtKind::Const { ty, init, .. } => {
                 if let Some(ty) = ty {
                     self.visit_type(ty);
                 }
-                if let Some(init) = init {
-                    self.visit_expr(init);
+                self.visit_expr(init);
+                self.default_output()
+            }
+            HirStmtKind::Var { ty, init, .. } => {
+                if let Some(ty) = ty {
+                    self.visit_type(ty);
                 }
+                self.visit_expr(init);
                 self.default_output()
             }
             HirStmtKind::Assign { lhs, rhs } => {

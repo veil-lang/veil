@@ -103,12 +103,12 @@ fn astparser_kw_fn_token_probe() {
 }
 
 #[test]
-fn astparser_kw_let_token_probe() {
-    let src = "let";
-    match veil_syntax::ast_grammar::AstParser::parse(veil_syntax::ast_grammar::AstRule::KW_LET, src)
+fn astparser_kw_var_token_probe() {
+    let src = "var";
+    match veil_syntax::ast_grammar::AstParser::parse(veil_syntax::ast_grammar::AstRule::KW_VAR, src)
     {
-        Ok(_) => eprintln!("KW_LET token recognized by AstParser"),
-        Err(e) => eprintln!("Pest raw error for KW_LET:\n{}", e),
+        Ok(_) => eprintln!("KW_VAR token recognized by AstParser"),
+        Err(e) => eprintln!("Pest raw error for KW_VAR:\n{}", e),
     }
 }
 
@@ -118,9 +118,9 @@ fn parses_minimal_mvl_program_with_str_and_idiv() {
     // Goal: reproduce inside the syntax crate and surface precise diagnostics to fix grammar/adapter.
     let src = r#"
 fn main() -> void {
-    let a: i32 = 6 // 3;     /# integer division operator
-    let s: str = "hi";       /# accept `str`
-    let t: string = s;       /# `string` still accepted; mapped to String type
+    var a: i32 = 6 // 3;     /# integer division operator
+    var s: str = "hi";       /# accept `str`
+    var t: string = s;       /# `string` still accepted; mapped to String type
     return;
 }
 "#;
@@ -164,9 +164,9 @@ fn parses_minimal_addition_program() {
     // Even simpler MVL sample; useful to isolate issues unrelated to `//` or string aliases.
     let src = r#"
 fn main() -> void {
-    let x = 1 as i32;
-    let y = 2 as i32;
-    let z = x + y;
+    var x = 1 as i32;
+    var y = 2 as i32;
+    var z = x + y;
     return;
 }
 "#;
@@ -347,33 +347,33 @@ fn astparser_block_probe() {
         }
     }
 
-    // Direct probes for a minimal let statement as its own rules.
-    let let_src = "let x: i32 = 1;";
-    match AstParser::parse(AstRule::let_stmt, let_src) {
-        Ok(_) => eprintln!("let_stmt parsed: {}", let_src),
-        Err(e) => eprintln!("let_stmt failed (diag) on {}: {}", let_src, e),
+    // Direct probes for a minimal var statement as its own rules.
+    let var_src = "var x: i32 = 1;";
+    match AstParser::parse(AstRule::var_stmt, var_src) {
+        Ok(_) => eprintln!("var_stmt parsed: {}", var_src),
+        Err(e) => eprintln!("var_stmt failed (diag) on {}: {}", var_src, e),
     }
-    match AstParser::parse(AstRule::stmt, let_src) {
-        Ok(_) => eprintln!("stmt parsed: {}", let_src),
-        Err(e) => eprintln!("stmt failed (diag) on {}: {}", let_src, e),
+    match AstParser::parse(AstRule::stmt, var_src) {
+        Ok(_) => eprintln!("stmt parsed: {}", var_src),
+        Err(e) => eprintln!("stmt failed (diag) on {}: {}", var_src, e),
     }
 
-    // Diagnostic-only probes to isolate the failure with let_stmt in blocks.
-    let blk_src = "{ let x: i32 = 1; }";
+    // Diagnostic-only probes to isolate the failure with var_stmt in blocks.
+    let blk_src = "{ var x: i32 = 1; }";
     match AstParser::parse(AstRule::block, blk_src) {
         Ok(_) => eprintln!("block parsed: {}", blk_src),
         Err(e) => eprintln!("block failed (diag) on {}: {}", blk_src, e),
     }
 
-    let let_src = "let x: i32 = 1;";
-    match AstParser::parse(AstRule::let_stmt, let_src) {
-        Ok(_) => eprintln!("let_stmt parsed: {}", let_src),
-        Err(e) => eprintln!("let_stmt failed (diag) on {}: {}", let_src, e),
+    let var_src = "var x: i32 = 1;";
+    match AstParser::parse(AstRule::var_stmt, var_src) {
+        Ok(_) => eprintln!("var_stmt parsed: {}", var_src),
+        Err(e) => eprintln!("var_stmt failed (diag) on {}: {}", var_src, e),
     }
 
-    match AstParser::parse(AstRule::stmt, let_src) {
-        Ok(_) => eprintln!("stmt parsed: {}", let_src),
-        Err(e) => eprintln!("stmt failed (diag) on {}: {}", let_src, e),
+    match AstParser::parse(AstRule::stmt, var_src) {
+        Ok(_) => eprintln!("stmt parsed: {}", var_src),
+        Err(e) => eprintln!("stmt failed (diag) on {}: {}", var_src, e),
     }
 }
 
@@ -426,7 +426,7 @@ fn astparser_idiv_comment_block_probe() {
     // Verify '6 // 3; // comment' parses inside a block (IDIV operator followed by line comment).
     let src = r#"
 {
-    let a: i32 = 6 // 3;     /# integer division operator
+    var a: i32 = 6 // 3;     /# integer division operator
 }
 "#;
 

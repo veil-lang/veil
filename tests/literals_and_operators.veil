@@ -1,71 +1,71 @@
 /# Literals and operators: ints, floats, strings, bools, comparisons, logical #/
 
 test integer_and_float_literals {
-    let a: i32 = 0;
-    let b: i32 = 123;
-    let c: i32 = 0xFF as i32;
-    let d: i32 = 0b1010 as i32;
+    const a: i32 = 0;
+    const b: i32 = 123;
+    const c: i32 = 0xFF as i32;
+    const d: i32 = 0b1010 as i32;
 
-    let f: f64 = 1.5;
-    let g: f64 = 2.5;
-    let sink_i: i32 = a + b + c + d;
-    let sink_f: f64 = f + g;
+    const f: f64 = 1.5;
+    const g: f64 = 2.5;
+    const sink_i: i32 = a + b + c + d;
+    const sink_f: f64 = f + g;
 
     /# Large integer literal path (i64) #/
-    let big: i64 = 4294967296;
-    let _ = sink_i;
-    let _ = sink_f;
-    let _ = big;
+    const big: i64 = 4294967296;
+    const _ = sink_i;
+    const _ = sink_f;
+    const _ = big;
     return;
 }
 
 test string_and_bool_literals {
-    let s: string = "hello";
-    let t: str = "world";
-    let u = `hi {s} {1 + 2}`;
+    const s: string = "hello";
+    const t: str = "world";
+    const u = `hi {s} {1 + 2}`;
 
-    let ok: bool = true;
-    let no: bool = false;
+    const ok: bool = true;
+    const no: bool = false;
 
     /# basic boolean or #/
-    let v = ok | no;
+    const v = ok | no;
 
-    let _ = s;
-    let _ = t;
-    let _ = u;
-    let _ = v;
+    const _ = s;
+    const _ = t;
+    const _ = u;
+    const _ = v;
     return;
 }
 
 test comparisons_and_equality {
-    let a: i32 = 3;
-    let b: i32 = 4;
+    const a: i32 = 3;
+    const b: i32 = 4;
 
-    let _lt  = a < b;
-    let _le  = a <= b;
-    let _gt  = a > b;
-    let _ge  = a >= b;
-    let _eq  = a == b;
-    let _ne  = a != b;
+    const _lt  = a < b;
+    const _le  = a <= b;
+    const _gt  = a > b;
+    const _ge  = a >= b;
+    const _eq  = a == b;
+    const _ne  = a != b;
 
     return;
 }
 
 test logical_ops_bool_only {
-    let t = true;
-    let f = false;
+    const t = true;
+    const f = false;
 
     /# New single-char logical operators #/
-    let and1 = t & f;
-    let or1  = t | f;
+    const and1 = t & f;
+    const or1  = t | f;
 
     /# Deprecated operators (still parse; may warn) #/
-    let and2 = t && f;
-    let or2  = t || f;
+    const and2 = t && f;
+    const or2  = t || f;
 
-    let _ = and1;
-    let _ = or1;
-    let _ = and2;
-    let _ = or2;
+    const _ = and1;
+    const _ = or1;
+    const _ = and2;
+    const _ = or2;
     return;
 }

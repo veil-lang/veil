@@ -6,12 +6,12 @@ fn logical_operators_single_char() {
     // Test that single-char logical operators & and | work correctly
     let src = r#"
 fn test_logical() -> bool {
-    let a = true;
-    let b = false;
+    var a = true;
+    var b = false;
 
     /# New single-char logical operators
-    let and_result = a & b;
-    let or_result = a | b;
+    var and_result = a & b;
+    var or_result = a | b;
 
     return and_result | or_result;
 }
@@ -37,18 +37,18 @@ fn logical_operators_precedence() {
     // Test precedence: bitwise has higher precedence than logical
     let src = r#"
 fn test_precedence() -> bool {
-    let a = 1;
-    let b = 2;
-    let c = 3;
+    var a = 1;
+    var b = 2;
+    var c = 3;
 
     /# Should parse as: (a & b) | c for bitwise
-    let bitwise_result = a & b | c;
+    var bitwise_result = a & b | c;
 
     /# Should parse as: (x & y) | z for logical booleans
-    let x = true;
-    let y = false;
-    let z = true;
-    let logical_result = x & y | z;
+    var x = true;
+    var y = false;
+    var z = true;
+    var logical_result = x & y | z;
 
     return logical_result;
 }
@@ -78,12 +78,12 @@ fn deprecated_logical_operators() {
     // Test that deprecated && and || still parse but should emit warnings
     let src = r#"
 fn test_deprecated() -> bool {
-    let a = true;
-    let b = false;
+    var a = true;
+    var b = false;
 
     /# Deprecated operators - should still parse
-    let and_result = a && b;
-    let or_result = a || b;
+    var and_result = a && b;
+    var or_result = a || b;
 
     return and_result || or_result;
 }
@@ -123,19 +123,19 @@ fn advanced_type_syntax() {
 /# Advanced type syntax test
 fn test_types() -> void {
     /# Reference types
-    let ref_val: &i32 = &42;
+    var ref_val: &i32 = &42;
 
     /# Pointer types (using null for now)
-    let ptr_val: *i32 = null;
+    var ptr_val: *i32 = null;
 
     /# Weak references (using null for now)
-    let weak_val: weak String = null;
+    var weak_val: weak String = null;
 
     /# Union types (initialize with one variant)
-    let union_val: i32 | f32 = 42;
+    var union_val: i32 | f32 = 42;
 
     /# Intersection types (using null for now)
-    let intersect_val: Display & Debug = null;
+    var intersect_val: Display & Debug = null;
 
     return;
 }
@@ -270,21 +270,21 @@ fn precedence_order_verification() {
     // Test that precedence follows the spec exactly
     let src = r#"
 fn test_full_precedence() -> bool {
-    let a = 1;
-    let b = 2;
-    let c = 3;
+    var a = 1;
+    var b = 2;
+    var c = 3;
 
     /# Test full precedence chain
     /# Should parse as: ((a & b) ^ c) | (a & (b | c))
-    let result = a & b ^ c | a & b | c;
+    var result = a & b ^ c | a & b | c;
 
     /# Logical operations with lower precedence
-    let x = true;
-    let y = false;
-    let z = true;
+    var x = true;
+    var y = false;
+    var z = true;
 
     /# Should parse as: (x & y) | z
-    let logical = x & y | z;
+    var logical = x & y | z;
 
     return logical;
 }

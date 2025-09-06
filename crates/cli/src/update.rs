@@ -38,16 +38,13 @@ struct GitHubAsset {
 
 /// Update channel configuration
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum UpdateChannel {
+    #[default]
     Stable,  // Regular releases only
     Nightly, // Pre-releases (nightly builds)
 }
 
-impl Default for UpdateChannel {
-    fn default() -> Self {
-        UpdateChannel::Stable
-    }
-}
 
 impl std::fmt::Display for UpdateChannel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -250,9 +247,7 @@ fn get_latest_release(channel: UpdateChannel) -> Result<GitHubRelease> {
 
             // Find the latest pre-release
             let latest_prerelease = releases
-                .into_iter()
-                .filter(|r| r.prerelease && !r.draft)
-                .next()
+                .into_iter().find(|r| r.prerelease && !r.draft)
                 .ok_or_else(|| anyhow!("No nightly releases found"))?;
 
             Ok(latest_prerelease)
@@ -387,7 +382,7 @@ fn install_with_cargo(archive_path: &PathBuf, verbose: bool) -> Result<()> {
 
     // Use cargo install --path to build and install the CLI package specifically
     let mut cmd = Command::new("cargo");
-    cmd.args(&["install", "--path", "crates/cli", "--force"]);
+    cmd.args(["install", "--path", "crates/cli", "--force"]);
 
     // Set the working directory to the extracted source
     cmd.current_dir(&source_dir);
@@ -492,7 +487,7 @@ fn extract_archive(archive_path: &PathBuf, extract_dir: &Path, verbose: bool) ->
         }
 
         Command::new("tar")
-            .args(&["-xzf", archive_str])
+            .args(["-xzf", archive_str])
             .arg("-C")
             .arg(extract_dir)
             .output()
@@ -501,7 +496,7 @@ fn extract_archive(archive_path: &PathBuf, extract_dir: &Path, verbose: bool) ->
         // Handle zip files
         if Command::new("unzip").arg("-v").output().is_ok() {
             Command::new("unzip")
-                .args(&["-q", archive_str])
+                .args(["-q", archive_str])
                 .arg("-d")
                 .arg(extract_dir)
                 .output()

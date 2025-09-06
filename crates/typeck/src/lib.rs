@@ -766,10 +766,11 @@ impl TypeChecker {
         for stmt in &block.stmts {
             match &stmt.kind {
                 veil_hir::HirStmtKind::Expr(expr) => self.collect_question_sites_in_expr(expr, out),
-                veil_hir::HirStmtKind::Let { init, .. } => {
-                    if let Some(e) = init {
-                        self.collect_question_sites_in_expr(e, out);
-                    }
+                veil_hir::HirStmtKind::Const { init, .. } => {
+                    self.collect_question_sites_in_expr(init, out);
+                }
+                veil_hir::HirStmtKind::Var { init, .. } => {
+                    self.collect_question_sites_in_expr(init, out);
                 }
                 veil_hir::HirStmtKind::Assign { lhs, rhs } => {
                     self.collect_question_sites_in_expr(lhs, out);

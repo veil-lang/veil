@@ -36,8 +36,8 @@ module_path = @{ ident ~ ( ( "::" | "/" ) ~ ident )* }  // Accept both '::' and 
 // Keywords (kept as rules for clarity; identifiers are separate)
 KW_FN          = @{ "fn" ~ !ident_continue }
 KW_TEST        = @{ "test" ~ !ident_continue }
-KW_LET         = @{ "let" ~ !ident_continue }
 KW_VAR         = @{ "var" ~ !ident_continue }
+KW_MUT         = @{ "mut" ~ !ident_continue }
 KW_CONST       = @{ "const" ~ !ident_continue }
 KW_IF          = @{ "if" ~ !ident_continue }
 KW_ELSE        = @{ "else" ~ !ident_continue }
@@ -71,13 +71,12 @@ KW_ASYNC       = @{ "async" ~ !ident_continue }
 KW_AWAIT       = @{ "await" ~ !ident_continue }
 
 KEYWORD = _{
-    KW_FN | KW_TEST | KW_LET | KW_VAR | KW_CONST | KW_IF | KW_ELSE | KW_RETURN | KW_DEFER | KW_SAFE | KW_AS
+    KW_FN | KW_TEST | KW_VAR | KW_CONST | KW_IF | KW_ELSE | KW_RETURN | KW_DEFER | KW_SAFE | KW_AS
   | KW_WHILE | KW_FOR | KW_IN | KW_STEP | KW_LOOP | KW_IMPORT | KW_FROM | KW_EXPORT | KW_STRUCT | KW_ENUM
   | KW_UNION | KW_TRAIT | KW_IMPL | KW_NEW | KW_CONSTRUCTOR | KW_MATCH | KW_TRUE | KW_FALSE | KW_RAWPTR
   | KW_FOREIGN | KW_TYPE | KW_PUB | KW_ASYNC | KW_AWAIT
   | TY_BOOL | TY_STRING | TY_STR | TY_VOID | TY_ANY | TY_U8A | TY_U8B | TY_U16A | TY_U16B | TY_U32A | TY_U32B | TY_U64A | TY_U64B
   | TY_I8A | TY_I8B | TY_I16A | TY_I16B | TY_I32A | TY_I32B | TY_I64A | TY_I64B | TY_F32A | TY_F32B | TY_F64A | TY_F64B
-  | none_lit
 }
 
 // Primitive types (aligns with implementation)
@@ -172,7 +171,7 @@ HASH     = { "#" }
 
 // Top-level entry
 token = {
-    KW_FN | KW_TEST | KW_LET | KW_VAR | KW_CONST | KW_IF | KW_ELSE | KW_RETURN | KW_DEFER | KW_SAFE | KW_AS
+    KW_FN | KW_TEST | KW_VAR | KW_CONST | KW_IF | KW_ELSE | KW_RETURN | KW_DEFER | KW_SAFE | KW_AS
   | KW_WHILE | KW_FOR | KW_IN | KW_STEP | KW_LOOP | KW_IMPORT | KW_FROM | KW_EXPORT | KW_STRUCT | KW_ENUM
   | KW_UNION | KW_TRAIT | KW_IMPL | KW_NEW | KW_CONSTRUCTOR | KW_MATCH | KW_TRUE | KW_FALSE | KW_RAWPTR
   | KW_FOREIGN | KW_TYPE | KW_PUB | KW_ASYNC | KW_AWAIT
@@ -387,7 +386,7 @@ trait_bounds = { ty_path ~ ( S ~ "+" ~ S ~ ty_path )* }
 
 // Statements
 stmt = _{
-      let_stmt
+      const_stmt
     | var_stmt
     | return_stmt
     | defer_stmt
@@ -404,11 +403,11 @@ stmt = _{
 
 block = { LBRACE ~ S? ~ ( stmt ~ S? )* ~ RBRACE }
 
-let_stmt = {
-    KW_LET ~ S ~ ident ~ ( S? ~ COLON ~ S? ~ ty )? ~ S? ~ EQ ~ S? ~ expr ~ WS? ~ SEMI
+const_stmt = {
+    KW_CONST ~ S ~ ident ~ ( S ~ COLON ~ S ~ ty )? ~ S ~ EQ ~ S ~ expr ~ WS? ~ SEMI
 }
 var_stmt = {
-    KW_VAR ~ S ~ ident ~ ( S ~ COLON ~ S ~ ty )? ~ S ~ EQ ~ S ~ expr ~ WS? ~ SEMI
+    KW_VAR ~ ( S ~ KW_MUT )? ~ S ~ ident ~ ( S ~ COLON ~ S ~ ty )? ~ S ~ EQ ~ S ~ expr ~ WS? ~ SEMI
 }
 
 return_stmt = { KW_RETURN ~ ( S ~ expr )? ~ WS? ~ SEMI }
@@ -428,7 +427,7 @@ break_stmt = { "break" ~ ( S ~ expr )? ~ S ~ SEMI }
 continue_stmt = { "continue" ~ S ~ SEMI }
 
 if_stmt = {
-    KW_IF ~ S ~ ( "let" ~ S ~ pattern ~ S ~ EQ ~ S ~ expr ~ S | expr ~ S ) ~ block ~ ( S ~ KW_ELSE ~ S ~ ( if_stmt | block ) )?
+    KW_IF ~ S ~ expr ~ S ~ block ~ ( S ~ KW_ELSE ~ S ~ ( if_stmt | block ) )?
 }
 
 match_expr_stmt = {
@@ -529,7 +528,7 @@ array_lit = {
 
 
 if_expr = {
-    KW_IF ~ S ~ ( "let" ~ S ~ pattern ~ S ~ EQ ~ S ~ expr ~ S | expr ~ S ) ~ block ~ ( S ~ KW_ELSE ~ S ~ ( if_expr | block ) )?
+    KW_IF ~ S ~ expr ~ S ~ block ~ ( S ~ KW_ELSE ~ S ~ ( if_expr | block ) )?
 }
 
 match_expr = {

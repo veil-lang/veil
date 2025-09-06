@@ -356,7 +356,7 @@ impl Monomorphizer {
 
         fn collect_types_in_stmt(stmt: &ast::Stmt, out: &mut HashSet<String>) {
             match stmt {
-                ast::Stmt::Let(_, ty_opt, expr, _, _) => {
+                ast::Stmt::Const(_, ty_opt, expr, _) | ast::Stmt::Var(_, ty_opt, expr, _, _) => {
                     if let Some(ty) = ty_opt
                         && let ast::Type::Array(inner) = ty
                     {
@@ -536,7 +536,7 @@ impl Monomorphizer {
             generic_structs: &HashMap<String, ast::StructDef>,
         ) {
             match stmt {
-                ast::Stmt::Let(_, ty_opt, expr, _, _) => {
+                ast::Stmt::Const(_, ty_opt, expr, _) | ast::Stmt::Var(_, ty_opt, expr, _, _) => {
                     if let Some(ty) = ty_opt
                         && let ast::Type::GenericInstance(name, _) = ty
                         && generic_structs.contains_key(name)
@@ -950,20 +950,23 @@ fn substitute_stmt(
     type_map: &HashMap<String, ast::Type>,
 ) -> Result<ast::Stmt, MonoError> {
     match stmt {
-        ast::Stmt::Let(name, ty_opt, expr, span, visibility) => {
+        ast::Stmt::Const(name, ty_opt, expr, span) => {
             let new_ty = if let Some(ty) = ty_opt.as_ref() {
                 Some(substitute_type(ty, type_map)?)
             } else {
                 None
             };
             let new_expr = substitute_expr(expr, type_map)?;
-            Ok(ast::Stmt::Let(
-                name.clone(),
-                new_ty,
-                new_expr,
-                *span,
-                visibility.clone(),
-            ))
+            Ok(ast::Stmt::Const(name.clone(), new_ty, new_expr, *span))
+        }
+        ast::Stmt::Var(name, ty_opt, expr, _, span) => {
+            let new_ty = if let Some(ty) = ty_opt.as_ref() {
+                Some(substitute_type(ty, type_map)?)
+            } else {
+                None
+            };
+            let new_expr = substitute_expr(expr, type_map)?;
+            Ok(ast::Stmt::Var(name.clone(), new_ty, new_expr, false, *span))
         }
         ast::Stmt::Expr(expr, span) => Ok(ast::Stmt::Expr(substitute_expr(expr, type_map)?, *span)),
         ast::Stmt::Return(expr, span) => {

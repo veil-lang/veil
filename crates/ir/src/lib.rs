@@ -829,52 +829,87 @@ impl<'a> LoweringCtx<'a> {
         use hir::HirExprKind as K;
         use hir::HirStmtKind as S;
         match &stmt.kind {
-            S::Let { pattern, ty, init } => {
-                if let hir::HirPatternKind::Variable(name) = &*pattern.kind {
-                    // Allocate a unique local slot for this binding
-                    let new_local = if name == "_" {
-                        // Always allocate new unique local for '_' (discard variables)
-                        LocalId(self.locals_meta.len() as u32)
-                    } else if let Some(&existing_local) = self.local_slots.get(name) {
-                        // Reuse existing local for the same variable name
-                        existing_local
-                    } else {
-                        // Allocate new unique local ID
-                        let new_id = LocalId(self.locals_meta.len() as u32);
-                        self.local_slots.insert(name.clone(), new_id);
-                        new_id
-                    };
-                    // Record LocalIR with best-effort type from HIR or infer from init
-                    let local_ty = if let Some(ty) = ty {
-                        map_hir_type_to_ir(ty)
-                    } else if let Some(init_expr) = init {
-                        // Try to infer type from the initialization expression
-                        self.infer_type_from_hir_expr_with_context(init_expr)
-                    } else {
-                        // Default to i32 for untyped, uninitialized locals
-                        TypeIR::I32
-                    };
-                    // Only add to locals_meta if this is a new local
-                    if !self.locals_meta.iter().any(|l| l.id == new_local) {
-                        self.locals_meta.push(LocalIR {
-                            id: new_local,
-                            ty: local_ty,
-                            debug_name: Some(name.clone()),
-                        });
-                    }
+            S::Const { name, ty, init } => {
+                // Allocate a unique local slot for this binding
+                let new_local = if name == "_" {
+                    // Always allocate new unique local for '_' (discard variables)
+                    LocalId(self.locals_meta.len() as u32)
+                } else if let Some(&existing_local) = self.local_slots.get(name) {
+                    // Reuse existing local for the same variable name
+                    existing_local
+                } else {
+                    // Allocate new unique local ID
+                    let new_id = LocalId(self.locals_meta.len() as u32);
+                    self.local_slots.insert(name.clone(), new_id);
+                    new_id
+                };
+                // Record LocalIR with best-effort type from HIR or infer from init
+                let local_ty = if let Some(ty) = ty {
+                    map_hir_type_to_ir(ty)
+                } else {
+                    // Try to infer type from the initialization expression
+                    self.infer_type_from_hir_expr_with_context(init)
+                };
+                // Only add to locals_meta if this is a new local
+                if !self.locals_meta.iter().any(|l| l.id == new_local) {
+                    self.locals_meta.push(LocalIR {
+                        id: new_local,
+                        ty: local_ty,
+                        debug_name: Some(name.clone()),
+                    });
+                }
 
-                    // Initialize with RHS if provided
-                    if let Some(init_expr) = init {
-                        if let Some(v) = self.lower_expr(init_expr) {
-                            let _ = self.emit(
-                                self.cur_bb,
-                                InstIR::Store {
-                                    local: new_local,
-                                    value: v,
-                                },
-                            );
-                        }
-                    }
+                // Initialize with RHS
+                if let Some(v) = self.lower_expr(init) {
+                    let _ = self.emit(
+                        self.cur_bb,
+                        InstIR::Store {
+                            local: new_local,
+                            value: v,
+                        },
+                    );
+                }
+                None
+            }
+            S::Var { name, ty, init, .. } => {
+                // Allocate a unique local slot for this binding
+                let new_local = if name == "_" {
+                    // Always allocate new unique local for '_' (discard variables)
+                    LocalId(self.locals_meta.len() as u32)
+                } else if let Some(&existing_local) = self.local_slots.get(name) {
+                    // Reuse existing local for the same variable name
+                    existing_local
+                } else {
+                    // Allocate new unique local ID
+                    let new_id = LocalId(self.locals_meta.len() as u32);
+                    self.local_slots.insert(name.clone(), new_id);
+                    new_id
+                };
+                // Record LocalIR with best-effort type from HIR or infer from init
+                let local_ty = if let Some(ty) = ty {
+                    map_hir_type_to_ir(ty)
+                } else {
+                    // Try to infer type from the initialization expression
+                    self.infer_type_from_hir_expr_with_context(init)
+                };
+                // Only add to locals_meta if this is a new local
+                if !self.locals_meta.iter().any(|l| l.id == new_local) {
+                    self.locals_meta.push(LocalIR {
+                        id: new_local,
+                        ty: local_ty,
+                        debug_name: Some(name.clone()),
+                    });
+                }
+
+                // Initialize with RHS
+                if let Some(v) = self.lower_expr(init) {
+                    let _ = self.emit(
+                        self.cur_bb,
+                        InstIR::Store {
+                            local: new_local,
+                            value: v,
+                        },
+                    );
                 }
                 None
             }
@@ -1280,7 +1315,14 @@ pub fn lower_from_ast(program: &ast::ast::Program) -> ProgramIR {
         debug_names: &mut IndexMap<ValueId, String>,
     ) -> Option<Option<ValueId>> {
         match stmt {
-            ast::ast::Stmt::Let(name, _ty, expr, _span, _vis) => {
+            ast::ast::Stmt::Const(name, _ty, expr, _span) => {
+                if let Some(v) = lower_expr(expr, block, next_val, locals) {
+                    locals.insert(name.clone(), v);
+                    debug_names.insert(v, name.clone());
+                }
+                None
+            }
+            ast::ast::Stmt::Var(name, _ty, expr, _is_mut, _span) => {
                 if let Some(v) = lower_expr(expr, block, next_val, locals) {
                     locals.insert(name.clone(), v);
                     debug_names.insert(v, name.clone());

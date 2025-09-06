@@ -5,52 +5,52 @@ fn add(a: i32, b: i32) -> i32 {
 }
 
 test template_string_basic {
-    let who: string = "Veil";
-    let msg: string = `Hello {who}`;
-    let _ = msg;
+    const who: string = "Veil";
+    const msg: string = `Hello {who}`;
+    const _ = msg;
     return;
 }
 
 test template_string_multiple_expressions {
-    let a: i32 = 1;
-    let b: i32 = 2;
+    const a: i32 = 1;
+    const b: i32 = 2;
 
-    let s: string = `sum={a + b} a={a} b={b}`;
-    let _ = s;
+    const s: string = `sum={a + b} a={a} b={b}`;
+    const _ = s;
     return;
 }
 
 test template_string_with_call_and_arithmetic {
-    let s: string = `add(1,2)={add(1 as i32, 2 as i32)} next={1 + 2}`;
-    let _ = s;
+    const s: string = `add(1,2)={add(1 as i32, 2 as i32)} next={1 + 2}`;
+    const _ = s;
     return;
 }
 
 test template_string_with_array_access {
-    let arr = [10 as i32, 20 as i32, 30 as i32];
-    let s: string = `first={arr[0]} second={arr[1]}`;
-    let _ = s;
+    const arr = [10 as i32, 20 as i32, 30 as i32];
+    const s: string = `first={arr[0]} second={arr[1]}`;
+    const _ = s;
     return;
 }
 
 test template_string_only_expression_body {
-    let s: string = `{1 + 2}`;
-    let _ = s;
+    const s: string = `{1 + 2}`;
+    const _ = s;
     return;
 }
 
 test template_string_back_to_back_expressions {
-    let a: i32 = 7;
-    let b: i32 = 8;
-    let s: string = `pair={a}{b}`;
-    let _ = s;
+    const a: i32 = 7;
+    const b: i32 = 8;
+    const s: string = `pair={a}{b}`;
+    const _ = s;
     return;
 }
 
 test template_string_with_bool_and_none_literals {
-    let t = true;
-    let n = none;
-    let s: string = `t={t} n={n}`;
-    let _ = s;
+    const t = true;
+    const n = none;
+    const s: string = `t={t} n={n}`;
+    const _ = s;
     return;
 }

@@ -1,85 +1,85 @@
 /# Division operators: / (float) and // (integer) #/
 
 test float_division_basic {
-    let a = 5.0;
-    let b = 2.0;
-    let q = a / b;
-    let _sink = q;
+    const a = 5.0;
+    const b = 2.0;
+    const q = a / b;
+    const _sink = q;
     return;
 }
 
 test integer_division_basic {
-    let a: i32 = 5 as i32;
-    let b: i32 = 2 as i32;
-    let q: i32 = a // b;
-    let _sink = q;
+    const a: i32 = 5 as i32;
+    const b: i32 = 2 as i32;
+    const q: i32 = a // b;
+    const _sink = q;
     return;
 }
 
 test division_chaining_left_associative {
-    let r1 = 8.0 / 2.0 / 2.0;         /# should be (8.0 / 2.0) / 2.0 = 2.0 #/
-    let r2: i32 = (8 as i32) // (2 as i32) // (2 as i32);  /# (8 // 2) // 2 = 2 #/
-    let _r1 = r1;
-    let _r2 = r2;
+    const r1 = 8.0 / 2.0 / 2.0;         /# should be (8.0 / 2.0) / 2.0 = 2.0 #/
+    const r2: i32 = (8 as i32) // (2 as i32) // (2 as i32);  /# (8 // 2) // 2 = 2 #/
+    const _r1 = r1;
+    const _r2 = r2;
     return;
 }
 
 test integer_division_no_spaces_tokenization {
-    let r: i32 = 6 // 3;   /# ensure // token recognized #/
-    let _r = r;
+    const r: i32 = 6 // 3;   /# ensure // token recognized #/
+    const _r = r;
     return;
 }
 
 test mixed_division_with_casts {
-    let f = 10.0 / 4.0;             /# 2.5 #/
-    let i: i32 = 9 as i32;
-    let j: i32 = 4 as i32;
-    let m: f64 = f + (i // j) as f64; /# 2.5 + 2.0 = 4.5 #/
-    let _m = m;
+    const f = 10.0 / 4.0;             /# 2.5 #/
+    const i: i32 = 9 as i32;
+    const j: i32 = 4 as i32;
+    const m: f64 = f + (i // j) as f64; /# 2.5 + 2.0 = 4.5 #/
+    const _m = m;
     return;
 }
 
 test precedence_integer_side {
     /# Expect a + ((b // c) * d) #/
-    let a: i32 = 1 as i32;
-    let b: i32 = 8 as i32;
-    let c: i32 = 2 as i32;
-    let d: i32 = 3 as i32;
-    let r: i32 = a + b // c * d;
-    let _r = r;
+    const a: i32 = 1 as i32;
+    const b: i32 = 8 as i32;
+    const c: i32 = 2 as i32;
+    const d: i32 = 3 as i32;
+    const r: i32 = a + b // c * d;
+    const _r = r;
     return;
 }
 
 test precedence_float_then_integer {
     /# (a / b) + ((c // d) as f64) #/
-    let a = 9.0;
-    let b = 3.0;
-    let c: i32 = 7 as i32;
-    let d: i32 = 2 as i32;
-    let r: f64 = (a / b) + (c // d) as f64;
-    let _r = r;
+    const a = 9.0;
+    const b = 3.0;
+    const c: i32 = 7 as i32;
+    const d: i32 = 2 as i32;
+    const r: f64 = (a / b) + (c // d) as f64;
+    const _r = r;
     return;
 }
 
 test division_assignment_ops_float {
-    let x: f64 = 20.0;
+    var x: f64 = 20.0;
     x /= 4.0;   /# becomes 5.0 #/
-    let _x = x;
+    const _x = x;
     return;
 }
 
 test division_assignment_ops_integer {
-    let x: i32 = 7 as i32;
-    let y: i32 = 2 as i32;
-    let r: i32 = x // y;
-    let _r = r;
+    const x: i32 = 7 as i32;
+    const y: i32 = 2 as i32;
+    const r: i32 = x // y;
+    const _r = r;
     return;
 }
 
 test negative_operands_division {
-    let a = -6.0 / 4.0;
-    let b: i32 = (-6 as i32) // (4 as i32);
-    let _a = a;
-    let _b = b;
+    const a = -6.0 / 4.0;
+    const b: i32 = (-6 as i32) // (4 as i32);
+    const _a = a;
+    const _b = b;
     return;
 }

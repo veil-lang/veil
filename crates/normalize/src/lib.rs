@@ -6,17 +6,6 @@
 //!
 //! This crate implements desugaring of higher-level HIR constructs into a more
 //! regular subset (Normalized HIR), while preserving source spans for accurate
-//! diagnostics in later passes.
-//!
-//! Initial coverage (M6 scope):
-//! - Pipeline operator: `a |> b` => `b(a)`; chains `a |> b |> c` => `c(b(a))`
-//! - Postfix increment/decrement: `x++` / `x--` normalized into blocks using
-//!   `let __tmp = x; x = x (+|-) 1; __tmp` to preserve expression value semantics
-//!
-//! Span Preservation:
-//! - New nodes produced by normalization inherit the span of the original node,
-//!   unless a more precise mapping is practical. The SpanMap in the program is
-//!   updated for all synthesized nodes.
 
 use std::collections::HashMap;
 
@@ -134,15 +123,21 @@ impl Normalizer {
                 self.normalize_expr(&mut tmp);
                 *expr = tmp;
             }
-            HirStmtKind::Let { init, .. } => {
-                if let Some(e) = init {
-                    let mut tmp = HirExpr {
-                        id: e.id,
-                        kind: e.kind.clone(),
-                    };
-                    self.normalize_expr(&mut tmp);
-                    *e = tmp;
-                }
+            HirStmtKind::Const { init, .. } => {
+                let mut tmp = HirExpr {
+                    id: init.id,
+                    kind: init.kind.clone(),
+                };
+                self.normalize_expr(&mut tmp);
+                *init = tmp;
+            }
+            HirStmtKind::Var { init, .. } => {
+                let mut tmp = HirExpr {
+                    id: init.id,
+                    kind: init.kind.clone(),
+                };
+                self.normalize_expr(&mut tmp);
+                *init = tmp;
             }
             HirStmtKind::Assign { lhs, rhs } => {
                 // Assignments: normalize both sides
@@ -251,7 +246,7 @@ impl Normalizer {
 
                 // tmp pattern
                 let tmp_pat_id = self.fresh_id();
-                let tmp_pattern = veil_hir::HirPattern {
+                let _tmp_pattern = veil_hir::HirPattern {
                     id: tmp_pat_id,
                     kind: Box::new(veil_hir::HirPatternKind::Variable(tmp_name.clone())),
                 };
@@ -263,10 +258,11 @@ impl Normalizer {
                 let let_id = self.fresh_id();
                 let let_stmt = HirStmt {
                     id: let_id,
-                    kind: HirStmtKind::Let {
-                        pattern: tmp_pattern,
+                    kind: HirStmtKind::Var {
+                        name: tmp_name.clone(),
                         ty: Option::<HirType>::None,
-                        init: Some(target.clone()),
+                        init: target.clone(),
+                        is_mutable: false,
                     },
                 };
                 if let Some(sp) = outer_span {
@@ -414,7 +410,7 @@ impl Normalizer {
 
                 // Build: let __opt = <inner>;
                 let tmp_pat_id = self.fresh_id();
-                let tmp_pattern = veil_hir::HirPattern {
+                let _tmp_pattern = veil_hir::HirPattern {
                     id: tmp_pat_id,
                     kind: Box::new(veil_hir::HirPatternKind::Variable(tmp_name.clone())),
                 };
@@ -425,10 +421,11 @@ impl Normalizer {
                 let let_id = self.fresh_id();
                 let let_stmt = HirStmt {
                     id: let_id,
-                    kind: HirStmtKind::Let {
-                        pattern: tmp_pattern,
+                    kind: HirStmtKind::Var {
+                        name: tmp_name.clone(),
                         ty: Option::<HirType>::None,
-                        init: Some(normalized_inner),
+                        init: normalized_inner,
+                        is_mutable: false,
                     },
                 };
                 if let Some(sp) = outer_span {
@@ -1012,15 +1009,10 @@ mod tests {
                 assert_eq!(b.stmts.len(), 2, "expected let temp and if-return");
                 // stmt[0] is let
                 match &b.stmts[0].kind {
-                    HirStmtKind::Let { pattern, init, .. } => {
-                        // pattern variable name and init should exist
-                        match &*pattern.kind {
-                            HirPatternKind::Variable(name) => {
-                                assert!(name.starts_with("__opt"), "temp should be __optN");
-                            }
-                            _ => panic!("let pattern should be variable"),
-                        }
-                        assert!(init.is_some(), "let must initialize temp with inner expr");
+                    HirStmtKind::Var { name, .. } => {
+                        // temp variable name should exist
+                        assert!(name.starts_with("__opt"), "temp should be __optN");
+                        // init should exist (not an Option anymore)
                     }
                     _ => panic!("first stmt should be let"),
                 }

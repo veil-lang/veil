@@ -1,68 +1,68 @@
 /# Ranges and arrays (literal + indexing + range literals) #/
 
 test array_literal_and_indexing {
-    let arr = [1 as i32, 2 as i32, 3 as i32];
-    let a0 = arr[0];
-    let a1 = arr[1];
-    let sum = a0 + a1;
-    let _sink = sum;
+    const arr = [1 as i32, 2 as i32, 3 as i32];
+    const a0 = arr[0];
+    const a1 = arr[1];
+    const sum = a0 + a1;
+    const _sink = sum;
     return;
 }
 
 test array_index_with_expression {
-    let arr = [10 as i32, 20 as i32, 30 as i32, 40 as i32];
-    let idx = 1 as i32;
-    let v = arr[idx + 1 as i32];
-    let _ = v; /# expect 30 #/
+    const arr = [10 as i32, 20 as i32, 30 as i32, 40 as i32];
+    const idx = 1 as i32;
+    const v = arr[idx + 1 as i32];
+    const _ = v; /# expect 30 #/
     return;
 }
 
 test sized_array_type_annotation {
-    let xs: [i32; 3] = [1 as i32, 2 as i32, 3 as i32];
-    let y = xs[2];
-    let _ = y;
+    const xs: [i32; 3] = [1 as i32, 2 as i32, 3 as i32];
+    const y = xs[2];
+    const _ = y;
     return;
 }
 
 test nested_array_indexing {
-    let grid = [
+    const grid = [
         [1 as i32, 2 as i32],
         [3 as i32, 4 as i32],
     ];
-    let a = grid[0][1]; /# 2 #/
-    let b = grid[1][0]; /# 3 #/
-    let _sink = a + b;
+    const a = grid[0][1]; /# 2 #/
+    const b = grid[1][0]; /# 3 #/
+    const _sink = a + b;
     return;
 }
 
 test ranges_as_values {
     /# Build ranges as first-class expressions #/
-    let r_exclusive = 0 .. 5;
-    let r_inclusive = 0 ..= 5;
-    let r_up = ..>;
-    let r_down = ..<;
-    let r_infinite = ..;
+    const r_exclusive = 0 .. 5;
+    const r_inclusive = 0 ..= 5;
+    const r_up = ..>;
+    const r_down = ..<;
+    const r_infinite = ..;
 
-    let _ = r_exclusive;
-    let _ = r_inclusive;
-    let _ = r_up;
-    let _ = r_down;
-    let _ = r_infinite;
+    const _ = r_exclusive;
+    const _ = r_inclusive;
+    const _ = r_up;
+    const _ = r_down;
+    const _ = r_infinite;
     return;
 }
 
 test ranges_inline_in_lets {
     /# Ranges assigned directly into temporaries #/
-    let a = 1 .. 3;
-    let b = 2 ..= 4;
-    let c = ..>;
-    let d = ..<;
-    let e = ..;
+    const a = 1 .. 3;
+    const b = 2 ..= 4;
+    const c = ..>;
+    const d = ..<;
+    const e = ..;
 
-    let _ = a;
-    let _ = b;
-    let _ = c;
-    let _ = d;
-    let _ = e;
+    const _ = a;
+    const _ = b;
+    const _ = c;
+    const _ = d;
+    const _ = e;
     return;
 }

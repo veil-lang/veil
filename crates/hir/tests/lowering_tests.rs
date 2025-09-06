@@ -6,7 +6,7 @@
 use codespan::Span;
 use veil_ast as ast;
 use veil_hir::ids::ModuleId;
-use veil_hir::{HirExprKind, HirItemKind, HirPatternKind, HirStmtKind, lower_program};
+use veil_hir::{HirExprKind, HirItemKind, HirStmtKind, lower_program};
 
 #[test]
 fn test_empty_program() {
@@ -225,7 +225,7 @@ fn test_expression_lowering() {
 fn test_pattern_lowering() {
     let _pattern = ast::Pattern::Variable("x".to_string(), Span::new(0, 1));
 
-    let let_stmt = ast::Stmt::Let(
+    let var_stmt = ast::Stmt::Var(
         "x".to_string(),
         Some(ast::Type::I32),
         ast::Expr::Int(
@@ -236,8 +236,8 @@ fn test_pattern_lowering() {
                 is_tail: false,
             },
         ),
+        false, // not mutable
         Span::new(0, 10),
-        ast::Visibility::Private,
     );
 
     let function = ast::Function {
@@ -245,7 +245,7 @@ fn test_pattern_lowering() {
         generic_params: vec![],
         params: vec![],
         return_type: ast::Type::Void,
-        body: vec![let_stmt],
+        body: vec![var_stmt],
         span: Span::new(0, 20),
         visibility: ast::Visibility::Private,
     };
@@ -271,18 +271,20 @@ fn test_pattern_lowering() {
     if let HirItemKind::Function(hir_function) = &hir_program.items[0].kind {
         assert_eq!(hir_function.body.stmts.len(), 1);
 
-        if let HirStmtKind::Let { pattern, ty, init } = &hir_function.body.stmts[0].kind {
-            if let HirPatternKind::Variable(name) = pattern.kind.as_ref() {
-                assert_eq!(name, "x");
-            } else {
-                panic!("Expected variable pattern");
-            }
+        if let HirStmtKind::Var {
+            name,
+            ty,
+            init,
+            is_mutable,
+        } = &hir_function.body.stmts[0].kind
+        {
+            assert_eq!(name, "x");
+            assert!(!is_mutable);
 
             assert!(ty.is_some());
             assert_eq!(ty.as_ref().unwrap(), &veil_hir::HirType::I32);
 
-            assert!(init.is_some());
-            if let HirExprKind::Int(42) = init.as_ref().unwrap().kind.as_ref() {
+            if let HirExprKind::Int(42) = init.kind.as_ref() {
                 // Correct initialization value
             } else {
                 panic!("Expected initialization to Int(42)");

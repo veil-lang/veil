@@ -239,8 +239,8 @@ pub enum Visibility {
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub enum Stmt {
-    Let(String, Option<Type>, Expr, Span, Visibility),
-    Var(String, Option<Type>, Span),
+    Const(String, Option<Type>, Expr, Span),
+    Var(String, Option<Type>, Expr, bool, Span), // bool indicates mutability
     Expr(Expr, Span),
     If(Expr, Vec<Stmt>, Option<Vec<Stmt>>, Span),
     Return(Expr, Span),
@@ -666,8 +666,8 @@ impl Pattern {
 impl Stmt {
     pub fn span(&self) -> Span {
         match self {
-            Stmt::Let(_, _, _, span, _) => *span,
-            Stmt::Var(_, _, span) => *span,
+            Stmt::Const(_, _, _, span) => *span,
+            Stmt::Var(_, _, _, _, span) => *span,
             Stmt::Expr(_, span) => *span,
             Stmt::If(_, _, _, span) => *span,
             Stmt::Return(_, span) => *span,
@@ -827,16 +827,17 @@ pub trait AstVisitor {
 
     fn visit_stmt(&mut self, stmt: &Stmt) {
         match stmt {
-            Stmt::Let(_, ty, expr, _, _) => {
+            Stmt::Const(_, ty, expr, _) => {
                 if let Some(ty) = ty {
                     self.visit_type(ty);
                 }
                 self.visit_expr(expr);
             }
-            Stmt::Var(_, ty, _) => {
+            Stmt::Var(_, ty, expr, _, _) => {
                 if let Some(ty) = ty {
                     self.visit_type(ty);
                 }
+                self.visit_expr(expr);
             }
             Stmt::Expr(expr, _) => {
                 self.visit_expr(expr);
@@ -1342,10 +1343,12 @@ pub trait AstTransformer {
 
     fn transform_stmt(&mut self, stmt: Stmt) -> Stmt {
         match stmt {
-            Stmt::Let(name, ty, expr, span, vis) => {
-                Stmt::Let(name, ty, self.transform_expr(expr), span, vis)
+            Stmt::Const(name, ty, expr, span) => {
+                Stmt::Const(name, ty, self.transform_expr(expr), span)
             }
-            Stmt::Var(name, ty, span) => Stmt::Var(name, ty, span),
+            Stmt::Var(name, ty, expr, is_mut, span) => {
+                Stmt::Var(name, ty, self.transform_expr(expr), is_mut, span)
+            }
             Stmt::Expr(expr, span) => Stmt::Expr(self.transform_expr(expr), span),
             Stmt::If(cond, then_branch, else_branch, span) => Stmt::If(
                 self.transform_expr(cond),

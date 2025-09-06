@@ -972,19 +972,47 @@ impl Resolver {
             HirStmtKind::Expr(expr) => {
                 self.resolve_expression(expr)?;
             }
-            HirStmtKind::Let { pattern, ty, init } => {
+            HirStmtKind::Const { name, ty, init } => {
                 // Resolve type annotation if present
                 if let Some(type_annotation) = ty {
                     self.resolve_type_annotation(type_annotation)?;
                 }
 
-                // Resolve initializer if present
-                if let Some(init_expr) = init {
-                    self.resolve_expression(init_expr)?;
+                // Resolve initializer
+                self.resolve_expression(init)?;
+
+                // Define the constant variable in the current scope
+                let symbol = Symbol::new(
+                    self.context.symbol_table.next_symbol_id(),
+                    name.clone(),
+                    SymbolKind::Variable,
+                    self.context.current_module(),
+                    stmt.id,
+                );
+                if let Err(e) = self.context.define_symbol(symbol) {
+                    self.context.add_error(e);
+                }
+            }
+            HirStmtKind::Var { name, ty, init, .. } => {
+                // Resolve type annotation if present
+                if let Some(type_annotation) = ty {
+                    self.resolve_type_annotation(type_annotation)?;
                 }
 
-                // Resolve pattern (defines new variables)
-                self.resolve_pattern(pattern)?;
+                // Resolve initializer
+                self.resolve_expression(init)?;
+
+                // Define the variable in the current scope
+                let symbol = Symbol::new(
+                    self.context.symbol_table.next_symbol_id(),
+                    name.clone(),
+                    SymbolKind::Variable,
+                    self.context.current_module(),
+                    stmt.id,
+                );
+                if let Err(e) = self.context.define_symbol(symbol) {
+                    self.context.add_error(e);
+                }
             }
             HirStmtKind::Assign { lhs, rhs } => {
                 self.resolve_expression(lhs)?;

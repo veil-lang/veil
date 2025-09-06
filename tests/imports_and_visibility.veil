@@ -43,13 +43,13 @@ test imports_and_visibility_compile {
     path_function();
 
     /# Use a few local variables to keep the block non-empty #/
-    let a: i32 = 1;
-    let b: bool = true;
-    let s: string = "ok";
+    const a: i32 = 1;
+    const b: bool = true;
+    const s: string = "ok";
 
-    let _ = a;
-    let _ = b;
-    let _ = s;
+    const _ = a;
+    const _ = b;
+    const _ = s;
 
     return;
 }

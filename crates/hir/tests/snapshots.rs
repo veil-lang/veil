@@ -103,19 +103,36 @@ impl HirVisitor for HirFormatter {
                 self.visit_expr(expr);
                 self.dedent();
             }
-            veil_hir::HirStmtKind::Let { pattern, ty, init } => {
-                self.write_line("Let statement:");
+            veil_hir::HirStmtKind::Const { name, ty, init } => {
+                self.write_line("Const statement:");
                 self.indent();
-                self.write_line(&format!("Pattern: {:?}", pattern.kind));
+                self.write_line(&format!("Name: {}", name));
                 if let Some(ty) = ty {
                     self.write_line(&format!("Type: {:?}", ty));
                 }
-                if let Some(init) = init {
-                    self.write_line("Initializer:");
-                    self.indent();
-                    self.visit_expr(init);
-                    self.dedent();
+                self.write_line("Initializer:");
+                self.indent();
+                self.visit_expr(init);
+                self.dedent();
+                self.dedent();
+            }
+            veil_hir::HirStmtKind::Var {
+                name,
+                ty,
+                init,
+                is_mutable,
+            } => {
+                self.write_line("Var statement:");
+                self.indent();
+                self.write_line(&format!("Name: {}", name));
+                self.write_line(&format!("Mutable: {}", is_mutable));
+                if let Some(ty) = ty {
+                    self.write_line(&format!("Type: {:?}", ty));
                 }
+                self.write_line("Initializer:");
+                self.indent();
+                self.visit_expr(init);
+                self.dedent();
                 self.dedent();
             }
             veil_hir::HirStmtKind::Return(expr) => {
@@ -350,7 +367,7 @@ fn test_let_statement_snapshot() {
         generic_params: vec![],
         params: vec![],
         return_type: ast::Type::Void,
-        body: vec![ast::Stmt::Let(
+        body: vec![ast::Stmt::Var(
             "x".to_string(),
             Some(ast::Type::I32),
             ast::Expr::Int(
@@ -361,8 +378,8 @@ fn test_let_statement_snapshot() {
                     is_tail: false,
                 },
             ),
+            false, // not mutable
             Span::new(codespan::ByteIndex(0), codespan::ByteIndex(15)),
-            ast::Visibility::Private,
         )],
         span: Span::new(codespan::ByteIndex(0), codespan::ByteIndex(20)),
         visibility: ast::Visibility::Private,
@@ -388,7 +405,7 @@ fn test_let_statement_snapshot() {
 
     // Verify key components are present
     assert!(output.contains("Function: test_let"));
-    assert!(output.contains("Let statement:"));
+    assert!(output.contains("Var statement:"));
     assert!(output.contains("Type: I32"));
     assert!(output.contains("Int: 42"));
 }

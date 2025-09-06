@@ -49,8 +49,7 @@ pub fn run_test(
                     let src_text = files.source(file_id);
                     for line in src_text.lines() {
                         let trimmed = line.trim_start();
-                        if trimmed.starts_with("test ") {
-                            let rest = &trimmed["test ".len()..];
+                        if let Some(rest) = trimmed.strip_prefix("test ") {
                             let name = rest
                                 .split(|c: char| c.is_whitespace() || c == '{')
                                 .next()
@@ -81,8 +80,7 @@ pub fn run_test(
                 let src_text = files.source(file_id);
                 for line in src_text.lines() {
                     let trimmed = line.trim_start();
-                    if trimmed.starts_with("test ") {
-                        let rest = &trimmed["test ".len()..];
+                    if let Some(rest) = trimmed.strip_prefix("test ") {
                         let name = rest
                             .split(|c: char| c.is_whitespace() || c == '{')
                             .next()
@@ -248,15 +246,14 @@ fn discover_veil_files_recursive(dir: &PathBuf, veil_files: &mut Vec<PathBuf>) -
 
         if path.is_dir() {
             // Skip hidden directories and common build/target directories
-            if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
-                if name.starts_with('.')
+            if let Some(name) = path.file_name().and_then(|s| s.to_str())
+                && (name.starts_with('.')
                     || name == "target"
                     || name == "build"
-                    || name == "node_modules"
+                    || name == "node_modules")
                 {
                     continue;
                 }
-            }
             discover_veil_files_recursive(&path, veil_files)?;
         } else if path.extension().and_then(|s| s.to_str()) == Some("veil") {
             veil_files.push(path);
@@ -381,8 +378,8 @@ fn generate_test_program(original_content: &str, test_name: &str) -> Result<Stri
     {
         let src = original_content;
         let pattern = format!("test {}", test_name);
-        if let Some(p) = src.find(&pattern) {
-            if let Some(rel) = src[p..].find('{') {
+        if let Some(p) = src.find(&pattern)
+            && let Some(rel) = src[p..].find('{') {
                 let start = p + rel;
                 let bytes = src.as_bytes();
                 let mut i = start;
@@ -423,7 +420,6 @@ fn generate_test_program(original_content: &str, test_name: &str) -> Result<Stri
                     i += 1;
                 }
             }
-        }
     }
     // Fallback: call the test by name if we failed to extract body
     filtered_lines.push(format!("    {}();", test_name));

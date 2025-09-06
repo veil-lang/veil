@@ -519,32 +519,18 @@ impl LoweringContext {
                     HirStmtKind::Expr(self.lower_expr(expr)?)
                 }
             }
-            ast::Stmt::Let(name, ty, value, _, _) => {
-                let pattern_id = self.next_node_id();
-                let pattern = HirPattern {
-                    id: pattern_id,
-                    kind: Box::new(HirPatternKind::Variable(name.clone())),
-                };
 
-                HirStmtKind::Let {
-                    pattern,
-                    ty: ty.as_ref().map(|t| self.lower_type(t)),
-                    init: Some(self.lower_expr(value)?),
-                }
-            }
-            ast::Stmt::Var(name, ty, _) => {
-                let pattern_id = self.next_node_id();
-                let pattern = HirPattern {
-                    id: pattern_id,
-                    kind: Box::new(HirPatternKind::Variable(name.clone())),
-                };
-
-                HirStmtKind::Let {
-                    pattern,
-                    ty: ty.as_ref().map(|t| self.lower_type(t)),
-                    init: None,
-                }
-            }
+            ast::Stmt::Const(name, ty, value, _) => HirStmtKind::Const {
+                name: name.clone(),
+                ty: ty.as_ref().map(|t| self.lower_type(t)),
+                init: self.lower_expr(value)?,
+            },
+            ast::Stmt::Var(name, ty, value, is_mutable, _) => HirStmtKind::Var {
+                name: name.clone(),
+                ty: ty.as_ref().map(|t| self.lower_type(t)),
+                init: self.lower_expr(value)?,
+                is_mutable: *is_mutable,
+            },
             ast::Stmt::Return(expr, _) => {
                 // Check if this is a void expression (empty return)
                 match expr {
@@ -617,8 +603,8 @@ impl LoweringContext {
 
     fn get_stmt_span(&self, stmt: &ast::Stmt) -> codespan::Span {
         match stmt {
-            ast::Stmt::Let(_, _, _, span, _) => *span,
-            ast::Stmt::Var(_, _, span) => *span,
+            ast::Stmt::Const(_, _, _, span) => *span,
+            ast::Stmt::Var(_, _, _, _, span) => *span,
             ast::Stmt::Expr(_, span) => *span,
             ast::Stmt::Return(_, span) => *span,
             ast::Stmt::Break(_, span) => *span,

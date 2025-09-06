@@ -11,7 +11,7 @@ use veil_syntax::parse_ast;
 fn test_prelude_injection_normal_file() {
     let source = r#"
 fn main() -> void {
-    let x = 42;
+    var x = 42;
 }
 "#;
 
