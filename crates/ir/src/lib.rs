@@ -291,6 +291,11 @@ pub enum InstIR {
         callee: String,
         args: Vec<ValueId>,
     },
+    // Format a string using a printf-style format and arguments; result is a String
+    Format {
+        fmt: String,
+        args: Vec<ValueId>,
+    },
 }
 
 impl fmt::Display for InstIR {
@@ -330,6 +335,16 @@ impl fmt::Display for InstIR {
             Store { local, value } => write!(f, "store %l{}, %{}", local.0, value.0),
             Call { callee, args } => {
                 write!(f, "call {}(", callee)?;
+                for (i, a) in args.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "%{}", a.0)?;
+                }
+                write!(f, ")")
+            }
+            Format { fmt, args } => {
+                write!(f, "format {:?}(", fmt)?;
                 for (i, a) in args.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
@@ -414,19 +429,46 @@ impl fmt::Display for TypeIR {
     }
 }
 
+// Module-scope loop context used by lowering control-flow
+struct LoopCtx {
+    break_bb: BlockId,
+    continue_bb: BlockId,
+}
+
 // ===== Lowering (Preferred: HIR → IR) =====
 
-/// Entry point for IR lowering from post-normalize, post-monomorphized HIR.
-/// This covers a minimal subset: literals, variables, binary ops (+,-,*,/),
-/// calls (with simple variable callee), let/expr/return statements.
-pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
-    use std::collections::HashMap;
-    // ------------------------
-    // Block utilities
-    // ------------------------
-    fn new_block(blocks: &mut Vec<BlockIR>) -> BlockId {
-        let id = BlockId(blocks.len() as u32);
-        blocks.push(BlockIR {
+struct LoweringCtx<'a> {
+    // Global function return types, for inference without hardcoded names
+    function_ret_types: &'a std::collections::HashMap<String, TypeIR>,
+    // Functions that support template string expansion tol per-function state
+    blocks: Vec<BlockIR>,
+    cur_bb: BlockId,
+    next_val: u32,
+    locals: std::collections::HashMap<String, ValueId>,
+    local_slots: std::collections::HashMap<String, LocalId>,
+    locals_meta: Vec<LocalIR>,
+    debug_names: IndexMap<ValueId, String>,
+    loops: Vec<LoopCtx>,
+}
+
+impl<'a> LoweringCtx<'a> {
+    fn new(function_ret_types: &'a std::collections::HashMap<String, TypeIR>) -> Self {
+        Self {
+            function_ret_types,
+            blocks: Vec::new(),
+            cur_bb: BlockId(0),
+            next_val: 0,
+            locals: std::collections::HashMap::new(),
+            local_slots: std::collections::HashMap::new(),
+            locals_meta: Vec::new(),
+            debug_names: IndexMap::new(),
+            loops: Vec::new(),
+        }
+    }
+
+    fn new_block(&mut self) -> BlockId {
+        let id = BlockId(self.blocks.len() as u32);
+        self.blocks.push(BlockIR {
             id,
             insts: Vec::new(),
             results: Vec::new(),
@@ -435,91 +477,116 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
         id
     }
 
-    fn get_block_mut(blocks: &mut Vec<BlockIR>, id: BlockId) -> &mut BlockIR {
+    fn get_block_mut(&mut self, id: BlockId) -> &mut BlockIR {
         // Ids are sequential and correspond to indices
-        &mut blocks[id.0 as usize]
+        &mut self.blocks[id.0 as usize]
     }
 
-    // Helper: emit an instruction into a block and produce a fresh ValueId
-    fn emit(blocks: &mut Vec<BlockIR>, bb: BlockId, next_val: &mut u32, inst: InstIR) -> ValueId {
-        let block = get_block_mut(blocks, bb);
+    fn emit(&mut self, bb: BlockId, inst: InstIR) -> ValueId {
+        let id = ValueId(self.next_val);
+        self.next_val = self.next_val.saturating_add(1);
+        let block = self.get_block_mut(bb);
         block.insts.push(inst);
-        let id = ValueId(*next_val);
-        *next_val = next_val.saturating_add(1);
         block.results.push(id);
         id
     }
 
-    fn set_term(blocks: &mut Vec<BlockIR>, bb: BlockId, term: TerminatorIR) {
-        let block = get_block_mut(blocks, bb);
+    fn set_term(&mut self, bb: BlockId, term: TerminatorIR) {
+        let block = self.get_block_mut(bb);
         block.term = term;
     }
 
-    // ------------------------
-    // Lowering: Expressions
-    // ------------------------
-    fn lower_expr(
-        expr: &hir::HirExpr,
-        blocks: &mut Vec<BlockIR>,
-        cur_bb: &mut BlockId,
-        next_val: &mut u32,
-        locals: &mut HashMap<String, ValueId>,
-        local_slots: &mut HashMap<String, LocalId>,
-    ) -> Option<ValueId> {
+    fn infer_type_from_hir_expr_with_context(&self, expr: &hir::HirExpr) -> TypeIR {
+        infer_type_from_hir_expr_with_context(
+            expr,
+            &self.locals_meta,
+            &self.local_slots,
+            self.function_ret_types,
+        )
+    }
+
+    fn infer_format_specifier_for_expr(&self, expr: &hir::HirExpr) -> String {
+        infer_format_specifier_for_expr(
+            expr,
+            &self.locals_meta,
+            &self.local_slots,
+            self.function_ret_types,
+        )
+    }
+
+    fn resolve_final_callee_name(&self, expr: &hir::HirExpr) -> Option<String> {
+        use hir::HirExprKind as K;
+        match &*expr.kind {
+            K::Variable(name) => Some(name.clone()),
+            K::Pipeline { expr: _, func } => {
+                // In pipeline, func determines the callee
+                self.resolve_final_callee_name(func)
+            }
+            _ => None,
+        }
+    }
+
+    fn lower_template_string(&mut self, parts: &[hir::HirTemplateStringPart]) -> ValueId {
+        let mut fmt = String::new();
+
+        let mut exprs: Vec<&hir::HirExpr> = Vec::new();
+
+        for p in parts {
+            match p {
+                hir::HirTemplateStringPart::String(s) => fmt.push_str(s),
+
+                hir::HirTemplateStringPart::Expr(ex) => {
+                    let spec = self.infer_format_specifier_for_expr(ex);
+
+                    fmt.push_str(&spec);
+
+                    exprs.push(ex);
+                }
+            }
+        }
+
+        let mut argv = Vec::new();
+
+        for ex in exprs {
+            if let Some(v) = self.lower_expr(ex) {
+                argv.push(v);
+            }
+        }
+
+        self.emit(self.cur_bb, InstIR::Format { fmt, args: argv })
+    }
+
+    fn lower_expr(&mut self, expr: &hir::HirExpr) -> Option<ValueId> {
         use hir::HirBinaryOp::*;
         use hir::HirExprKind as K;
         match &*expr.kind {
-            K::Int(v) => Some(emit(
-                blocks,
-                *cur_bb,
-                next_val,
-                InstIR::ConstInt { value: *v },
-            )),
-            K::Float(v) => Some(emit(
-                blocks,
-                *cur_bb,
-                next_val,
-                InstIR::ConstFloat { value: *v },
-            )),
+            K::Int(v) => Some(self.emit(self.cur_bb, InstIR::ConstInt { value: *v })),
+            K::Float(v) => Some(self.emit(self.cur_bb, InstIR::ConstFloat { value: *v })),
             K::Bool(b) => {
                 let n = if *b { 1 } else { 0 };
-                Some(emit(
-                    blocks,
-                    *cur_bb,
-                    next_val,
-                    InstIR::ConstInt { value: n },
-                ))
+                Some(self.emit(self.cur_bb, InstIR::ConstInt { value: n }))
             }
-            K::String(s) => Some(emit(
-                blocks,
-                *cur_bb,
-                next_val,
-                InstIR::ConstStr { value: s.clone() },
-            )),
+            K::String(s) => Some(self.emit(self.cur_bb, InstIR::ConstStr { value: s.clone() })),
+            K::Template { parts } => Some(self.lower_template_string(parts)),
             K::Variable(name) => {
-                if let Some(lid) = local_slots.get(name) {
-                    Some(emit(
-                        blocks,
-                        *cur_bb,
-                        next_val,
-                        InstIR::Load { local: *lid },
-                    ))
+                if let Some(lid) = self.local_slots.get(name) {
+                    Some(self.emit(self.cur_bb, InstIR::Load { local: *lid }))
                 } else {
-                    locals.get(name).copied()
+                    self.locals.get(name).copied()
                 }
             }
             K::Binary { op, lhs, rhs } => {
                 match op {
                     // Short-circuiting logical AND: (l && r)
                     And => {
-                        let l = lower_expr(lhs, blocks, cur_bb, next_val, locals, local_slots)?;
+                        let l = self.lower_expr(lhs)?;
+
                         // Create blocks for rhs evaluation and merge
-                        let rhs_bb = new_block(blocks);
-                        let merge_bb = new_block(blocks);
+                        let rhs_bb = self.new_block();
+                        let merge_bb = self.new_block();
                         // Branch on l: if true, evaluate rhs; else skip to merge
-                        set_term(
-                            blocks,
-                            *cur_bb,
+                        self.set_term(
+                            self.cur_bb,
                             TerminatorIR::Branch {
                                 cond: l,
                                 then_bb: rhs_bb,
@@ -527,19 +594,18 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                             },
                         );
                         // Lower rhs in rhs_bb
-                        *cur_bb = rhs_bb;
-                        let r = lower_expr(rhs, blocks, cur_bb, next_val, locals, local_slots)
-                            .unwrap_or_else(|| {
-                                emit(blocks, *cur_bb, next_val, InstIR::ConstInt { value: 0 })
-                            });
-                        set_term(blocks, *cur_bb, TerminatorIR::Jump { bb: merge_bb });
+                        self.cur_bb = rhs_bb;
+
+                        let r = self.lower_expr(rhs).unwrap_or_else(|| {
+                            self.emit(self.cur_bb, InstIR::ConstInt { value: 0 })
+                        });
+
+                        self.set_term(self.cur_bb, TerminatorIR::Jump { bb: merge_bb });
                         // Merge: select(l ? r : 0)
-                        *cur_bb = merge_bb;
-                        let zero = emit(blocks, *cur_bb, next_val, InstIR::ConstInt { value: 0 });
-                        Some(emit(
-                            blocks,
-                            *cur_bb,
-                            next_val,
+                        self.cur_bb = merge_bb;
+                        let zero = self.emit(self.cur_bb, InstIR::ConstInt { value: 0 });
+                        Some(self.emit(
+                            self.cur_bb,
                             InstIR::Select {
                                 cond: l,
                                 then_v: r,
@@ -549,13 +615,13 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                     }
                     // Short-circuiting logical OR: (l || r)
                     Or => {
-                        let l = lower_expr(lhs, blocks, cur_bb, next_val, locals, local_slots)?;
-                        let rhs_bb = new_block(blocks);
-                        let merge_bb = new_block(blocks);
+                        let l = self.lower_expr(lhs)?;
+
+                        let rhs_bb = self.new_block();
+                        let merge_bb = self.new_block();
                         // If l is true, skip rhs and produce 1; else evaluate rhs
-                        set_term(
-                            blocks,
-                            *cur_bb,
+                        self.set_term(
+                            self.cur_bb,
                             TerminatorIR::Branch {
                                 cond: l,
                                 then_bb: merge_bb,
@@ -563,19 +629,18 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                             },
                         );
                         // Lower rhs when needed
-                        *cur_bb = rhs_bb;
-                        let r = lower_expr(rhs, blocks, cur_bb, next_val, locals, local_slots)
-                            .unwrap_or_else(|| {
-                                emit(blocks, *cur_bb, next_val, InstIR::ConstInt { value: 0 })
-                            });
-                        set_term(blocks, *cur_bb, TerminatorIR::Jump { bb: merge_bb });
+                        self.cur_bb = rhs_bb;
+
+                        let r = self.lower_expr(rhs).unwrap_or_else(|| {
+                            self.emit(self.cur_bb, InstIR::ConstInt { value: 0 })
+                        });
+
+                        self.set_term(self.cur_bb, TerminatorIR::Jump { bb: merge_bb });
                         // Merge: select(l ? 1 : r)
-                        *cur_bb = merge_bb;
-                        let one = emit(blocks, *cur_bb, next_val, InstIR::ConstInt { value: 1 });
-                        Some(emit(
-                            blocks,
-                            *cur_bb,
-                            next_val,
+                        self.cur_bb = merge_bb;
+                        let one = self.emit(self.cur_bb, InstIR::ConstInt { value: 1 });
+                        Some(self.emit(
+                            self.cur_bb,
                             InstIR::Select {
                                 cond: l,
                                 then_v: one,
@@ -584,8 +649,9 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                         ))
                     }
                     _ => {
-                        let l = lower_expr(lhs, blocks, cur_bb, next_val, locals, local_slots)?;
-                        let r = lower_expr(rhs, blocks, cur_bb, next_val, locals, local_slots)?;
+                        let l = self.lower_expr(lhs)?;
+                        let r = self.lower_expr(rhs)?;
+
                         let inst = match op {
                             Add => InstIR::Add { lhs: l, rhs: r },
                             Sub => InstIR::Sub { lhs: l, rhs: r },
@@ -605,72 +671,28 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                             Ge => InstIR::CmpGe { lhs: l, rhs: r },
                             _ => InstIR::Nop,
                         };
-                        Some(emit(blocks, *cur_bb, next_val, inst))
+                        Some(self.emit(self.cur_bb, inst))
                     }
                 }
             }
-            K::Call { func, args } => {
-                if let K::Variable(name) = &*func.kind {
-                    // Special-case: lower print/println(template) directly to printf(fmt, args...)
-                    if (name == "print" || name == "println") && args.len() == 1 {
-                        if let K::Template { parts } = &*args[0].kind {
-                            // Build a printf format string and collect expr parts
-                            let mut fmt = String::new();
-                            let mut exprs: Vec<&hir::HirExpr> = Vec::new();
-                            for p in parts {
-                                match p {
-                                    hir::HirTemplateStringPart::String(s) => fmt.push_str(s),
-                                    hir::HirTemplateStringPart::Expr(e) => {
-                                        // Minimal support: integer expressions -> %d
-                                        fmt.push_str("%d");
-                                        exprs.push(e);
-                                    }
-                                }
-                            }
-                            if name == "println" {
-                                fmt.push_str("\\n");
-                            }
-                            // Emit const format string
-                            let fmt_id =
-                                emit(blocks, *cur_bb, next_val, InstIR::ConstStr { value: fmt });
-                            // Build argv: fmt first, then evaluated exprs
-                            let mut argv = Vec::new();
-                            argv.push(fmt_id);
-                            for e in exprs {
-                                if let Some(v) =
-                                    lower_expr(e, blocks, cur_bb, next_val, locals, local_slots)
-                                {
-                                    argv.push(v);
-                                }
-                            }
-                            // Call printf(fmt, ...)
-                            return Some(emit(
-                                blocks,
-                                *cur_bb,
-                                next_val,
-                                InstIR::Call {
-                                    callee: "printf".to_string(),
-                                    args: argv,
-                                },
-                            ));
-                        }
-                    }
 
+            K::Call { func, args } => {
+                if let Some(name) = self.resolve_final_callee_name(func) {
                     // Default lowering for other calls
+
                     let mut argv = Vec::new();
+
                     for a in args {
-                        if let Some(v) =
-                            lower_expr(a, blocks, cur_bb, next_val, locals, local_slots)
-                        {
+                        if let Some(v) = self.lower_expr(a) {
                             argv.push(v);
                         }
                     }
-                    Some(emit(
-                        blocks,
-                        *cur_bb,
-                        next_val,
+
+                    Some(self.emit(
+                        self.cur_bb,
                         InstIR::Call {
-                            callee: name.clone(),
+                            callee: name,
+
                             args: argv,
                         },
                     ))
@@ -678,10 +700,12 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                     None
                 }
             }
+
             // Unary operations
             K::Unary { op, expr } => {
-                let v = lower_expr(expr, blocks, cur_bb, next_val, locals, local_slots)
-                    .unwrap_or_else(|| emit(blocks, *cur_bb, next_val, InstIR::Nop));
+                let v = self
+                    .lower_expr(expr)
+                    .unwrap_or_else(|| self.emit(self.cur_bb, InstIR::Nop));
                 use hir::HirUnaryOp::*;
                 let inst = match op {
                     Not => InstIR::Not { value: v },
@@ -692,91 +716,52 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                     PreDec => InstIR::Neg { value: v }, // TODO: Implement proper pre-decrement
                     PostDec => InstIR::Neg { value: v }, // TODO: Implement proper post-decrement
                 };
-                Some(emit(blocks, *cur_bb, next_val, inst))
+                Some(self.emit(self.cur_bb, inst))
             }
             // Casts
             K::Cast { expr, ty } => {
-                let v = lower_expr(expr, blocks, cur_bb, next_val, locals, local_slots)
-                    .unwrap_or_else(|| emit(blocks, *cur_bb, next_val, InstIR::Nop));
+                let v = self
+                    .lower_expr(expr)
+                    .unwrap_or_else(|| self.emit(self.cur_bb, InstIR::Nop));
                 let ity = map_hir_type_to_ir(ty);
-                Some(emit(
-                    blocks,
-                    *cur_bb,
-                    next_val,
-                    InstIR::Cast { value: v, ty: ity },
-                ))
+                Some(self.emit(self.cur_bb, InstIR::Cast { value: v, ty: ity }))
             }
             // Control-flow expressions (If/While/Loop) are handled in statement lowering
             _ => None,
         }
     }
 
-    // ------------------------
-    // Lowering: Statements/Blocks with CFG
-    // ------------------------
-    struct LoopCtx {
-        break_bb: BlockId,
-        continue_bb: BlockId,
-    }
-
-    fn lower_block(
-        blk: &hir::HirBlock,
-        blocks: &mut Vec<BlockIR>,
-        cur_bb: &mut BlockId,
-        next_val: &mut u32,
-        locals: &mut HashMap<String, ValueId>,
-        local_slots: &mut HashMap<String, LocalId>,
-        locals_meta: &mut Vec<LocalIR>,
-        debug_names: &mut IndexMap<ValueId, String>,
-        loops: &mut Vec<LoopCtx>,
-    ) {
+    fn lower_block(&mut self, blk: &hir::HirBlock) {
         for stmt in &blk.stmts {
-            if let Some(_ret) = lower_stmt(
-                stmt,
-                blocks,
-                cur_bb,
-                next_val,
-                locals,
-                local_slots,
-                locals_meta,
-                debug_names,
-                loops,
-            ) {
+            if let Some(_ret) = self.lower_stmt(stmt) {
                 // Early return; keep terminator set by caller
                 return;
             }
         }
         if let Some(expr) = &blk.expr {
-            let _ = lower_expr(expr, blocks, cur_bb, next_val, locals, local_slots);
+            let _ = self.lower_expr(expr);
         }
     }
 
     fn lower_if_stmt(
+        &mut self,
         cond: &hir::HirExpr,
         then_branch: &hir::HirBlock,
         else_branch: &Option<hir::HirBlock>,
-        blocks: &mut Vec<BlockIR>,
-        cur_bb: &mut BlockId,
-        next_val: &mut u32,
-        locals: &mut HashMap<String, ValueId>,
-        local_slots: &mut HashMap<String, LocalId>,
-        locals_meta: &mut Vec<LocalIR>,
-        debug_names: &mut IndexMap<ValueId, String>,
-        loops: &mut Vec<LoopCtx>,
     ) {
         // Evaluate condition in current block
-        let cval = lower_expr(cond, blocks, cur_bb, next_val, locals, local_slots)
-            .unwrap_or_else(|| emit(blocks, *cur_bb, next_val, InstIR::Nop));
+        let cval = self
+            .lower_expr(cond)
+            .unwrap_or_else(|| self.emit(self.cur_bb, InstIR::Nop));
 
         // Create CFG nodes
-        let then_bb = new_block(blocks);
-        let else_bb = new_block(blocks);
-        let merge_bb = new_block(blocks);
+        let then_bb = self.new_block();
+        let else_bb = self.new_block();
+        let merge_bb = self.new_block();
 
         // Branch out of current block
-        set_term(
-            blocks,
-            *cur_bb,
+        self.set_term(
+            self.cur_bb,
             TerminatorIR::Branch {
                 cond: cval,
                 then_bb,
@@ -785,76 +770,40 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
         );
 
         // Lower THEN
-        let mut then_cur = then_bb;
-        lower_block(
-            then_branch,
-            blocks,
-            &mut then_cur,
-            next_val,
-            locals,
-            local_slots,
-            locals_meta,
-            debug_names,
-            loops,
-        );
+        self.cur_bb = then_bb;
+        self.lower_block(then_branch);
         // Ensure jump to merge if not already returned/branched (we conservatively overwrite)
-        set_term(blocks, then_cur, TerminatorIR::Jump { bb: merge_bb });
+        self.set_term(self.cur_bb, TerminatorIR::Jump { bb: merge_bb });
 
         // Lower ELSE
-        let mut else_cur = else_bb;
+        self.cur_bb = else_bb;
         if let Some(eb) = else_branch {
-            lower_block(
-                eb,
-                blocks,
-                &mut else_cur,
-                next_val,
-                locals,
-                local_slots,
-                locals_meta,
-                debug_names,
-                loops,
-            );
+            self.lower_block(eb);
         }
-        set_term(blocks, else_cur, TerminatorIR::Jump { bb: merge_bb });
+        self.set_term(self.cur_bb, TerminatorIR::Jump { bb: merge_bb });
 
         // Continue at merge
-        *cur_bb = merge_bb;
+        self.cur_bb = merge_bb;
     }
 
-    fn lower_while_stmt(
-        condition: &hir::HirExpr,
-        body: &hir::HirBlock,
-        blocks: &mut Vec<BlockIR>,
-        cur_bb: &mut BlockId,
-        next_val: &mut u32,
-        locals: &mut HashMap<String, ValueId>,
-        local_slots: &mut HashMap<String, LocalId>,
-        locals_meta: &mut Vec<LocalIR>,
-        debug_names: &mut IndexMap<ValueId, String>,
-        loops: &mut Vec<LoopCtx>,
-    ) {
+    fn lower_while_stmt(&mut self, condition: &hir::HirExpr, body: &hir::HirBlock) {
         // Create blocks
-        let cond_bb = new_block(blocks);
-        let loop_bb = new_block(blocks);
-        let after_bb = new_block(blocks);
+        let cond_bb = self.new_block();
+        let loop_bb = self.new_block();
+        let after_bb = self.new_block();
 
         // Jump from current to cond
-        set_term(blocks, *cur_bb, TerminatorIR::Jump { bb: cond_bb });
+        self.set_term(self.cur_bb, TerminatorIR::Jump { bb: cond_bb });
 
         // Lower condition
-        let mut cond_cur = cond_bb;
-        let cval = lower_expr(
-            condition,
-            blocks,
-            &mut cond_cur,
-            next_val,
-            locals,
-            local_slots,
-        )
-        .unwrap_or_else(|| emit(blocks, cond_cur, next_val, InstIR::Nop));
-        set_term(
-            blocks,
-            cond_cur,
+        self.cur_bb = cond_bb;
+
+        let cval = self
+            .lower_expr(condition)
+            .unwrap_or_else(|| self.emit(self.cur_bb, InstIR::Nop));
+
+        self.set_term(
+            self.cur_bb,
             TerminatorIR::Branch {
                 cond: cval,
                 then_bb: loop_bb,
@@ -863,43 +812,23 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
         );
 
         // Push loop ctx
-        loops.push(LoopCtx {
+        self.loops.push(LoopCtx {
             break_bb: after_bb,
             continue_bb: cond_bb,
         });
 
         // Lower body
-        let mut body_cur = loop_bb;
-        lower_block(
-            body,
-            blocks,
-            &mut body_cur,
-            next_val,
-            locals,
-            local_slots,
-            locals_meta,
-            debug_names,
-            loops,
-        );
+        self.cur_bb = loop_bb;
+        self.lower_block(body);
         // Continue to re-check condition
-        set_term(blocks, body_cur, TerminatorIR::Jump { bb: cond_bb });
+        self.set_term(self.cur_bb, TerminatorIR::Jump { bb: cond_bb });
 
         // Pop loop ctx and continue at after
-        loops.pop();
-        *cur_bb = after_bb;
+        self.loops.pop();
+        self.cur_bb = after_bb;
     }
 
-    fn lower_stmt(
-        stmt: &hir::HirStmt,
-        blocks: &mut Vec<BlockIR>,
-        cur_bb: &mut BlockId,
-        next_val: &mut u32,
-        locals: &mut HashMap<String, ValueId>,
-        local_slots: &mut HashMap<String, LocalId>,
-        locals_meta: &mut Vec<LocalIR>,
-        debug_names: &mut IndexMap<ValueId, String>,
-        loops: &mut Vec<LoopCtx>,
-    ) -> Option<Option<ValueId>> {
+    fn lower_stmt(&mut self, stmt: &hir::HirStmt) -> Option<Option<ValueId>> {
         use hir::HirExprKind as K;
         use hir::HirStmtKind as S;
         match &stmt.kind {
@@ -908,14 +837,14 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                     // Allocate a unique local slot for this binding
                     let new_local = if name == "_" {
                         // Always allocate new unique local for '_' (discard variables)
-                        LocalId(locals_meta.len() as u32)
-                    } else if let Some(&existing_local) = local_slots.get(name) {
+                        LocalId(self.locals_meta.len() as u32)
+                    } else if let Some(&existing_local) = self.local_slots.get(name) {
                         // Reuse existing local for the same variable name
                         existing_local
                     } else {
                         // Allocate new unique local ID
-                        let new_id = LocalId(locals_meta.len() as u32);
-                        local_slots.insert(name.clone(), new_id);
+                        let new_id = LocalId(self.locals_meta.len() as u32);
+                        self.local_slots.insert(name.clone(), new_id);
                         new_id
                     };
                     // Record LocalIR with best-effort type from HIR or infer from init
@@ -923,14 +852,14 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                         map_hir_type_to_ir(ty)
                     } else if let Some(init_expr) = init {
                         // Try to infer type from the initialization expression
-                        infer_type_from_hir_expr_with_context(init_expr, &locals_meta, local_slots)
+                        self.infer_type_from_hir_expr_with_context(init_expr)
                     } else {
                         // Default to i32 for untyped, uninitialized locals
                         TypeIR::I32
                     };
                     // Only add to locals_meta if this is a new local
-                    if !locals_meta.iter().any(|l| l.id == new_local) {
-                        locals_meta.push(LocalIR {
+                    if !self.locals_meta.iter().any(|l| l.id == new_local) {
+                        self.locals_meta.push(LocalIR {
                             id: new_local,
                             ty: local_ty,
                             debug_name: Some(name.clone()),
@@ -938,19 +867,16 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                     }
 
                     // Initialize with RHS if provided
-                    if let Some(init_expr) = init
-                        && let Some(v) =
-                            lower_expr(init_expr, blocks, cur_bb, next_val, locals, local_slots)
-                    {
-                        let _ = emit(
-                            blocks,
-                            *cur_bb,
-                            next_val,
-                            InstIR::Store {
-                                local: new_local,
-                                value: v,
-                            },
-                        );
+                    if let Some(init_expr) = init {
+                        if let Some(v) = self.lower_expr(init_expr) {
+                            let _ = self.emit(
+                                self.cur_bb,
+                                InstIR::Store {
+                                    local: new_local,
+                                    value: v,
+                                },
+                            );
+                        }
                     }
                 }
                 None
@@ -963,66 +889,36 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                         then_branch,
                         else_branch,
                     } => {
-                        lower_if_stmt(
-                            condition,
-                            then_branch,
-                            else_branch,
-                            blocks,
-                            cur_bb,
-                            next_val,
-                            locals,
-                            local_slots,
-                            locals_meta,
-                            debug_names,
-                            loops,
-                        );
+                        self.lower_if_stmt(condition, then_branch, else_branch);
                         None
                     }
                     K::While { condition, body } => {
-                        lower_while_stmt(
-                            condition,
-                            body,
-                            blocks,
-                            cur_bb,
-                            next_val,
-                            locals,
-                            local_slots,
-                            locals_meta,
-                            debug_names,
-                            loops,
-                        );
+                        self.lower_while_stmt(condition, body);
                         None
                     }
                     // Desugar a simple match into a branch chain for literal patterns without guards
                     K::Match { expr, arms } => {
                         // Evaluate scrutinee
-                        let scrut = lower_expr(expr, blocks, cur_bb, next_val, locals, local_slots)
-                            .unwrap_or_else(|| {
-                                emit(blocks, *cur_bb, next_val, InstIR::ConstInt { value: 0 })
-                            });
-                        let next_bb = *cur_bb;
-                        let merge_bb = new_block(blocks);
+                        let scrut = self.lower_expr(expr).unwrap_or_else(|| {
+                            self.emit(self.cur_bb, InstIR::ConstInt { value: 0 })
+                        });
+
+                        let next_bb = self.cur_bb;
+                        let merge_bb = self.new_block();
                         let mut arm_blocks: Vec<(Option<ValueId>, BlockId)> = Vec::new();
+
                         // Create a basic block per arm and record literal value when applicable
                         for arm in arms {
-                            let arm_bb = new_block(blocks);
+                            let arm_bb = self.new_block();
                             // Support literal and wildcard arms with optional guards; non-literal structured patterns fall back to default behavior
                             let lit_val = match &*arm.pattern.kind {
                                 hir::HirPatternKind::Literal(boxed) => match &*boxed.kind {
-                                    K::Int(v) => Some(emit(
-                                        blocks,
-                                        arm_bb,
-                                        next_val,
-                                        InstIR::ConstInt { value: *v },
-                                    )),
+                                    K::Int(v) => {
+                                        Some(self.emit(arm_bb, InstIR::ConstInt { value: *v }))
+                                    }
                                     K::Bool(b) => {
                                         let n = if *b { 1 } else { 0 };
-                                        Some(emit(
-                                            blocks,
-                                            arm_bb,
-                                            next_val,
-                                            InstIR::ConstInt { value: n },
-                                        ))
+                                        Some(self.emit(arm_bb, InstIR::ConstInt { value: n }))
                                     }
                                     _ => None,
                                 },
@@ -1030,21 +926,20 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                             };
                             arm_blocks.push((lit_val, arm_bb));
                         }
+
                         // Chain branches comparing scrutinee to each literal arm; default to first arm if non-literal/else
                         let mut cursor = next_bb;
                         for (i, (lit, arm_bb)) in arm_blocks.iter().enumerate() {
                             // Determine the fallthrough compare block (or default to this arm if last)
                             let fallthrough = if i + 1 < arm_blocks.len() {
-                                new_block(blocks)
+                                self.new_block()
                             } else {
                                 *arm_bb
                             };
                             if let Some(lv) = lit {
                                 // Compare scrutinee == literal
-                                let cmp = emit(
-                                    blocks,
+                                let cmp = self.emit(
                                     cursor,
-                                    next_val,
                                     InstIR::CmpEq {
                                         lhs: scrut,
                                         rhs: *lv,
@@ -1052,9 +947,8 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                                 );
                                 // If the arm has a guard, evaluate it in a dedicated block
                                 if let Some(guard_expr) = &arms[i].guard {
-                                    let guard_bb = new_block(blocks);
-                                    set_term(
-                                        blocks,
+                                    let guard_bb = self.new_block();
+                                    self.set_term(
                                         cursor,
                                         TerminatorIR::Branch {
                                             cond: cmp,
@@ -1063,26 +957,15 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                                         },
                                     );
                                     // Lower guard in guard_bb
-                                    let mut guard_cur = guard_bb;
-                                    let g = lower_expr(
-                                        guard_expr,
-                                        blocks,
-                                        &mut guard_cur,
-                                        next_val,
-                                        locals,
-                                        local_slots,
-                                    )
-                                    .unwrap_or_else(|| {
-                                        emit(
-                                            blocks,
-                                            guard_cur,
-                                            next_val,
-                                            InstIR::ConstInt { value: 0 },
-                                        )
+                                    let guard_cur = guard_bb;
+                                    self.cur_bb = guard_cur;
+
+                                    let g = self.lower_expr(guard_expr).unwrap_or_else(|| {
+                                        self.emit(self.cur_bb, InstIR::ConstInt { value: 0 })
                                     });
-                                    set_term(
-                                        blocks,
-                                        guard_cur,
+
+                                    self.set_term(
+                                        self.cur_bb,
                                         TerminatorIR::Branch {
                                             cond: g,
                                             then_bb: *arm_bb,
@@ -1091,8 +974,7 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                                     );
                                 } else {
                                     // No guard: branch directly to arm or fallthrough
-                                    set_term(
-                                        blocks,
+                                    self.set_term(
                                         cursor,
                                         TerminatorIR::Branch {
                                             cond: cmp,
@@ -1104,44 +986,29 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                                 cursor = fallthrough;
                             } else {
                                 // Wildcard/default arm: jump directly
-                                set_term(blocks, cursor, TerminatorIR::Jump { bb: *arm_bb });
+                                self.set_term(cursor, TerminatorIR::Jump { bb: *arm_bb });
                                 cursor = *arm_bb;
                             }
                         }
+
                         // Lower each arm body and jump to merge
                         for (idx, (_lit, arm_bb)) in arm_blocks.iter().enumerate() {
-                            *cur_bb = *arm_bb;
+                            self.cur_bb = *arm_bb;
                             match &arms[idx].body {
                                 hir::HirMatchArmBody::Expr(be) => {
-                                    let _ = lower_expr(
-                                        be,
-                                        blocks,
-                                        cur_bb,
-                                        next_val,
-                                        locals,
-                                        local_slots,
-                                    );
+                                    let _ = self.lower_expr(be);
                                 }
                                 hir::HirMatchArmBody::Block(bb) => {
-                                    lower_block(
-                                        bb,
-                                        blocks,
-                                        cur_bb,
-                                        next_val,
-                                        locals,
-                                        local_slots,
-                                        locals_meta,
-                                        debug_names,
-                                        loops,
-                                    );
+                                    self.lower_block(bb);
                                 }
                             }
-                            set_term(blocks, *cur_bb, TerminatorIR::Jump { bb: merge_bb });
+                            self.set_term(self.cur_bb, TerminatorIR::Jump { bb: merge_bb });
                         }
                         // Continue after match
-                        *cur_bb = merge_bb;
+                        self.cur_bb = merge_bb;
                         None
                     }
+
                     // Desugar a for-loop to while using opaque iterator helpers:
                     // iter_has_next(iter) -> bool, iter_next(iter) -> T
                     K::For {
@@ -1150,40 +1017,38 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                         body,
                     } => {
                         // Evaluate iterator
-                        let iter_v =
-                            lower_expr(iter, blocks, cur_bb, next_val, locals, local_slots)
-                                .unwrap_or_else(|| emit(blocks, *cur_bb, next_val, InstIR::Nop));
+                        let iter_v = self
+                            .lower_expr(iter)
+                            .unwrap_or_else(|| self.emit(self.cur_bb, InstIR::Nop));
+
                         // Blocks: cond -> loop -> after
-                        let cond_bb = new_block(blocks);
-                        let loop_bb = new_block(blocks);
-                        let after_bb = new_block(blocks);
-                        set_term(blocks, *cur_bb, TerminatorIR::Jump { bb: cond_bb });
+                        let cond_bb = self.new_block();
+                        let loop_bb = self.new_block();
+                        let after_bb = self.new_block();
+                        self.set_term(self.cur_bb, TerminatorIR::Jump { bb: cond_bb });
+
                         // Condition: has_next = iter_has_next(iter)
-                        *cur_bb = cond_bb;
-                        let has = emit(
-                            blocks,
-                            *cur_bb,
-                            next_val,
+                        self.cur_bb = cond_bb;
+                        let has = self.emit(
+                            self.cur_bb,
                             InstIR::Call {
                                 callee: "iter_has_next".to_string(),
                                 args: vec![iter_v],
                             },
                         );
-                        set_term(
-                            blocks,
-                            *cur_bb,
+                        self.set_term(
+                            self.cur_bb,
                             TerminatorIR::Branch {
                                 cond: has,
                                 then_bb: loop_bb,
                                 else_bb: after_bb,
                             },
                         );
+
                         // Body: next_val = iter_next(iter); bind if pattern is variable
-                        *cur_bb = loop_bb;
-                        let next_item = emit(
-                            blocks,
-                            *cur_bb,
-                            next_val,
+                        self.cur_bb = loop_bb;
+                        let next_item = self.emit(
+                            self.cur_bb,
                             InstIR::Call {
                                 callee: "iter_next".to_string(),
                                 args: vec![iter_v],
@@ -1191,74 +1056,68 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
                         );
                         if let hir::HirPatternKind::Variable(name) = &*pattern.kind {
                             // Bind pattern name to next_item for body scope
-                            locals.insert(name.clone(), next_item);
-                            debug_names.insert(next_item, name.clone());
+                            self.locals.insert(name.clone(), next_item);
+                            self.debug_names.insert(next_item, name.clone());
                         }
-                        lower_block(
-                            body,
-                            blocks,
-                            cur_bb,
-                            next_val,
-                            locals,
-                            local_slots,
-                            locals_meta,
-                            debug_names,
-                            loops,
-                        );
-                        set_term(blocks, *cur_bb, TerminatorIR::Jump { bb: cond_bb });
+                        self.lower_block(body);
+                        self.set_term(self.cur_bb, TerminatorIR::Jump { bb: cond_bb });
+
                         // After
-                        *cur_bb = after_bb;
+                        self.cur_bb = after_bb;
                         None
                     }
+
                     _ => {
-                        let _ = lower_expr(e, blocks, cur_bb, next_val, locals, local_slots);
+                        let _ = self.lower_expr(e);
                         None
                     }
                 }
             }
+
             S::Assign { lhs, rhs } => {
                 // If assigning to a local slot, emit a Store; otherwise just evaluate RHS
-                if let hir::HirExprKind::Variable(var_name) = &*lhs.kind
-                    && let Some(lid) = local_slots.get(var_name).copied()
-                    && let Some(v) = lower_expr(rhs, blocks, cur_bb, next_val, locals, local_slots)
-                {
-                    let _ = emit(
-                        blocks,
-                        *cur_bb,
-                        next_val,
-                        InstIR::Store {
-                            local: lid,
-                            value: v,
-                        },
-                    );
-                    return None;
+                if let hir::HirExprKind::Variable(var_name) = &*lhs.kind {
+                    if let Some(lid) = self.local_slots.get(var_name).copied() {
+                        if let Some(v) = self.lower_expr(rhs) {
+                            let _ = self.emit(
+                                self.cur_bb,
+                                InstIR::Store {
+                                    local: lid,
+                                    value: v,
+                                },
+                            );
+                            return None;
+                        }
+                    }
                 }
-                let _ = lower_expr(rhs, blocks, cur_bb, next_val, locals, local_slots);
+
+                let _ = self.lower_expr(rhs);
                 None
             }
+
             S::Return(opt) => {
-                let v = opt
-                    .as_ref()
-                    .and_then(|e| lower_expr(e, blocks, cur_bb, next_val, locals, local_slots));
+                let v = opt.as_ref().and_then(|e| self.lower_expr(e));
+
                 // Set terminator on current block now
-                set_term(blocks, *cur_bb, TerminatorIR::Return { value: v });
+                self.set_term(self.cur_bb, TerminatorIR::Return { value: v });
+
                 Some(v)
             }
+
             S::Break(opt) => {
                 // Evaluate expression for side effects, ignore value in this minimal IR
                 if let Some(expr) = opt {
-                    let _ = lower_expr(expr, blocks, cur_bb, next_val, locals, local_slots);
+                    let _ = self.lower_expr(expr);
                 }
-                if let Some(top) = loops.last() {
-                    set_term(blocks, *cur_bb, TerminatorIR::Jump { bb: top.break_bb });
+                if let Some(top) = self.loops.last() {
+                    self.set_term(self.cur_bb, TerminatorIR::Jump { bb: top.break_bb });
                 }
                 None
             }
             S::Continue => {
-                if let Some(top) = loops.last() {
-                    set_term(
-                        blocks,
-                        *cur_bb,
+                if let Some(top) = self.loops.last() {
+                    self.set_term(
+                        self.cur_bb,
                         TerminatorIR::Jump {
                             bb: top.continue_bb,
                         },
@@ -1268,11 +1127,22 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
             }
         }
     }
+}
 
-    // ------------------------
-    // Entry: Lower Program
-    // ------------------------
+/// Entry point for IR lowering from post-normalize, post-monomorphized HIR.
+/// This covers a minimal subset: literals, variables, binary ops (+,-,*,/),
+/// calls (with simple variable callee), let/expr/return statements.
+pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
     let mut ir = ProgramIR::new();
+
+    // Build a function -> return type map from HIR to guide expression type inference
+    let mut function_ret_types: std::collections::HashMap<String, TypeIR> =
+        std::collections::HashMap::new();
+    for item in &program.items {
+        if let hir::HirItemKind::Function(func) = &item.kind {
+            function_ret_types.insert(func.name.clone(), map_hir_type_to_ir(&func.return_type));
+        }
+    }
 
     for item in &program.items {
         if let hir::HirItemKind::Function(func) = &item.kind {
@@ -1289,52 +1159,39 @@ pub fn lower_from_hir(program: &hir::HirProgram) -> ProgramIR {
 
             let mut f_ir = FunctionIR::new(name, params, ret);
 
-            // Local lowering state (per function)
-            let mut next_val: u32 = 0;
-            // Param values map (by name)
-            let mut locals: HashMap<String, ValueId> = HashMap::new();
-            // Local slots map (by name)
-            let mut local_slots: HashMap<String, LocalId> = HashMap::new();
-            let mut loops: Vec<LoopCtx> = Vec::new();
+            // Create LoweringCtx for this function
+            let mut ctx = LoweringCtx::new(&function_ret_types);
+
+            // Initialize context with function's entry block
+            ctx.blocks = f_ir.blocks;
+            ctx.cur_bb = f_ir.entry;
 
             // Seed parameter value IDs so they can be referenced
             for p in &func.params {
-                let id = ValueId(next_val);
-                next_val = next_val.saturating_add(1);
-                f_ir.debug_names.insert(id, p.name.clone());
-                locals.insert(p.name.clone(), id);
+                let id = ValueId(ctx.next_val);
+                ctx.next_val = ctx.next_val.saturating_add(1);
+                ctx.debug_names.insert(id, p.name.clone());
+                ctx.locals.insert(p.name.clone(), id);
             }
 
-            // Current block starts at entry
-            let mut cur_bb = f_ir.entry;
-
             // Lower body statements and optional tail expr
-            lower_block(
-                &func.body,
-                &mut f_ir.blocks,
-                &mut cur_bb,
-                &mut next_val,
-                &mut locals,
-                &mut local_slots,
-                &mut f_ir.locals,
-                &mut f_ir.debug_names,
-                &mut loops,
-            );
+            ctx.lower_block(&func.body);
 
             // Finalize terminator only if the current block still has the default placeholder
-            match f_ir.blocks[cur_bb.0 as usize].term {
+            match ctx.blocks[ctx.cur_bb.0 as usize].term {
                 TerminatorIR::Return { value: None } => {
                     // Default placeholder: replace with an explicit return (still None here)
-                    set_term(
-                        &mut f_ir.blocks,
-                        cur_bb,
-                        TerminatorIR::Return { value: None },
-                    );
+                    ctx.set_term(ctx.cur_bb, TerminatorIR::Return { value: None });
                 }
                 _ => {
                     // Do not overwrite non-default terminators (explicit return, branch, or jump)
                 }
             }
+
+            // Update function IR with results from context
+            f_ir.blocks = ctx.blocks;
+            f_ir.locals = ctx.locals_meta;
+            f_ir.debug_names = ctx.debug_names;
 
             ir.functions.push(f_ir);
         }
@@ -1537,8 +1394,12 @@ fn map_hir_type_to_ir(t: &hir::HirType) -> TypeIR {
 
 fn infer_type_from_hir_expr_with_context(
     expr: &hir::HirExpr,
+
     locals_meta: &[LocalIR],
+
     local_slots: &std::collections::HashMap<String, LocalId>,
+
+    function_ret_types: &std::collections::HashMap<String, TypeIR>,
 ) -> TypeIR {
     use hir::HirExprKind as K;
     match &*expr.kind {
@@ -1551,7 +1412,22 @@ fn infer_type_from_hir_expr_with_context(
         K::Void => TypeIR::Void,
         K::Binary { .. } => TypeIR::I64, // Most binary ops result in i64
         K::Unary { .. } => TypeIR::I64,  // Most unary ops result in i64
-        K::Call { .. } => TypeIR::I32,   // Default to i32 for function calls
+
+        K::Call { func, .. } => {
+            // Infer return type by consulting the HIR-derived function return-type map
+            if let K::Variable(func_name) = &*func.kind {
+                if let Some(ret_ty) = function_ret_types.get(func_name) {
+                    ret_ty.clone()
+                } else {
+                    // Fall back to i32 when the callee is unknown or external
+                    TypeIR::I32
+                }
+            } else {
+                // Non-variable function expressions default to i32
+                TypeIR::I32
+            }
+        }
+
         K::Variable(name) => {
             // Look up the variable type from already processed locals
             if let Some(&local_id) = local_slots.get(name) {
@@ -1565,7 +1441,30 @@ fn infer_type_from_hir_expr_with_context(
             }
         }
         K::Pipeline { .. } => TypeIR::I32, // Pipeline results default to i32
-        _ => TypeIR::I32, // Safe default for other expressions
+        _ => TypeIR::I32,                  // Safe default for other expressions
+    }
+}
+
+/// Infer the appropriate printf format specifier for an expression in a template string.
+
+/// This uses local type information whenever available to avoid hardcoding function names.
+
+fn infer_format_specifier_for_expr(
+    expr: &hir::HirExpr,
+    locals_meta: &[LocalIR],
+    local_slots: &std::collections::HashMap<String, LocalId>,
+    function_ret_types: &std::collections::HashMap<String, TypeIR>,
+) -> String {
+    let ty =
+        infer_type_from_hir_expr_with_context(expr, locals_meta, local_slots, function_ret_types);
+
+    match ty {
+        TypeIR::String => "%s".to_string(),
+        TypeIR::F32 | TypeIR::F64 => "%f".to_string(),
+        TypeIR::Bool | TypeIR::I32 => "%d".to_string(),
+        TypeIR::I64 => "%lld".to_string(),
+        TypeIR::Ptr(_) | TypeIR::Opaque(_) => "%p".to_string(),
+        TypeIR::Void => "%d".to_string(),
     }
 }
 

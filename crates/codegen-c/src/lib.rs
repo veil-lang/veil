@@ -64,7 +64,11 @@ impl IrCBackend {
         out.push_str("#include <stdbool.h>\n");
         out.push_str("#include <stddef.h>\n");
         out.push_str("#include <stdio.h>\n");
-        out.push_str("#include <string.h>\n\n");
+        out.push_str("#include <stdlib.h>\n");
+        out.push_str("#include <string.h>\n");
+        out.push_str("/* Undefine min/max macros to avoid conflicts with user functions */\n");
+        out.push_str("#ifdef min\n#undef min\n#endif\n");
+        out.push_str("#ifdef max\n#undef max\n#endif\n\n");
 
         // Iterator runtime hook stubs.
         // Tooling can provide a real runtime by defining VEIL_RUNTIME_PROVIDES_ITER
@@ -389,6 +393,66 @@ impl IrCBackend {
                             let cty = local_cty(*local);
                             let _ =
                                 writeln!(out, "    l{} = ({} ){};", local.0, cty, val_ref(*value));
+                        }
+
+                        veil_ir::InstIR::Format { fmt, args } => {
+                            // Emit string formatting as malloc + snprintf
+                            let esc = escape_c_str(fmt);
+                            let argv = args
+                                .iter()
+                                .map(|a| val_ref(*a))
+                                .collect::<Vec<_>>()
+                                .join(", ");
+
+                            // Determine SSA name for result to build temporary names
+                            let name = if (res.0 as usize) < f.params.len() {
+                                format!("p{}", res.0)
+                            } else {
+                                format!("v{}", res.0)
+                            };
+
+                            // Compute required length (excluding NUL)
+                            if argv.is_empty() {
+                                let _ = writeln!(
+                                    out,
+                                    "    size_t {}_len = snprintf(NULL, 0, \"{}\");",
+                                    name, esc
+                                );
+                            } else {
+                                let _ = writeln!(
+                                    out,
+                                    "    size_t {}_len = snprintf(NULL, 0, \"{}\", {});",
+                                    name, esc, argv
+                                );
+                            }
+
+                            // Allocate buffer and format into it
+                            let _ = writeln!(
+                                out,
+                                "    char* {}_buf = (char*)malloc({}_len + 1);",
+                                name, name
+                            );
+                            if argv.is_empty() {
+                                let _ = writeln!(
+                                    out,
+                                    "    snprintf({0}_buf, {0}_len + 1, \"{1}\");",
+                                    name, esc
+                                );
+                            } else {
+                                let _ = writeln!(
+                                    out,
+                                    "    snprintf({0}_buf, {0}_len + 1, \"{1}\", {2});",
+                                    name, esc, argv
+                                );
+                            }
+
+                            // Assign buffer pointer as const char*
+                            declare_or_assign(
+                                res,
+                                "const char*",
+                                &format!("{}_buf", name),
+                                &mut out,
+                            );
                         }
                         veil_ir::InstIR::Call { callee, args } => {
                             // If we have a prototype among IR functions, honor its return type.

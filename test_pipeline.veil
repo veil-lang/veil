@@ -37,5 +37,11 @@ fn main() -> void {
     let _ = result3;
     let _ = result4;
 
+    println("Pipeline results:");
+    println(`result1: {result1}`);
+    println(`result2: {result2}`);
+    println(`result3: {result3}`);
+    println(`result4: {result4}`);
+
     return;
 }

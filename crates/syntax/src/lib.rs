@@ -291,7 +291,7 @@ pub fn parse_ast_with_warnings(
             match p.as_rule() {
                 R::ty_postfix => {
                     // Handle ty_postfix by processing its children
-                    for c in p.into_inner() {
+                    if let Some(c) = p.into_inner().next() {
                         return parse_type_inner(c);
                     }
                     Type::Unknown
@@ -918,12 +918,10 @@ pub fn parse_ast_with_warnings(
                                 let expr_src = &body[i + 1..j];
                                 if let Ok(mut pairs) =
                                     ast_grammar::AstParser::parse(R::expr, expr_src)
+                                    && let Some(p) = pairs.next()
                                 {
-                                    if let Some(p) = pairs.next() {
-                                        parts.push(TemplateStrPart::Expression(Box::new(
-                                            parse_expr(p),
-                                        )));
-                                    }
+                                    parts
+                                        .push(TemplateStrPart::Expression(Box::new(parse_expr(p))));
                                 }
                                 i = j + 1;
                             } else {
