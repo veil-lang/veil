@@ -1,0 +1,41 @@
+/# Test file with main function for mutability enforcement in Veil v2.0
+
+fn main() {
+    /# Test 1: Basic mutable variable assignment (should work)
+    var x = 10;
+    x = 20; /# This should be allowed
+    println("Mutable assignment works!");
+
+    /# Test 2: Multiple assignments to mutable variable
+    var counter = 0;
+    counter = 1;
+    counter = 2;
+    counter = 3; /# All should work
+    println("Multiple assignments work!");
+
+    /# Test 3: Mixed mutability - only assign to mutable ones
+    var a = 1;
+    var b = 2;
+    const C = 3;
+
+    a = 10; /# Should work - a is mutable
+    /# Don't assign to b or C - they are immutable
+    println("Mixed mutability test passed!");
+
+    /# Test 4: Mutable variable with type compatibility
+    var y: i32 = 10;
+    y = 20; /# Should work - same type
+    println("Type compatible assignment works!");
+
+    /# Test 5: Nested scope mutability
+    var outer = 1;
+    {
+        var inner = 2;
+        outer = 10; /# Should work
+        inner = 20; /# Should work
+    }
+    outer = 30; /# Should work
+    println("Nested scope mutability works!");
+
+    println("All mutability tests passed successfully!");
+}

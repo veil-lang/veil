@@ -1,0 +1,15 @@
+[package]
+name = "veil-lexer"
+version = "0.0.1"
+edition = "2024"
+publish = false
+description = "Minimal lexer crate stub for the Veil compiler workspace."
+
+[lib]
+name = "veil_lexer"
+path = "src/lib.rs"
+
+[features]
+default = []
+
+[dependencies]

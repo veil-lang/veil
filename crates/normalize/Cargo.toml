@@ -1,0 +1,18 @@
+[package]
+name = "veil-normalize"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Veil normalization pass: desugaring pipeline, ++/--, and postfix '?' into core HIR constructs."
+
+[lib]
+name = "veil_normalize"
+path = "src/lib.rs"
+
+[dependencies]
+veil-hir = { path = "../hir" }
+veil-diagnostics = { path = "../diagnostics" }
+
+[dev-dependencies]
+pretty_assertions = "1.4.0"
+codespan = "0.11.1"

@@ -1,0 +1,20 @@
+[package]
+name = "veil-runtime"
+version = "0.1.0"
+edition = "2024"
+description = "Veil runtime shims and C headers (iterator hooks and helpers)"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lib]
+name = "veil_runtime"
+path = "src/lib.rs"
+# Expose as a Rust library; future versions may add 'staticlib' or 'cdylib' for C linkage.
+crate-type = ["rlib"]
+
+[features]
+# Placeholder feature to gate iterator-related runtime pieces.
+default = ["iter"]
+iter = []
+
+[dependencies]

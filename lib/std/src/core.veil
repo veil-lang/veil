@@ -1,30 +1,30 @@
-import std/io;
+import std::io;
 
-#[header="stdlib.h"]
+#[header("stdlib.h")]
 foreign fn exit(code: i32) -> void;
 
-#[header="string.h"]
+#[header("string.h")]
 foreign fn strlen(s: string) -> size_t;
 
 foreign fn ve_array_length(arr: rawptr) -> i32;
 
-#[no_emit_decl="true"]
+#[no_emit_decl("true")]
 foreign fn ve_array_append_i32(arr: rawptr, item: i32) -> rawptr;
-#[no_emit_decl="true"]
+#[no_emit_decl("true")]
 foreign fn ve_array_append_string(arr: rawptr, item: string) -> rawptr;
-#[no_emit_decl="true"]
+#[no_emit_decl("true")]
 foreign fn ve_array_append_bool(arr: rawptr, item: bool) -> rawptr;
-#[no_emit_decl="true"]
+#[no_emit_decl("true")]
 foreign fn ve_string_at(s: string, index: i32) -> i32;
-#[no_emit_decl="true"]
+#[no_emit_decl("true")]
 foreign fn ve_string_slice(s: string, start: i32, end: i32) -> string;
 
-#[header="string.h", no_emit_decl="true"]
+#[header("string.h"), no_emit_decl("true")]
 foreign fn memcpy(dest: rawptr, src: rawptr, n: size_t) -> rawptr;
 
 
 export fn panic(msg: string) -> void {
-    println(`Panic: ${msg}`);
+    println(`Panic: {msg}`);
     exit(1);
 }
 
@@ -61,7 +61,8 @@ impl string[] {
     fn length(self) -> i32 {
         return ve_array_length(self as rawptr) as i32;
     }
-      fn append(self, item: string) -> string[] {
+
+    fn append(self, item: string) -> string[] {
         return ve_array_append_string(self as rawptr, item) as string[];
     }
 }
@@ -76,7 +77,8 @@ impl i32[] {
     fn length(self) -> i32 {
         return ve_array_length(self as rawptr) as i32;
     }
-      fn append(self, item: i32) -> i32[] {
+
+    fn append(self, item: i32) -> i32[] {
         return ve_array_append_i32(self as rawptr, item) as i32[];
     }
 }
@@ -84,7 +86,9 @@ impl i32[] {
 impl bool[] {
     fn length(self) -> i32 {
         return ve_array_length(self as rawptr) as i32;
-    }    fn append(self, item: bool) -> bool[] {
+    }
+
+    fn append(self, item: bool) -> bool[] {
         return ve_array_append_bool(self as rawptr, item) as bool[];
     }
 }

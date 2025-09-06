@@ -1,0 +1,56 @@
+/# Template strings coverage: literals, embedded expressions, nesting of multiple parts #/
+
+fn add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+test template_string_basic {
+    const who: string = "Veil";
+    const msg: string = `Hello {who}`;
+    const _ = msg;
+    return;
+}
+
+test template_string_multiple_expressions {
+    const a: i32 = 1;
+    const b: i32 = 2;
+
+    const s: string = `sum={a + b} a={a} b={b}`;
+    const _ = s;
+    return;
+}
+
+test template_string_with_call_and_arithmetic {
+    const s: string = `add(1,2)={add(1 as i32, 2 as i32)} next={1 + 2}`;
+    const _ = s;
+    return;
+}
+
+test template_string_with_array_access {
+    const arr = [10 as i32, 20 as i32, 30 as i32];
+    const s: string = `first={arr[0]} second={arr[1]}`;
+    const _ = s;
+    return;
+}
+
+test template_string_only_expression_body {
+    const s: string = `{1 + 2}`;
+    const _ = s;
+    return;
+}
+
+test template_string_back_to_back_expressions {
+    const a: i32 = 7;
+    const b: i32 = 8;
+    const s: string = `pair={a}{b}`;
+    const _ = s;
+    return;
+}
+
+test template_string_with_bool_and_none_literals {
+    const t = true;
+    const n = none;
+    const s: string = `t={t} n={n}`;
+    const _ = s;
+    return;
+}

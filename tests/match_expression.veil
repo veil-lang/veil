@@ -1,0 +1,61 @@
+/# Match expression tests: integer, string, bool; statement-level and expression-level arms #/
+
+test match_on_int_minimal {
+    const v: i32 = 2 as i32;
+
+    match v {
+        1 => { const _ = 10; }
+        2 => { const _ = 20; }
+        _ => { const _ = 0; }
+    }
+
+    return;
+}
+
+test match_expression_value_i32 {
+    const v: i32 = 1 as i32;
+
+    const res: i32 = match v {
+        0 => 10 as i32
+        1 => 20 as i32
+        _ => 30 as i32
+    };
+
+    const _ = res;
+    return;
+}
+
+test match_on_string_literal {
+    const s: string = "b";
+
+    match s {
+        "a" => { const _ = 1; }
+        "b" => { const _ = 2; }
+        _   => { const _ = 0; }
+    }
+
+    return;
+}
+
+test match_on_bool_literals {
+    const b = true;
+
+    match b {
+        true  => { const _ = 1; }
+        false => { const _ = 0; }
+    }
+
+    return;
+}
+
+test mixed_arm_bodies_statement_level {
+    const x: i32 = 0 as i32;
+
+    /# Statement-level match: first arm uses a block body, second uses an expression body #/
+    match x {
+        0 => { const _ = 0; }
+        _ => 1
+    };
+
+    return;
+}

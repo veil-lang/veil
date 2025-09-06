@@ -1,2 +1,50 @@
-export import std/io;
-export import std/core;
+/# Veil Standard Library Prelude
+/# This module provides commonly used functions and types that are
+/# automatically imported into every Veil program.
+
+/# Runtime intrinsics
+#{ header: "stdio.h" }
+foreign fn printf(fmt: string, arg: string) -> i32;
+export fn print(s: string) -> void {
+    printf("%s", s);
+}
+export fn println(s: string) -> void {
+    printf("%s\n", s);
+}
+
+/# Basic utility functions
+export fn panic(message: string) -> void {
+    println(message);
+}
+
+export fn assert(condition: bool, message: string) -> void {
+    if !condition {
+        panic(message);
+    }
+}
+
+/# Math utilities
+export fn abs(n: i32) -> i32 {
+    if n < 0 {
+        return -n;
+    }
+    return n;
+}
+
+export fn max(a: i32, b: i32) -> i32 {
+    if a > b {
+        return a;
+    }
+    return b;
+}
+
+export fn min(a: i32, b: i32) -> i32 {
+    if a < b {
+        return a;
+    }
+    return b;
+}
+
+/# Type aliases for convenience
+/# export type usize = u64;
+/# export type isize = i64;

@@ -1,0 +1,47 @@
+/# Functions and calls #/
+
+fn add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+fn sum3(a: i32, b: i32, c: i32) -> i32 {
+    return a + b + c;
+}
+
+fn noop() -> void {
+    return;
+}
+
+test call_minimal_no_args {
+    noop();
+    return;
+}
+
+test call_with_args_and_nesting {
+    const one: i32 = 1 as i32;
+    const two: i32 = 2 as i32;
+    const three: i32 = 3 as i32;
+
+    const r: i32 = add(add(one, two), three);
+    const _sink = r;
+    return;
+}
+
+test call_with_expression_arguments {
+    const a: i32 = 4 as i32;
+    const b: i32 = 5 as i32;
+
+    const r: i32 = add(a, b + 1 as i32);
+    const _ = r;
+    return;
+}
+
+test call_multiple_parameters {
+    const a: i32 = 10 as i32;
+    const b: i32 = 20 as i32;
+    const c: i32 = 30 as i32;
+
+    const r: i32 = sum3(a, b, c);
+    const _store = r;
+    return;
+}

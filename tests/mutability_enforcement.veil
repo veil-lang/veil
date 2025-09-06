@@ -1,0 +1,67 @@
+/# Test file for mutability enforcement in Veil v2.0
+
+/# Test 1: Basic variable assignment (should work - var is mutable by design)
+fn test_mutable_assignment() {
+    var x = 10;
+    x = 20; /# This should be allowed
+}
+
+/# Test 2: Variable assignment (should work - var is mutable by design)
+fn test_variable_assignment() {
+    var x = 10;
+    x = 20; /# This should work now
+}
+
+/# Test 3: Constant assignment (should fail)
+fn test_constant_assignment() {
+    const PI = 3.14159;
+    PI = 3.14; /# This should cause a compile error
+}
+
+/# Test 4: Mixed mutability in same scope
+fn test_mixed_mutability() {
+    var a = 1;
+    var b = 2;
+    const C = 3;
+
+    a = 10; /# Should work - var is mutable
+    b = 20; /# Should work - var is mutable
+    /# C = 30; /# Should fail - const is immutable
+}
+
+/# Test 5: Variable reassignment with type compatibility
+fn test_type_compatible_assignment() {
+    var x: i32 = 10;
+    x = 20; /# Should work - same type
+}
+
+/# Test 6: Variable with incompatible type (should fail type checking)
+fn test_type_incompatible_assignment() {
+    var x: i32 = 10;
+    x = "hello"; /# Should fail - type mismatch
+}
+
+/# Test 7: Nested scope mutability
+fn test_nested_scope() {
+    var outer = 1;
+    {
+        var inner = 2;
+        outer = 10; /# Should work
+        inner = 20; /# Should work
+    }
+    outer = 30; /# Should work
+    /# inner = 40; /# Should fail - out of scope
+}
+
+/# Test 8: Function parameters (immutable by default)
+fn test_parameter_mutability(x: i32) {
+    x = 10; /# Should fail - parameters are immutable
+}
+
+/# Test 9: Multiple assignments to variable
+fn test_multiple_assignments() {
+    var counter = 0;
+    counter = 1;
+    counter = 2;
+    counter = 3; /# All should work
+}

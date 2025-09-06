@@ -1,0 +1,71 @@
+/# Literals and operators: ints, floats, strings, bools, comparisons, logical #/
+
+test integer_and_float_literals {
+    const a: i32 = 0;
+    const b: i32 = 123;
+    const c: i32 = 0xFF as i32;
+    const d: i32 = 0b1010 as i32;
+
+    const f: f64 = 1.5;
+    const g: f64 = 2.5;
+    const sink_i: i32 = a + b + c + d;
+    const sink_f: f64 = f + g;
+
+    /# Large integer literal path (i64) #/
+    const big: i64 = 4294967296;
+    const _ = sink_i;
+    const _ = sink_f;
+    const _ = big;
+    return;
+}
+
+test string_and_bool_literals {
+    const s: string = "hello";
+    const t: str = "world";
+    const u = `hi {s} {1 + 2}`;
+
+    const ok: bool = true;
+    const no: bool = false;
+
+    /# basic boolean or #/
+    const v = ok | no;
+
+    const _ = s;
+    const _ = t;
+    const _ = u;
+    const _ = v;
+    return;
+}
+
+test comparisons_and_equality {
+    const a: i32 = 3;
+    const b: i32 = 4;
+
+    const _lt  = a < b;
+    const _le  = a <= b;
+    const _gt  = a > b;
+    const _ge  = a >= b;
+    const _eq  = a == b;
+    const _ne  = a != b;
+
+    return;
+}
+
+test logical_ops_bool_only {
+    const t = true;
+    const f = false;
+
+    /# New single-char logical operators #/
+    const and1 = t & f;
+    const or1  = t | f;
+
+    /# Modern logical operators #/
+    const and2 = t & f;
+    const or2  = t | f;
+
+    const _ = and1;
+    const _ = or1;
+    const _ = and2;
+    const _ = or2;
+    return;
+}
