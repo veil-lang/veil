@@ -297,6 +297,7 @@ impl TypeChecker {
 
     /// Strict type matching for explicit type annotations
     /// This is more restrictive than general type compatibility
+    #[allow(clippy::only_used_in_recursion)]
     fn strict_type_match(&self, expected: &HirType, actual: &HirType) -> bool {
         use HirType::*;
 

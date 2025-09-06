@@ -31,6 +31,5 @@ mod tests {
         // Verify core AST types are accessible
         let _type_example = Type::I32;
         let _visibility_example = Visibility::Private;
-        assert!(true);
     }
 }

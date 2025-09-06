@@ -572,6 +572,7 @@ impl IrCBackend {
         s
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn type_to_c(&self, ty: &TypeIR) -> String {
         use TypeIR::*;
 

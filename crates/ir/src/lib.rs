@@ -511,6 +511,7 @@ impl<'a> LoweringCtx<'a> {
         )
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn resolve_final_callee_name(&self, expr: &hir::HirExpr) -> Option<String> {
         use hir::HirExprKind as K;
         match &*expr.kind {

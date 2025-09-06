@@ -398,11 +398,10 @@ impl Monomorphizer {
                         collect_types_in_stmt(s, out);
                     }
                 }
-                ast::Stmt::Break(expr_opt, _) => {
-                    if let Some(e) = expr_opt {
-                        collect_types_in_expr(e, out);
-                    }
+                ast::Stmt::Break(Some(e), _) => {
+                    collect_types_in_expr(e, out);
                 }
+                ast::Stmt::Break(None, _) => {}
                 _ => {}
             }
         }
@@ -579,11 +578,10 @@ impl Monomorphizer {
                         collect_struct_instances_in_stmt(s, out, generic_structs);
                     }
                 }
-                ast::Stmt::Break(expr_opt, _) => {
-                    if let Some(e) = expr_opt {
-                        collect_struct_instances_in_expr(e, out, generic_structs);
-                    }
+                ast::Stmt::Break(Some(e), _) => {
+                    collect_struct_instances_in_expr(e, out, generic_structs);
                 }
+                ast::Stmt::Break(None, _) => {}
                 _ => {}
             }
         }

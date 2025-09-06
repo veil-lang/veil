@@ -16,9 +16,10 @@ fn parse_expr_from_source(source: &str) -> Expr {
     // Extract the first function and its first statement as an expression
     if let Some(func) = program.functions.first()
         && let Some(stmt) = func.body.first()
-            && let veil_ast::Stmt::Expr(expr, _) = stmt {
-                return expr.clone();
-            }
+        && let veil_ast::Stmt::Expr(expr, _) = stmt
+    {
+        return expr.clone();
+    }
 
     panic!("Expected expression statement in function body");
 }

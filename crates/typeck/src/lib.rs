@@ -212,6 +212,7 @@ impl TypeCheckContext {
     }
 
     /// Check if type is compatible with another
+    #[allow(clippy::only_used_in_recursion)]
     pub fn types_compatible(&self, left: &HirType, right: &HirType) -> bool {
         use HirType::*;
 
@@ -597,11 +598,12 @@ impl TypeChecker {
             // If block has exactly one statement and no tail expression,
             // check if it's an expression statement and return its type
             if let Some(stmt) = block.stmts.first_mut()
-                && let veil_hir::HirStmtKind::Expr(expr) = &mut stmt.kind {
-                    let ty = self.check_expr(expr)?;
-                    self.context.set_node_type(expr.id, ty.clone());
-                    last_type = ty;
-                }
+                && let veil_hir::HirStmtKind::Expr(expr) = &mut stmt.kind
+            {
+                let ty = self.check_expr(expr)?;
+                self.context.set_node_type(expr.id, ty.clone());
+                last_type = ty;
+            }
         }
 
         Ok(last_type)
@@ -729,22 +731,23 @@ impl TypeChecker {
     fn check_impl(&mut self, imp: &mut HirImpl) -> Result<(), Vec<Diag>> {
         // Validate trait_ref existence if provided
         if let Some(trait_type) = &imp.trait_ref
-            && let HirType::Unresolved(trait_name) = trait_type {
-                let is_trait = self
-                    .context
-                    .symbol_table
-                    .find_by_name_and_kind(trait_name, SymbolKind::Trait)
-                    .is_some();
-                if !is_trait {
-                    // VE0101: unresolved trait in impl
-                    self.error_with_fix(
-                        imp.id,
-                        Some("VE0101"),
-                        format!("unknown trait '{:?}' in impl", trait_name),
-                        "Declare/import the trait or correct the name",
-                    );
-                }
+            && let HirType::Unresolved(trait_name) = trait_type
+        {
+            let is_trait = self
+                .context
+                .symbol_table
+                .find_by_name_and_kind(trait_name, SymbolKind::Trait)
+                .is_some();
+            if !is_trait {
+                // VE0101: unresolved trait in impl
+                self.error_with_fix(
+                    imp.id,
+                    Some("VE0101"),
+                    format!("unknown trait '{:?}' in impl", trait_name),
+                    "Declare/import the trait or correct the name",
+                );
             }
+        }
 
         // Check duplicate methods in impl
         use std::collections::HashSet;

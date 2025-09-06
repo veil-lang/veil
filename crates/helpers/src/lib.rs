@@ -7,8 +7,7 @@
 
 use anyhow::Result;
 use codespan::{FileId, Files};
-#[cfg(target_os = "windows")]
-use std::fs;
+
 use std::path::{Path, PathBuf};
 
 /// Extract a "line:col" string from a codespan diagnostic for a specific file.
@@ -411,7 +410,7 @@ fn discover_msvc_lib_paths() -> Vec<PathBuf> {
     if paths.is_empty() {
         let vs_base =
             PathBuf::from(r"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC");
-        if let Ok(read_dir) = fs::read_dir(&vs_base) {
+        if let Ok(read_dir) = std::fs::read_dir(&vs_base) {
             let mut versions: Vec<PathBuf> =
                 read_dir.filter_map(|e| e.ok().map(|e| e.path())).collect();
             versions.sort();
@@ -427,7 +426,7 @@ fn discover_msvc_lib_paths() -> Vec<PathBuf> {
             }
         }
         let sdk_base = PathBuf::from(r"C:\Program Files (x86)\Windows Kits\10\Lib");
-        if let Ok(read_dir) = fs::read_dir(&sdk_base) {
+        if let Ok(read_dir) = std::fs::read_dir(&sdk_base) {
             let mut versions: Vec<PathBuf> =
                 read_dir.filter_map(|e| e.ok().map(|e| e.path())).collect();
             versions.sort();

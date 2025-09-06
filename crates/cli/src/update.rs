@@ -337,7 +337,7 @@ fn download_and_install(version_info: VersionInfo, verbose: bool) -> Result<()> 
 }
 
 /// Install using cargo install --path after extracting source.
-fn install_with_cargo(archive_path: &PathBuf, verbose: bool) -> Result<()> {
+fn install_with_cargo(archive_path: &Path, verbose: bool) -> Result<()> {
     if verbose {
         println!("🔧 Installing using cargo install...");
     }
@@ -462,7 +462,7 @@ fn install_with_cargo(archive_path: &PathBuf, verbose: bool) -> Result<()> {
 }
 
 /// Extract archive to target directory.
-fn extract_archive(archive_path: &PathBuf, extract_dir: &Path, verbose: bool) -> Result<()> {
+fn extract_archive(archive_path: &Path, extract_dir: &Path, verbose: bool) -> Result<()> {
     if verbose {
         println!("📦 Extracting archive...");
     }

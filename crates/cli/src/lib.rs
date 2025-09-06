@@ -961,11 +961,12 @@ impl Pass for BuildIrPass {
             return Err(anyhow::anyhow!("Type check failed"));
         }
 
-        // Optional normalized HIR dump (side-effect only controlled by flags)
+        // M6: Normalize HIR (always required for compilation)
+        normalize::normalize_program(&mut hir_program);
+
+        // Optional normalized HIR dump to file (controlled by flags)
         if verbose || dump_norm_hir {
-            normalize::normalize_program(&mut hir_program);
-        } else {
-            normalize::normalize_program(&mut hir_program);
+            // HIR dumping could be added here if needed
         }
 
         // M7 (current pipeline kept): monomorphize at AST level (compat)
@@ -986,6 +987,7 @@ impl Pass for BuildIrPass {
 }
 
 /// Public: process a build end-to-end, returning the final output path (exe or C file when skip_cc).
+#[allow(clippy::too_many_arguments)]
 pub fn process_build(
     input: PathBuf,
     output: PathBuf,
