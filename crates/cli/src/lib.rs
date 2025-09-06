@@ -25,6 +25,7 @@ pub mod benchmark;
 pub mod init;
 pub mod run;
 pub mod test;
+pub mod update;
 pub mod upgrade;
 
 #[derive(Debug)]
@@ -71,6 +72,11 @@ pub enum CliCommand {
         input: PathBuf,
         iterations: usize,
         verbose: bool,
+    },
+    Update {
+        verbose: bool,
+        force: bool,
+        channel: Channel,
     },
     Upgrade {
         no_remind: bool,
@@ -184,6 +190,14 @@ enum Command {
         #[arg(short, long)]
         verbose: bool,
     },
+    Update {
+        #[arg(short, long, help = "Show verbose output during update")]
+        verbose: bool,
+        #[arg(short, long, help = "Force update without confirmation")]
+        force: bool,
+        #[arg(long, help = "Update channel: stable or nightly", value_parser = parse_channel, default_value = "stable")]
+        channel: Option<Channel>,
+    },
     Upgrade {
         #[arg(long, help = "Disable update reminder notifications")]
         no_remind: bool,
@@ -280,6 +294,15 @@ pub fn parse() -> anyhow::Result<CliCommand> {
             input,
             iterations,
             verbose,
+        }),
+        Some(Command::Update {
+            verbose,
+            force,
+            channel,
+        }) => Ok(CliCommand::Update {
+            verbose,
+            force,
+            channel: channel.unwrap_or_default(),
         }),
         Some(Command::Upgrade {
             no_remind: _,

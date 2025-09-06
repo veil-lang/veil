@@ -12,9 +12,6 @@
 //! - Deterministic print: stable order (functions sorted by name, blocks by id, inst order preserved)
 //! - Lowering: HIR → IR (basic coverage), legacy AST → IR skeleton retained for debug
 //!
-//! Roadmap:
-//! - Flesh out instruction set and types
-//! - Add golden IR snapshots and round-trip tests
 
 use std::fmt;
 

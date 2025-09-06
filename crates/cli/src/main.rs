@@ -44,6 +44,17 @@ fn main() -> Result<()> {
             iterations,
             verbose,
         }) => cli::benchmark::run_benchmark(input, iterations, verbose),
+        Ok(cli::CliCommand::Update {
+            verbose,
+            force,
+            channel,
+        }) => {
+            let update_channel = match channel {
+                cli::Channel::Stable => cli::update::UpdateChannel::Stable,
+                cli::Channel::Canary => cli::update::UpdateChannel::Nightly,
+            };
+            cli::update::run_update(verbose, force, update_channel)
+        }
         Ok(cli::CliCommand::Upgrade {
             no_remind,
             force,
