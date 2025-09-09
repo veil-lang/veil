@@ -66,6 +66,9 @@ impl IrCBackend {
         out.push_str("#include <stdio.h>\n");
         out.push_str("#include <stdlib.h>\n");
         out.push_str("#include <string.h>\n");
+        out.push_str("#ifdef _WIN32\n");
+        out.push_str("#include <windows.h>\n");
+        out.push_str("#endif\n");
         out.push_str("/* Undefine min/max macros to avoid conflicts with user functions */\n");
         out.push_str("#ifdef min\n#undef min\n#endif\n");
         out.push_str("#ifdef max\n#undef max\n#endif\n\n");
@@ -80,6 +83,16 @@ impl IrCBackend {
         out.push_str("static inline bool iter_has_next(void* it) { (void)it; return false; }\n");
         out.push_str("#define iter_next(it) (0)\n");
         out.push_str("#endif\n\n");
+
+        // UTF-8 initialization function
+        out.push_str("/* Initialize UTF-8 console support on Windows */\n");
+        out.push_str("static void init_utf8_support(void) {\n");
+        out.push_str("#ifdef _WIN32\n");
+        out.push_str("    /* Set console code pages to UTF-8 */\n");
+        out.push_str("    SetConsoleOutputCP(65001);\n");
+        out.push_str("    SetConsoleCP(65001);\n");
+        out.push_str("#endif\n");
+        out.push_str("}\n\n");
 
         // Forward declare functions (sorted by name for deterministic order)
         let mut fns = ir.functions.clone();
@@ -185,6 +198,11 @@ impl IrCBackend {
 
             for b in blocks {
                 let _ = writeln!(out, "bb{}:", b.id.0);
+
+                // Add UTF-8 initialization for main function at the start of bb0
+                if f.name == "main" && b.id.0 == 0 {
+                    let _ = writeln!(out, "    init_utf8_support();");
+                }
 
                 for (i, inst) in b.insts.iter().enumerate() {
                     let res = b.results.get(i).copied().unwrap_or(veil_ir::ValueId(0));
@@ -490,7 +508,6 @@ impl IrCBackend {
                             let _ = writeln!(out, "    return {};", val_ref(*v));
                         } else if f.name == "main" {
                             // Main function should return 0 instead of void
-
                             let _ = writeln!(out, "    return 0;");
                         } else if f.ret != TypeIR::Void {
                             // Synthesize a default value for non-void functions that omitted an explicit return expression
