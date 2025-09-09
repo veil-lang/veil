@@ -843,7 +843,168 @@ impl<'a> LoweringCtx<'a> {
                 let ity = map_hir_type_to_ir(ty);
                 Some(self.emit(self.cur_bb, InstIR::Cast { value: v, ty: ity }))
             }
-            // Control-flow expressions (If/While/Loop) are handled in statement lowering
+            // Handle for-loops as expressions
+            K::For {
+                pattern,
+                iter,
+                body,
+            } => {
+                // Check if iterator is a range expression
+                if let hir::HirExprKind::Binary {
+                    op: hir::HirBinaryOp::Range,
+                    lhs,
+                    rhs,
+                } = &*iter.kind
+                {
+                    // Handle range as simple counting loop
+                    let start_val = self
+                        .lower_expr(lhs)
+                        .unwrap_or_else(|| self.emit(self.cur_bb, InstIR::ConstInt { value: 0 }));
+                    let end_val = self
+                        .lower_expr(rhs)
+                        .unwrap_or_else(|| self.emit(self.cur_bb, InstIR::ConstInt { value: 0 }));
+
+                    // Create local slot for loop variable if pattern is a variable
+                    let loop_var_slot = if let hir::HirPatternKind::Variable(name) = &*pattern.kind
+                    {
+                        let local_id = LocalId(self.locals_meta.len() as u32);
+                        self.locals_meta.push(LocalIR {
+                            id: local_id,
+                            ty: TypeIR::I64,
+                            debug_name: Some(name.clone()),
+                        });
+                        Some((local_id, name.clone()))
+                    } else {
+                        None
+                    };
+
+                    // Initialize loop variable to start value
+                    if let Some((local_id, _name)) = &loop_var_slot {
+                        self.emit(
+                            self.cur_bb,
+                            InstIR::Store {
+                                local: *local_id,
+                                value: start_val,
+                            },
+                        );
+                    }
+
+                    // Blocks: cond -> loop -> after
+                    let cond_bb = self.new_block();
+                    let loop_bb = self.new_block();
+                    let after_bb = self.new_block();
+                    self.set_term(self.cur_bb, TerminatorIR::Jump { bb: cond_bb });
+
+                    // Condition: current < end
+                    self.cur_bb = cond_bb;
+                    let current_val = if let Some((local_id, name)) = &loop_var_slot {
+                        let current = self.emit(self.cur_bb, InstIR::Load { local: *local_id });
+                        // Also bind the current value to the pattern name for the loop body
+                        self.locals.insert(name.clone(), current);
+                        self.debug_names.insert(current, name.clone());
+                        current
+                    } else {
+                        start_val
+                    };
+
+                    let cond = self.emit(
+                        self.cur_bb,
+                        InstIR::CmpLt {
+                            lhs: current_val,
+                            rhs: end_val,
+                        },
+                    );
+                    self.set_term(
+                        self.cur_bb,
+                        TerminatorIR::Branch {
+                            cond,
+                            then_bb: loop_bb,
+                            else_bb: after_bb,
+                        },
+                    );
+
+                    // Loop body
+                    self.cur_bb = loop_bb;
+                    self.lower_block(body);
+
+                    // Increment loop variable
+                    if let Some((local_id, _)) = &loop_var_slot {
+                        let current = self.emit(self.cur_bb, InstIR::Load { local: *local_id });
+                        let one = self.emit(self.cur_bb, InstIR::ConstInt { value: 1 });
+                        let incremented = self.emit(
+                            self.cur_bb,
+                            InstIR::Add {
+                                lhs: current,
+                                rhs: one,
+                            },
+                        );
+                        self.emit(
+                            self.cur_bb,
+                            InstIR::Store {
+                                local: *local_id,
+                                value: incremented,
+                            },
+                        );
+                    }
+
+                    self.set_term(self.cur_bb, TerminatorIR::Jump { bb: cond_bb });
+
+                    // After
+                    self.cur_bb = after_bb;
+                    None
+                } else {
+                    // Fallback to iterator protocol for non-range iterators
+                    let iter_v = self
+                        .lower_expr(iter)
+                        .unwrap_or_else(|| self.emit(self.cur_bb, InstIR::Nop));
+
+                    // Blocks: cond -> loop -> after
+                    let cond_bb = self.new_block();
+                    let loop_bb = self.new_block();
+                    let after_bb = self.new_block();
+                    self.set_term(self.cur_bb, TerminatorIR::Jump { bb: cond_bb });
+
+                    // Condition: has_next = iter_has_next(iter)
+                    self.cur_bb = cond_bb;
+                    let has = self.emit(
+                        self.cur_bb,
+                        InstIR::Call {
+                            callee: "iter_has_next".to_string(),
+                            args: vec![iter_v],
+                        },
+                    );
+                    self.set_term(
+                        self.cur_bb,
+                        TerminatorIR::Branch {
+                            cond: has,
+                            then_bb: loop_bb,
+                            else_bb: after_bb,
+                        },
+                    );
+
+                    // Body: next_val = iter_next(iter); bind if pattern is variable
+                    self.cur_bb = loop_bb;
+                    let next_item = self.emit(
+                        self.cur_bb,
+                        InstIR::Call {
+                            callee: "iter_next".to_string(),
+                            args: vec![iter_v],
+                        },
+                    );
+                    if let hir::HirPatternKind::Variable(name) = &*pattern.kind {
+                        // Bind pattern name to next_item for body scope
+                        self.locals.insert(name.clone(), next_item);
+                        self.debug_names.insert(next_item, name.clone());
+                    }
+                    self.lower_block(body);
+                    self.set_term(self.cur_bb, TerminatorIR::Jump { bb: cond_bb });
+
+                    // After
+                    self.cur_bb = after_bb;
+                    None
+                }
+            }
+            // Other control-flow expressions (If/While/Loop) are handled in statement lowering
             _ => None,
         }
     }
@@ -889,15 +1050,26 @@ impl<'a> LoweringCtx<'a> {
         // Lower THEN
         self.cur_bb = then_bb;
         self.lower_block(then_branch);
-        // Ensure jump to merge if not already returned/branched (we conservatively overwrite)
-        self.set_term(self.cur_bb, TerminatorIR::Jump { bb: merge_bb });
+        // Only jump to merge if no terminator was set (e.g., by a return statement)
+        if matches!(
+            self.blocks[self.cur_bb.0 as usize].term,
+            TerminatorIR::Return { value: None }
+        ) {
+            self.set_term(self.cur_bb, TerminatorIR::Jump { bb: merge_bb });
+        }
 
         // Lower ELSE
         self.cur_bb = else_bb;
         if let Some(eb) = else_branch {
             self.lower_block(eb);
         }
-        self.set_term(self.cur_bb, TerminatorIR::Jump { bb: merge_bb });
+        // Only jump to merge if no terminator was set (e.g., by a return statement)
+        if matches!(
+            self.blocks[self.cur_bb.0 as usize].term,
+            TerminatorIR::Return { value: None }
+        ) {
+            self.set_term(self.cur_bb, TerminatorIR::Jump { bb: merge_bb });
+        }
 
         // Continue at merge
         self.cur_bb = merge_bb;
@@ -1161,62 +1333,168 @@ impl<'a> LoweringCtx<'a> {
                         None
                     }
 
-                    // Desugar a for-loop to while using opaque iterator helpers:
-                    // iter_has_next(iter) -> bool, iter_next(iter) -> T
+                    // Handle for-loops with range optimization
                     K::For {
                         pattern,
                         iter,
                         body,
                     } => {
-                        // Evaluate iterator
-                        let iter_v = self
-                            .lower_expr(iter)
-                            .unwrap_or_else(|| self.emit(self.cur_bb, InstIR::Nop));
+                        // Check if iterator is a range expression
+                        if let hir::HirExprKind::Binary {
+                            op: hir::HirBinaryOp::Range,
+                            lhs,
+                            rhs,
+                        } = &*iter.kind
+                        {
+                            // Handle range as simple counting loop
+                            let start_val = self.lower_expr(lhs).unwrap_or_else(|| {
+                                self.emit(self.cur_bb, InstIR::ConstInt { value: 0 })
+                            });
+                            let end_val = self.lower_expr(rhs).unwrap_or_else(|| {
+                                self.emit(self.cur_bb, InstIR::ConstInt { value: 0 })
+                            });
 
-                        // Blocks: cond -> loop -> after
-                        let cond_bb = self.new_block();
-                        let loop_bb = self.new_block();
-                        let after_bb = self.new_block();
-                        self.set_term(self.cur_bb, TerminatorIR::Jump { bb: cond_bb });
+                            // Create local slot for loop variable if pattern is a variable
+                            let loop_var_slot =
+                                if let hir::HirPatternKind::Variable(name) = &*pattern.kind {
+                                    let local_id = LocalId(self.locals_meta.len() as u32);
+                                    self.locals_meta.push(LocalIR {
+                                        id: local_id,
+                                        ty: TypeIR::I64,
+                                        debug_name: Some(name.clone()),
+                                    });
+                                    Some((local_id, name.clone()))
+                                } else {
+                                    None
+                                };
 
-                        // Condition: has_next = iter_has_next(iter)
-                        self.cur_bb = cond_bb;
-                        let has = self.emit(
-                            self.cur_bb,
-                            InstIR::Call {
-                                callee: "iter_has_next".to_string(),
-                                args: vec![iter_v],
-                            },
-                        );
-                        self.set_term(
-                            self.cur_bb,
-                            TerminatorIR::Branch {
-                                cond: has,
-                                then_bb: loop_bb,
-                                else_bb: after_bb,
-                            },
-                        );
+                            // Initialize loop variable to start value
+                            if let Some((local_id, _name)) = &loop_var_slot {
+                                self.emit(
+                                    self.cur_bb,
+                                    InstIR::Store {
+                                        local: *local_id,
+                                        value: start_val,
+                                    },
+                                );
+                            }
 
-                        // Body: next_val = iter_next(iter); bind if pattern is variable
-                        self.cur_bb = loop_bb;
-                        let next_item = self.emit(
-                            self.cur_bb,
-                            InstIR::Call {
-                                callee: "iter_next".to_string(),
-                                args: vec![iter_v],
-                            },
-                        );
-                        if let hir::HirPatternKind::Variable(name) = &*pattern.kind {
-                            // Bind pattern name to next_item for body scope
-                            self.locals.insert(name.clone(), next_item);
-                            self.debug_names.insert(next_item, name.clone());
+                            // Blocks: cond -> loop -> after
+                            let cond_bb = self.new_block();
+                            let loop_bb = self.new_block();
+                            let after_bb = self.new_block();
+                            self.set_term(self.cur_bb, TerminatorIR::Jump { bb: cond_bb });
+
+                            // Condition: current < end
+                            self.cur_bb = cond_bb;
+                            let current_val = if let Some((local_id, name)) = &loop_var_slot {
+                                let current =
+                                    self.emit(self.cur_bb, InstIR::Load { local: *local_id });
+                                // Also bind the current value to the pattern name for the loop body
+                                self.locals.insert(name.clone(), current);
+                                self.debug_names.insert(current, name.clone());
+                                current
+                            } else {
+                                start_val
+                            };
+
+                            let cond = self.emit(
+                                self.cur_bb,
+                                InstIR::CmpLt {
+                                    lhs: current_val,
+                                    rhs: end_val,
+                                },
+                            );
+                            self.set_term(
+                                self.cur_bb,
+                                TerminatorIR::Branch {
+                                    cond,
+                                    then_bb: loop_bb,
+                                    else_bb: after_bb,
+                                },
+                            );
+
+                            // Loop body
+                            self.cur_bb = loop_bb;
+                            self.lower_block(body);
+
+                            // Increment loop variable
+                            if let Some((local_id, _)) = &loop_var_slot {
+                                let current =
+                                    self.emit(self.cur_bb, InstIR::Load { local: *local_id });
+                                let one = self.emit(self.cur_bb, InstIR::ConstInt { value: 1 });
+                                let incremented = self.emit(
+                                    self.cur_bb,
+                                    InstIR::Add {
+                                        lhs: current,
+                                        rhs: one,
+                                    },
+                                );
+                                self.emit(
+                                    self.cur_bb,
+                                    InstIR::Store {
+                                        local: *local_id,
+                                        value: incremented,
+                                    },
+                                );
+                            }
+
+                            self.set_term(self.cur_bb, TerminatorIR::Jump { bb: cond_bb });
+
+                            // After
+                            self.cur_bb = after_bb;
+                            None
+                        } else {
+                            // Fallback to iterator protocol for non-range iterators
+                            let iter_v = self
+                                .lower_expr(iter)
+                                .unwrap_or_else(|| self.emit(self.cur_bb, InstIR::Nop));
+
+                            // Blocks: cond -> loop -> after
+                            let cond_bb = self.new_block();
+                            let loop_bb = self.new_block();
+                            let after_bb = self.new_block();
+                            self.set_term(self.cur_bb, TerminatorIR::Jump { bb: cond_bb });
+
+                            // Condition: has_next = iter_has_next(iter)
+                            self.cur_bb = cond_bb;
+                            let has = self.emit(
+                                self.cur_bb,
+                                InstIR::Call {
+                                    callee: "iter_has_next".to_string(),
+                                    args: vec![iter_v],
+                                },
+                            );
+                            self.set_term(
+                                self.cur_bb,
+                                TerminatorIR::Branch {
+                                    cond: has,
+                                    then_bb: loop_bb,
+                                    else_bb: after_bb,
+                                },
+                            );
+
+                            // Body: next_val = iter_next(iter); bind if pattern is variable
+                            self.cur_bb = loop_bb;
+                            let next_item = self.emit(
+                                self.cur_bb,
+                                InstIR::Call {
+                                    callee: "iter_next".to_string(),
+                                    args: vec![iter_v],
+                                },
+                            );
+                            if let hir::HirPatternKind::Variable(name) = &*pattern.kind {
+                                // Bind pattern name to next_item for body scope
+                                self.locals.insert(name.clone(), next_item);
+                                self.debug_names.insert(next_item, name.clone());
+                            }
+                            self.lower_block(body);
+                            self.set_term(self.cur_bb, TerminatorIR::Jump { bb: cond_bb });
+
+                            // After
+                            self.cur_bb = after_bb;
+                            None
                         }
-                        self.lower_block(body);
-                        self.set_term(self.cur_bb, TerminatorIR::Jump { bb: cond_bb });
-
-                        // After
-                        self.cur_bb = after_bb;
-                        None
                     }
 
                     _ => {
